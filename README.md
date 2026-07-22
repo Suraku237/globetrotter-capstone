@@ -8,7 +8,7 @@ Students build the monolith first, then refactor it into microservices, and fina
 ## Project Structure
 
 ```
-.
+. 
 ├── app/
 │   ├── __init__.py         # Flask app factory
 │   ├── models.py           # Data models and JSON file I/O

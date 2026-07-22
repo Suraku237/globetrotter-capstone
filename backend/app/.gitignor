@@ -1,0 +1,14 @@
+# Secrets
+.env
+
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Data (JSON "database" files — don't commit user data)
+app/data/*.json
+
+# OS
+.DS_Store
+Thumbs.db

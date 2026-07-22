@@ -1,0 +1,29 @@
+[
+  {
+    "id": "d53fb591-d435-466f-93fd-7238650368b8",
+    "email": "admin@example.com",
+    "full_name": "Admin User",
+    "role": "admin",
+    "hashed_password": "$2b$12$L6Jraw1QgCXWt552UIEfPOmTFWDQprpI6DhsvL7A6eFPKOlFO5Q3S",
+    "preferences": [],
+    "created_at": "2026-07-22T21:14:31.228188+00:00"
+  },
+  {
+    "id": "ba08a01a-9254-4086-93c0-481a9664227f",
+    "email": "worker@example.com",
+    "full_name": "Worker User",
+    "role": "worker",
+    "hashed_password": "$2b$12$/lHWWXS4dXKwSSCAuUYmsuY3fYU.GQUA/rz6k/tu3E9reWxKfbJqq",
+    "preferences": [],
+    "created_at": "2026-07-22T21:14:31.472278+00:00"
+  },
+  {
+    "id": "3a60c815-bce8-47c2-82b1-6b7e625f9c51",
+    "email": "user@example.com",
+    "full_name": "Regular User",
+    "role": "user",
+    "hashed_password": "$2b$12$ruCiggJ0vmATCOGZyOSGfO3WDGUVODqaksIWllSX1n7IP.leVxeE6",
+    "preferences": [],
+    "created_at": "2026-07-22T21:14:31.707502+00:00"
+  }
+]

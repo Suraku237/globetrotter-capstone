@@ -1,0 +1,46 @@
+[
+  {
+    "id": "5c8ea541-8ba1-418a-a831-46fecee2f7a4",
+    "name": "Yaound\u00e9",
+    "region": "Centre",
+    "tags": [
+      "city",
+      "culture",
+      "museum"
+    ],
+    "image_url": "https://images.unsplash.com/photo-1518548419970-58e3b4079ab2?auto=format&fit=crop&w=1200&q=80"
+  },
+  {
+    "id": "2c57d370-4d01-42dd-91dc-d39b55f6a003",
+    "name": "Mfoundi",
+    "region": "Centre",
+    "tags": [
+      "city",
+      "market",
+      "business"
+    ],
+    "image_url": "https://images.unsplash.com/photo-1494526585095-c41746248156?auto=format&fit=crop&w=1200&q=80"
+  },
+  {
+    "id": "8aee5969-909f-4e0c-afd3-137a8e597646",
+    "name": "Mbankomo",
+    "region": "Centre",
+    "tags": [
+      "nature",
+      "relax",
+      "lake"
+    ],
+    "image_url": "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=80"
+  },
+  {
+    "id": "b9f8acd1-8afc-459c-ae8f-e42935f1e790",
+    "name": "Nkolbisson",
+    "region": "Centre",
+    "tags": [
+      "local",
+      "food",
+      "community"
+    ],
+    "image_url": "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=1200&q=80"
+  }
+]

@@ -34,5 +34,14 @@
     "hashed_password": "$2b$12$Tto9BIElyam4RUE5CYtQBeKhht4zmTHqOhEXahpDdsy4/XDgXNW16",
     "preferences": [],
     "created_at": "2026-07-23T00:59:10.847125+00:00"
+  },
+  {
+    "id": "2b00ee02-946a-42ec-a155-97649a810f6c",
+    "email": "rayan@gmail.com",
+    "full_name": "rayan",
+    "role": "user",
+    "hashed_password": "$2b$12$L0ZKbYe/DW4PbN3qX4NzNO6MEfapytGKu/gJneOdtKykEQzqZXobS",
+    "preferences": [],
+    "created_at": "2026-07-23T02:04:22.886037+00:00"
   }
 ]

@@ -1,5 +1,12 @@
-node_modules
-__pycache__
+venv/
+__pycache__/
 *.pyc
-.env
 .git
+.gitignore
+.env
+.env.example
+app/.env
+app/.env.example
+Dockerfile
+docker-compose.yml
+.dockerignore

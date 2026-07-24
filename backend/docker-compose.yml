@@ -1,0 +1,12 @@
+version: "3.9"
+
+services:
+  backend:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      JWT_SECRET: ${JWT_SECRET}
+    volumes:
+      - ./data:/app/data   # keeps your JSON data persistent across rebuilds
+    restart: unless-stopped

@@ -31,11 +31,11 @@ class ApiService {
     const prodUrl = String.fromEnvironment('API_BASE_URL', defaultValue: '');
     if (prodUrl.isNotEmpty) return prodUrl;
 
-    if (kIsWeb) return 'http://localhost:8000';
+    if (kIsWeb) return 'http://109.199.120.38:8000';
     if (defaultTargetPlatform == TargetPlatform.android) {
-      return 'http://10.0.2.2:8000';
+      return 'http://109.199.120.38:8000';
     }
-    return 'http://localhost:8000'; // iOS simulator, desktop
+    return 'http://109.199.120.38:8000'; // iOS simulator, desktop
   }
 
   Map<String, String> get _headers => {

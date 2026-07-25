@@ -19,7 +19,7 @@ pipeline {
                     python3 -m venv .venv
                     . .venv/bin/activate
                     pip install --no-cache-dir -r requirements-dev.txt
-                    pytest app/tests -v
+                    python -m pytest app/tests -v
                 '''
             }
         }

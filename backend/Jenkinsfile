@@ -13,19 +13,23 @@ pipeline {
         }
 
         stage('Test') {
-            steps {
-                sh '''
-                    python3 -m venv .venv
-                    . .venv/bin/activate
+             steps {
+              sh '''
+                           cd backend                                   
+                      python3 -m venv .venv
+                       . .venv/bin/activate
                     pip install --no-cache-dir -r requirements-dev.txt
                     pytest app/tests -v
-                '''
-            }
-        }
+                 '''
+           }
+       }
 
         stage('Build') {
-            steps {
-                sh 'docker compose -f docker-compose.yml build'
+           steps {
+             sh '''
+                 cd backend                                  
+                    docker compose -f docker-compose.yml build
+                         '''
             }
         }
 

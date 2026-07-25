@@ -1,3 +1,24 @@
 -r requirements.txt
 pytest==8.3.3
 httpx==0.27.2
+
+stage('Test') {
+    steps {
+        sh '''
+            cd backend                                    ← here
+            python3 -m venv .venv
+            . .venv/bin/activate
+            pip install --no-cache-dir -r requirements-dev.txt
+            pytest app/tests -v
+        '''
+    }
+}
+
+stage('Build') {
+    steps {
+        sh '''
+            cd backend                                    ← here
+            docker compose -f docker-compose.yml build
+        '''
+    }
+}

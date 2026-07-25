@@ -1,0 +1,67 @@
+pipeline {
+    agent any
+
+    environment {
+        DEPLOY_DIR = '/root/fast_travel/globetrotter-capstone/backend'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Test') {
+            steps {
+                sh '''
+                    python3 -m venv .venv
+                    . .venv/bin/activate
+                    pip install --no-cache-dir -r requirements-dev.txt
+                    pytest app/tests -v
+                '''
+            }
+        }
+
+        stage('Build') {
+            steps {
+                sh 'docker compose -f docker-compose.yml build'
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                sh '''
+                    cd ${DEPLOY_DIR}
+                    docker compose up -d --build
+                    docker image prune -f
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            slackSend(
+                color: 'good',
+                message: "✅ Backend deploy succeeded: ${env.JOB_NAME} #${env.BUILD_NUMBER} (${env.BUILD_URL})"
+            )
+            emailext(
+                subject: "✅ Backend deploy succeeded - build #${env.BUILD_NUMBER}",
+                body: "The backend deploy pipeline succeeded.\n\nBuild: ${env.BUILD_URL}",
+                to: '${DEFAULT_RECIPIENTS}'
+            )
+        }
+        failure {
+            slackSend(
+                color: 'danger',
+                message: "❌ Backend deploy FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER} (${env.BUILD_URL})"
+            )
+            emailext(
+                subject: "❌ Backend deploy FAILED - build #${env.BUILD_NUMBER}",
+                body: "The backend deploy pipeline failed. Check logs.\n\nBuild: ${env.BUILD_URL}",
+                to: '${DEFAULT_RECIPIENTS}'
+            )
+        }
+    }
+}

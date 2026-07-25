@@ -13,23 +13,23 @@ pipeline {
         }
 
         stage('Test') {
-             steps {
-              sh '''
-                           cd backend                                   
-                      python3 -m venv .venv
-                       . .venv/bin/activate
+            steps {
+                sh '''
+                    cd backend
+                    python3 -m venv .venv
+                    . .venv/bin/activate
                     pip install --no-cache-dir -r requirements-dev.txt
                     pytest app/tests -v
-                 '''
-           }
-       }
+                '''
+            }
+        }
 
         stage('Build') {
-           steps {
-             sh '''
-                 cd backend                                  
+            steps {
+                sh '''
+                    cd backend
                     docker compose -f docker-compose.yml build
-                         '''
+                '''
             }
         }
 
@@ -37,6 +37,8 @@ pipeline {
             steps {
                 sh '''
                     cd ${DEPLOY_DIR}
+                    git fetch --all
+                    git reset --hard origin/main
                     docker compose up -d --build
                     docker image prune -f
                 '''

@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        DEPLOY_DIR = '/root/fast_travel/globetrotter-capstone/backend'
+        DEPLOY_DIR = '/opt/fast_travel/backend'
     }
 
     stages {

@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fast Travel — Board Your Next Trip</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:wght@400;700&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<!-- ============================================================
+     ANALYTICS SLOT
+     Paste your tracking snippet here (Google Analytics / Plausible /
+     Fathom / etc). Nothing is loaded yet — this is intentionally empty.
+     Example (Google Analytics 4):
+       <script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXX"></script>
+       <script>
+         window.dataLayer = window.dataLayer || [];
+         function gtag(){dataLayer.push(arguments);}
+         gtag('js', new Date());
+         gtag('config', 'G-XXXXXXX');
+       </script>
+     Example (Plausible, no cookies, one line):
+       <script defer data-domain="yourdomain.com" src="https://plausible.io/js/script.js"></script>
+     ============================================================ -->
+
+<style>
+
+  :root{
+    --ink:        #0B1D33;
+    --ink-soft:   #142A47;
+    --cream:      #F5F1E6;
+    --gold:       #D4A24E;
+    --rust:       #C1443C;
+    --slate:      #93A0B2;
+    --line:       rgba(245,241,230,0.14);
+    --line-strong:rgba(245,241,230,0.28);
+
+    --display: 'Bebas Neue', sans-serif;
+    --mono:    'Space Mono', monospace;
+    --body:    'Work Sans', sans-serif;
+  }
+
+  *{ box-sizing:border-box; margin:0; padding:0; }
+
+  html{ scroll-behavior:smooth; }
+
+  body{
+    background:var(--ink);
+    color:var(--cream);
+    font-family:var(--body);
+    line-height:1.5;
+    overflow-x:hidden;
+    position:relative;
+  }
+
+  /* ambient glow + faint dot-grid, like a departure-board room at night */
+  body::before{
+    content:"";
+    position:fixed;
+    inset:0;
+    z-index:0;
+    pointer-events:none;
+    background:
+      radial-gradient(ellipse 900px 500px at 15% -5%, rgba(212,162,78,0.14), transparent 60%),
+      radial-gradient(ellipse 700px 500px at 100% 15%, rgba(193,68,60,0.10), transparent 60%),
+      radial-gradient(circle, rgba(245,241,230,0.05) 1px, transparent 1px);
+    background-size:auto, auto, 26px 26px;
+  }
+
+  header, .hero, .showcase, .features, .developer, .community, footer{
+    position:relative;
+    z-index:1;
+  }
+
+  @keyframes riseIn{
+    from{ opacity:0; transform:translateY(18px); }
+    to{ opacity:1; transform:translateY(0); }
+  }
+  .reveal{ animation:riseIn .7s cubic-bezier(.2,.7,.2,1) both; }
+  .reveal-1{ animation-delay:.05s; }
+  .reveal-2{ animation-delay:.16s; }
+  .reveal-3{ animation-delay:.27s; }
+
+  a{ color:inherit; text-decoration:none; }
+
+  img,svg{ display:block; }
+
+  .wrap{
+    max-width:1180px;
+    margin:0 auto;
+    padding:0 32px;
+  }
+
+  /* ---------- focus ---------- */
+  a:focus-visible, button:focus-visible{
+    outline:2px solid var(--gold);
+    outline-offset:3px;
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ animation:none !important; transition:none !important; }
+  }
+
+  /* ---------- header ---------- */
+  header{
+    position:sticky;
+    top:0;
+    z-index:50;
+    background:rgba(11,29,51,0.86);
+    backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--line);
+  }
+
+  .nav{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:20px 0;
+  }
+
+  .brand{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    font-family:var(--display);
+    font-size:1.5rem;
+    letter-spacing:0.06em;
+  }
+
+  .brand .dot{
+    width:10px; height:10px;
+    border-radius:50%;
+    background:var(--gold);
+    box-shadow:0 0 0 3px rgba(212,162,78,0.22);
+  }
+
+  .navlinks{
+    display:flex;
+    gap:36px;
+    font-size:0.86rem;
+    letter-spacing:0.04em;
+    text-transform:uppercase;
+    color:var(--slate);
+  }
+
+  .navlinks a:hover{ color:var(--cream); }
+
+  .navlinks a{ position:relative; padding-bottom:4px; }
+  .navlinks a::after{
+    content:"";
+    position:absolute; left:0; right:0; bottom:0;
+    height:1px; background:var(--gold);
+    transform:scaleX(0); transform-origin:left;
+    transition:transform .25s ease;
+  }
+  .navlinks a:hover::after{ transform:scaleX(1); }
+
+  @media (max-width:720px){
+    .navlinks{ display:none; }
+  }
+
+  /* ---------- hero ---------- */
+  .hero{
+    padding:88px 0 60px;
+    position:relative;
+  }
+
+  .eyebrow-row{
+    display:flex;
+    align-items:center;
+    gap:14px;
+    margin-bottom:22px;
+    font-family:var(--mono);
+    font-size:0.78rem;
+    letter-spacing:0.14em;
+    color:var(--gold);
+    text-transform:uppercase;
+  }
+  .eyebrow-row .rule{
+    flex:0 0 40px;
+    height:1px;
+    background:var(--gold);
+    opacity:0.6;
+  }
+
+  .hero-grid{
+    display:grid;
+    grid-template-columns:1.05fr 0.95fr;
+    gap:56px;
+    align-items:center;
+  }
+
+  h1{
+    font-family:var(--display);
+    font-size:clamp(2.8rem, 5.4vw, 4.6rem);
+    line-height:0.98;
+    letter-spacing:0.01em;
+    margin-bottom:22px;
+  }
+  h1 span{ color:var(--gold); }
+
+  .hero p.lede{
+    font-size:1.08rem;
+    color:var(--slate);
+    max-width:46ch;
+    margin-bottom:34px;
+  }
+
+  /* ---------- boarding pass card (signature element) ---------- */
+  .pass{
+    background:var(--cream);
+    color:var(--ink);
+    border-radius:18px;
+    position:relative;
+    box-shadow:0 30px 70px -20px rgba(0,0,0,0.55);
+    overflow:visible;
+    transform:rotate(-1.2deg);
+    transition:transform .35s ease, box-shadow .35s ease;
+  }
+  .pass:hover{
+    transform:rotate(0deg) translateY(-4px);
+    box-shadow:0 40px 90px -20px rgba(0,0,0,0.6);
+  }
+
+  .pass-top{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    padding:26px 28px 22px;
+  }
+
+  .pass-field .k{
+    font-family:var(--mono);
+    font-size:0.68rem;
+    letter-spacing:0.12em;
+    color:#7C6A4E;
+    text-transform:uppercase;
+    margin-bottom:6px;
+  }
+  .pass-field .v{
+    font-family:var(--display);
+    font-size:1.5rem;
+    letter-spacing:0.02em;
+  }
+  .pass-field.right{ text-align:right; }
+
+  .perf{
+    position:relative;
+    height:0;
+    border-top:2px dashed rgba(11,29,51,0.28);
+    margin:0 0;
+  }
+  .perf::before,.perf::after{
+    content:"";
+    position:absolute;
+    top:50%; transform:translateY(-50%);
+    width:26px; height:26px;
+    background:var(--ink);
+    border-radius:50%;
+  }
+  .perf::before{ left:-13px; }
+  .perf::after{ right:-13px; }
+
+  .pass-bottom{
+    padding:24px 28px 30px;
+  }
+
+  .pass-route{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:22px;
+  }
+  .pass-route .city{
+    font-family:var(--display);
+    font-size:1.9rem;
+  }
+  .pass-route .city small{
+    display:block;
+    font-family:var(--mono);
+    font-size:0.68rem;
+    color:#7C6A4E;
+    letter-spacing:0.1em;
+    margin-top:4px;
+  }
+  .plane{
+    width:44px; height:20px;
+    position:relative;
+  }
+  .plane::before{
+    content:"";
+    position:absolute;
+    left:0; right:0; top:50%;
+    height:1px;
+    background:#B9AC8C;
+  }
+  .plane svg{ position:relative; }
+
+  .cta-row{
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+  }
+
+  .btn{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:14px;
+    padding:14px 18px;
+    border-radius:10px;
+    font-family:var(--body);
+    font-weight:600;
+    font-size:0.95rem;
+    border:1px solid transparent;
+    cursor:pointer;
+    transition:transform .16s ease, box-shadow .16s ease;
+  }
+  .btn:hover{ transform:translateY(-2px); }
+
+  .btn-primary{
+    background:var(--ink);
+    color:var(--cream);
+  }
+  .btn-primary:hover{ box-shadow:0 12px 26px -10px rgba(11,29,51,0.55); }
+
+  .btn-outline{
+    background:transparent;
+    border-color:rgba(11,29,51,0.22);
+    color:var(--ink);
+  }
+  .btn-outline:hover{ border-color:var(--ink); }
+
+  .btn .tag{
+    font-family:var(--mono);
+    font-size:0.68rem;
+    letter-spacing:0.08em;
+    color:var(--gold);
+    text-transform:uppercase;
+  }
+  .btn-outline .tag{ color:var(--rust); }
+
+  .barcode{
+    margin-top:22px;
+    height:34px;
+    background:repeating-linear-gradient(90deg, var(--ink) 0 2px, transparent 2px 5px, var(--ink) 5px 6px, transparent 6px 11px, var(--ink) 11px 14px, transparent 14px 17px);
+    opacity:0.85;
+  }
+
+  @media (max-width:900px){
+    .hero-grid{ grid-template-columns:1fr; }
+  }
+
+  /* ---------- device showcase ---------- */
+  .showcase{
+    padding:40px 0 100px;
+  }
+
+  .showcase-head{
+    text-align:center;
+    margin-bottom:56px;
+  }
+  .showcase-head h2{
+    font-family:var(--display);
+    font-size:clamp(2rem,4vw,2.9rem);
+    letter-spacing:0.01em;
+  }
+  .showcase-head p{
+    color:var(--slate);
+    max-width:52ch;
+    margin:14px auto 0;
+  }
+
+  .devices{
+    display:flex;
+    align-items:flex-end;
+    justify-content:center;
+    gap:40px;
+    flex-wrap:wrap;
+  }
+
+  /* desktop frame */
+  .desktop-frame{
+    width:min(560px, 90vw);
+    background:var(--ink-soft);
+    border:1px solid var(--line-strong);
+    border-radius:14px 14px 6px 6px;
+    box-shadow:0 40px 90px -30px rgba(0,0,0,0.6);
+  }
+  .desktop-bar{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    padding:12px 16px;
+    border-bottom:1px solid var(--line);
+  }
+  .desktop-bar .dotx{ width:9px; height:9px; border-radius:50%; }
+  .desktop-bar .r{ background:#C1443C; }
+  .desktop-bar .y{ background:#D4A24E; }
+  .desktop-bar .g{ background:#4E8C6B; }
+  .desktop-bar .url{
+    margin-left:14px;
+    font-family:var(--mono);
+    font-size:0.7rem;
+    color:var(--slate);
+    background:rgba(245,241,230,0.06);
+    padding:4px 10px;
+    border-radius:6px;
+    flex:1;
+  }
+  .desktop-screen{
+    padding:20px;
+    display:grid;
+    grid-template-columns:110px 1fr;
+    gap:16px;
+    min-height:300px;
+  }
+  .d-side{
+    display:flex; flex-direction:column; gap:10px;
+  }
+  .d-pill{
+    height:10px; border-radius:5px;
+    background:rgba(245,241,230,0.1);
+  }
+  .d-pill.active{ background:var(--gold); }
+  .d-main .d-card{
+    background:rgba(245,241,230,0.06);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:14px;
+    margin-bottom:12px;
+  }
+  .d-map{
+    height:90px;
+    border-radius:8px;
+    background:
+      radial-gradient(circle at 30% 40%, rgba(212,162,78,0.5), transparent 45%),
+      radial-gradient(circle at 70% 65%, rgba(193,68,60,0.45), transparent 40%),
+      linear-gradient(135deg, #1B3A5C, #0F2338);
+    margin-bottom:10px;
+    position:relative;
+  }
+  .d-line{ height:8px; border-radius:4px; background:rgba(245,241,230,0.12); margin-bottom:8px; }
+  .d-line.w60{ width:60%; }
+  .d-line.w40{ width:40%; }
+
+  /* phone frame */
+  .phone-frame{
+    width:230px;
+    background:var(--ink-soft);
+    border:1px solid var(--line-strong);
+    border-radius:32px;
+    padding:10px;
+    box-shadow:0 40px 90px -30px rgba(0,0,0,0.6);
+  }
+  .phone-notch{
+    width:70px; height:16px;
+    background:var(--ink);
+    border-radius:0 0 12px 12px;
+    margin:0 auto 6px;
+  }
+  .phone-screen{
+    background:linear-gradient(160deg, #16324F, #0B1D33 60%);
+    border-radius:22px;
+    padding:16px 14px;
+    min-height:420px;
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+  }
+  .p-eyebrow{
+    font-family:var(--mono);
+    font-size:0.62rem;
+    letter-spacing:0.1em;
+    color:var(--gold);
+    text-transform:uppercase;
+  }
+  .p-title{
+    font-family:var(--display);
+    font-size:1.35rem;
+    letter-spacing:0.01em;
+  }
+  .p-map{
+    height:120px;
+    border-radius:12px;
+    background:
+      radial-gradient(circle at 35% 30%, rgba(212,162,78,0.55), transparent 45%),
+      radial-gradient(circle at 65% 70%, rgba(193,68,60,0.5), transparent 42%),
+      linear-gradient(135deg, #1B3A5C, #0F2338);
+  }
+  .p-card{
+    background:rgba(245,241,230,0.07);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:10px 12px;
+  }
+  .p-card .t{ font-size:0.82rem; font-weight:600; margin-bottom:3px; }
+  .p-card .s{ font-size:0.72rem; color:var(--slate); }
+  .p-nav{
+    margin-top:auto;
+    display:flex;
+    justify-content:space-around;
+    padding-top:10px;
+    border-top:1px solid var(--line);
+  }
+  .p-nav .ic{
+    width:16px; height:16px;
+    border-radius:4px;
+    background:rgba(245,241,230,0.18);
+  }
+  .p-nav .ic.on{ background:var(--gold); }
+
+  /* ---------- features ---------- */
+  .features{
+    padding:80px 0;
+    border-top:1px solid var(--line);
+  }
+
+  .feat-grid{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:1px;
+    background:var(--line);
+    border:1px solid var(--line);
+    border-radius:14px;
+    overflow:hidden;
+  }
+
+  .feat{
+    background:var(--ink);
+    padding:32px 28px;
+    transition:background .25s ease;
+  }
+  .feat:hover{ background:var(--ink-soft); }
+
+  .feat .code{
+    font-family:var(--mono);
+    font-size:0.72rem;
+    color:var(--gold);
+    letter-spacing:0.1em;
+    margin-bottom:14px;
+    display:block;
+  }
+  .feat h3{
+    font-family:var(--display);
+    font-size:1.5rem;
+    letter-spacing:0.01em;
+    margin-bottom:10px;
+  }
+  .feat p{ color:var(--slate); font-size:0.94rem; }
+
+  @media (max-width:860px){
+    .feat-grid{ grid-template-columns:1fr; }
+  }
+
+  /* ---------- developer (passport page) ---------- */
+  .developer{
+    padding:80px 0;
+    border-top:1px solid var(--line);
+  }
+
+  .passport{
+    display:grid;
+    grid-template-columns:180px 1fr;
+    gap:36px;
+    background:var(--ink-soft);
+    border:1px solid var(--line-strong);
+    border-radius:18px;
+    padding:40px;
+    align-items:center;
+    position:relative;
+  }
+
+  .passport::before{
+    content:"BUILT BY";
+    position:absolute;
+    top:24px; right:40px;
+    font-family:var(--mono);
+    font-size:0.68rem;
+    letter-spacing:0.16em;
+    color:var(--gold);
+  }
+
+  .avatar{
+    width:140px; height:140px;
+    border-radius:14px;
+    background:linear-gradient(150deg, var(--gold), var(--rust));
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-family:var(--display);
+    font-size:3rem;
+    color:var(--ink);
+    letter-spacing:0.02em;
+    box-shadow:0 20px 40px -16px rgba(0,0,0,0.5);
+  }
+
+  .dev-info .k{
+    font-family:var(--mono);
+    font-size:0.68rem;
+    letter-spacing:0.12em;
+    color:var(--slate);
+    text-transform:uppercase;
+    margin-bottom:8px;
+  }
+
+  .dev-info h3{
+    font-family:var(--display);
+    font-size:2rem;
+    letter-spacing:0.01em;
+    margin-bottom:4px;
+  }
+
+  .dev-info .role{
+    font-family:var(--mono);
+    font-size:0.82rem;
+    color:var(--gold);
+    margin-bottom:16px;
+  }
+
+  .dev-info p.bio{
+    color:var(--slate);
+    max-width:56ch;
+    margin-bottom:20px;
+  }
+
+  .dev-links{
+    display:flex;
+    gap:14px;
+    flex-wrap:wrap;
+  }
+
+  .dev-link{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    padding:9px 16px;
+    border-radius:999px;
+    border:1px solid var(--line-strong);
+    font-size:0.85rem;
+    font-weight:500;
+    transition:border-color .2s ease, background .2s ease;
+  }
+  .dev-link:hover{
+    border-color:var(--gold);
+    background:rgba(212,162,78,0.08);
+  }
+
+  @media (max-width:720px){
+    .passport{
+      grid-template-columns:1fr;
+      text-align:center;
+      padding:32px 24px;
+    }
+    .avatar{ margin:0 auto; }
+    .dev-links{ justify-content:center; }
+    .passport::before{ position:static; display:block; margin-bottom:18px; }
+  }
+
+  /* ---------- community ---------- */
+  .community{
+    padding:80px 0 100px;
+    border-top:1px solid var(--line);
+  }
+
+  .comm-head{
+    text-align:center;
+    margin-bottom:44px;
+  }
+  .comm-head h2{
+    font-family:var(--display);
+    font-size:clamp(2rem,4vw,2.9rem);
+  }
+  .comm-head p{ color:var(--slate); margin-top:12px; }
+
+  .comm-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:24px;
+  }
+
+  .comm-card{
+    background:var(--ink-soft);
+    border:1px solid var(--line-strong);
+    border-radius:16px;
+    padding:30px;
+    display:flex;
+    flex-direction:column;
+    gap:16px;
+  }
+
+  .comm-icon{
+    width:48px; height:48px;
+    border-radius:12px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  .comm-icon.fb{ background:#3B5A8A; }
+  .comm-icon.wa{ background:#3F8F5F; }
+
+  .comm-card h3{
+    font-family:var(--display);
+    font-size:1.4rem;
+    letter-spacing:0.01em;
+  }
+  .comm-card p{ color:var(--slate); font-size:0.92rem; flex:1; }
+
+  .comm-card .btn{ align-self:flex-start; }
+
+  @media (max-width:720px){
+    .comm-grid{ grid-template-columns:1fr; }
+  }
+
+  /* ---------- footer ---------- */
+  footer{
+    border-top:1px solid var(--line);
+    padding:36px 0;
+  }
+  .foot-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:16px;
+  }
+  .foot-row .brand{ font-size:1.1rem; }
+  footer .fine{
+    font-family:var(--mono);
+    font-size:0.72rem;
+    color:var(--slate);
+    letter-spacing:0.04em;
+  }
+
+</style>
+</head>
+<body>
+
+  <header>
+    <div class="wrap nav">
+      <div class="brand"><span class="dot"></span>FAST TRAVEL</div>
+      <nav class="navlinks">
+        <a href="#showcase">The App</a>
+        <a href="#features">Features</a>
+        <a href="#developer">Developer</a>
+        <a href="#community">Community</a>
+      </nav>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div class="wrap">
+      <div class="eyebrow-row reveal"><span class="rule"></span>Boarding now</div>
+      <div class="hero-grid">
+        <div class="reveal reveal-1">
+          <h1>Your next trip,<br>fully <span>boarded.</span></h1>
+          <p class="lede">Fast Travel plans the route, books the stops, and hands you an itinerary worth keeping — on your phone in the terminal, on your desktop back home.</p>
+        </div>
+
+        <div class="pass reveal reveal-2">
+          <div class="pass-top">
+            <div class="pass-field">
+              <div class="k">Passenger</div>
+              <div class="v">You</div>
+            </div>
+            <div class="pass-field right">
+              <div class="k">Class</div>
+              <div class="v">Free</div>
+            </div>
+          </div>
+
+          <div class="perf"></div>
+
+          <div class="pass-bottom">
+            <div class="pass-route">
+              <div class="city">HOME<small>Origin</small></div>
+              <div class="plane">
+                <svg width="44" height="20" viewBox="0 0 44 20" fill="none">
+                  <path d="M2 10 H34" stroke="#0B1D33" stroke-width="1"/>
+                  <path d="M28 4 L40 10 L28 16 L30 10 Z" fill="#0B1D33"/>
+                </svg>
+              </div>
+              <div class="city">EVERYWHERE<small>Destination</small></div>
+            </div>
+
+            <div class="cta-row">
+              <a href="#" class="btn btn-primary">
+                Get it on Mobile <span class="tag">iOS · Android</span>
+              </a>
+              <a href="#" class="btn btn-outline">
+                Get it on Desktop <span class="tag">Win · Mac · Linux</span>
+              </a>
+            </div>
+
+            <div class="barcode"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="showcase" id="showcase">
+    <div class="wrap">
+      <div class="showcase-head">
+        <h2>One itinerary, every screen</h2>
+        <p>Plan a trip on the desktop app over coffee, then pull up the same route on your phone the moment you land.</p>
+      </div>
+
+      <div class="devices">
+        <div class="phone-frame">
+          <div class="phone-notch"></div>
+          <div class="phone-screen">
+            <div>
+              <div class="p-eyebrow">Trip · Day 3</div>
+              <div class="p-title">Lisbon</div>
+            </div>
+            <div class="p-map"></div>
+            <div class="p-card">
+              <div class="t">Belém Tower</div>
+              <div class="s">9:00 AM · 45 min walk</div>
+            </div>
+            <div class="p-card">
+              <div class="t">Pastéis de Belém</div>
+              <div class="s">10:15 AM · Local pick</div>
+            </div>
+            <div class="p-nav">
+              <div class="ic on"></div>
+              <div class="ic"></div>
+              <div class="ic"></div>
+              <div class="ic"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="desktop-frame">
+          <div class="desktop-bar">
+            <span class="dotx r"></span><span class="dotx y"></span><span class="dotx g"></span>
+            <div class="url">fasttravel.app/trips/lisbon</div>
+          </div>
+          <div class="desktop-screen">
+            <div class="d-side">
+              <div class="d-pill active"></div>
+              <div class="d-pill"></div>
+              <div class="d-pill"></div>
+              <div class="d-pill"></div>
+              <div class="d-pill"></div>
+            </div>
+            <div class="d-main">
+              <div class="d-map"></div>
+              <div class="d-card">
+                <div class="d-line w60"></div>
+                <div class="d-line w40"></div>
+              </div>
+              <div class="d-card">
+                <div class="d-line w60"></div>
+                <div class="d-line w40"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="features" id="features">
+    <div class="wrap">
+      <div class="feat-grid">
+        <div class="feat">
+          <span class="code">DEST</span>
+          <h3>Destinations worth landing on</h3>
+          <p>A curated set of places, each with what it's actually known for — no filler, no generic top-ten lists.</p>
+        </div>
+        <div class="feat">
+          <span class="code">PLAN</span>
+          <h3>Itineraries that hold together</h3>
+          <p>Build a day-by-day route and keep it in sync across every device you own.</p>
+        </div>
+        <div class="feat">
+          <span class="code">SUGG</span>
+          <h3>Recommendations that fit the trip</h3>
+          <p>Suggestions shaped by where you're going and how long you're staying — not a generic feed.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="developer" id="developer">
+    <div class="wrap">
+      <div class="passport">
+        <div class="avatar">KJ</div>
+        <div class="dev-info">
+          <div class="k">Passport · Developer</div>
+          <h3>Kwete Ngnouba Junior Rayan</h3>
+          <div class="role">Full-Stack Developer · Flutter &amp; FastAPI</div>
+          <p class="bio">Building Fast Travel end to end — Flutter on the front, FastAPI on the back, and everything in between: from the itinerary engine to the pipeline that ships it. Based in Yaoundé, currently studying Software Engineering at ICT University.</p>
+          <div class="dev-links">
+            <a href="#" class="dev-link">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.46-1.16-1.11-1.47-1.11-1.47-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.08 2.91.83.09-.65.35-1.08.63-1.33-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.6 9.6 0 0 1 5 0c1.91-1.3 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .26.18.58.69.48A10 10 0 0 0 12 2Z" fill="var(--cream)"/></svg>
+              GitHub
+            </a>
+            <a href="#" class="dev-link">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4.98 3.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5ZM3 9h4v12H3V9Zm7 0h3.8v1.7h.05c.53-1 1.83-2 3.77-2 4.03 0 4.78 2.5 4.78 5.9V21h-4v-5.6c0-1.35-.02-3.1-1.9-3.1-1.9 0-2.2 1.5-2.2 3v5.7h-4V9Z" fill="var(--cream)"/></svg>
+              LinkedIn
+            </a>
+            <a href="mailto:kwetejunior9@gmail.com" class="dev-link">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M3 5h18a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm1.4 2 7.1 5.6a1 1 0 0 0 1 0L19.6 7H4.4Z" fill="var(--cream)"/></svg>
+              Email
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="community" id="community">
+    <div class="wrap">
+      <div class="comm-head">
+        <h2>Travel with company</h2>
+        <p>Swap routes, ask questions, and hear what's new before it ships.</p>
+      </div>
+
+      <div class="comm-grid">
+        <div class="comm-card">
+          <div class="comm-icon fb">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M15 8.5h2.5V5.2C17.1 5.1 15.9 5 14.6 5c-2.7 0-4.6 1.7-4.6 4.7V12H7v3.5h3v8.4h3.6v-8.4h3l.5-3.5h-3.5V9.9c0-1 .3-1.4 1.4-1.4Z" fill="#F5F1E6"/></svg>
+          </div>
+          <h3>Facebook Group</h3>
+          <p>Join travelers planning real trips with Fast Travel — share itineraries, ask locals-in-the-know, and post from the road.</p>
+          <a href="#" class="btn btn-outline" style="border-color:rgba(245,241,230,0.2); color:var(--cream);">Join the group <span class="tag" style="color:#8FA8D4;">Facebook</span></a>
+        </div>
+
+        <div class="comm-card">
+          <div class="comm-icon wa">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 3a9 9 0 0 0-7.7 13.6L3 21l4.6-1.2A9 9 0 1 0 12 3Zm0 1.7a7.3 7.3 0 1 1 0 14.6 7.2 7.2 0 0 1-3.7-1l-.3-.2-2.7.7.7-2.6-.2-.3A7.3 7.3 0 0 1 12 4.7Zm-2.7 3.1c-.2 0-.4 0-.6.3-.2.3-.7.9-.7 2s.8 2.3 1 2.5c.1.2 1.7 2.6 4 3.5 2 .8 2.4.6 2.8.6.4 0 1.3-.5 1.5-1 .2-.5.2-1 .1-1-.1-.2-.2-.3-.5-.4l-1.7-.8c-.2-.1-.4-.1-.6.1l-.6.9c-.1.2-.3.2-.5.1-.7-.3-1.5-.8-2.1-1.5-.6-.6-1-1.3-1.2-1.7-.1-.2 0-.4.1-.5l.4-.5c.1-.2.2-.3.1-.5l-.8-1.9c-.1-.3-.3-.3-.5-.3Z" fill="#F5F1E6"/></svg>
+          </div>
+          <h3>WhatsApp Community</h3>
+          <p>Faster updates and quick answers — best for last-minute questions when you're already mid-trip.</p>
+          <a href="#" class="btn btn-outline" style="border-color:rgba(245,241,230,0.2); color:var(--cream);">Join the chat <span class="tag" style="color:#7FCB9A;">WhatsApp</span></a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap foot-row">
+      <div class="brand"><span class="dot"></span>FAST TRAVEL</div>
+      <div class="fine">© 2026 FAST TRAVEL · BUILT FOR TRAVELERS, BY TRAVELERS</div>
+    </div>
+  </footer>
+
+</body>
+</html>

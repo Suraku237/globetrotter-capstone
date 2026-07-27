@@ -162,6 +162,27 @@
     .navlinks{ display:none; }
   }
 
+  .nav-analytics-btn{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    padding:9px 16px;
+    border-radius:999px;
+    border:1px solid var(--line-strong);
+    font-family:var(--mono);
+    font-size:0.78rem;
+    letter-spacing:0.04em;
+    text-transform:uppercase;
+    color:var(--gold);
+    transition:border-color .2s ease, background .2s ease, transform .16s ease;
+  }
+  .nav-analytics-btn:hover{
+    border-color:var(--gold);
+    background:rgba(212,162,78,0.08);
+    transform:translateY(-1px);
+  }
+  .nav-analytics-btn svg{ flex-shrink:0; }
+
   /* ---------- hero ---------- */
   .hero{
     padding:88px 0 60px;
@@ -747,6 +768,10 @@
         <a href="#developer">Developer</a>
         <a href="#community">Community</a>
       </nav>
+      <a href="analytics.html" class="nav-analytics-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M4 20V10M12 20V4M20 20v-7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+        Analytics
+      </a>
     </div>
   </header>
 

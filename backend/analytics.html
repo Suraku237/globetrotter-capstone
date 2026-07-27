@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fast Travel — Control Tower</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:wght@400;700&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<!-- Same backend URL used by index.html's tracking calls -->
+<script>
+  window.FAST_TRAVEL_API = "http://109.199.120.38:8000";
+</script>
+
+<style>
+
+  :root{
+    --ink:        #0B1D33;
+    --ink-soft:   #142A47;
+    --cream:      #F5F1E6;
+    --gold:       #D4A24E;
+    --rust:       #C1443C;
+    --green:      #4E8C6B;
+    --slate:      #93A0B2;
+    --line:       rgba(245,241,230,0.14);
+    --line-strong:rgba(245,241,230,0.28);
+
+    --display: 'Bebas Neue', sans-serif;
+    --mono:    'Space Mono', monospace;
+    --body:    'Work Sans', sans-serif;
+  }
+
+  *{ box-sizing:border-box; margin:0; padding:0; }
+
+  body{
+    background:var(--ink);
+    color:var(--cream);
+    font-family:var(--body);
+    line-height:1.5;
+    min-height:100vh;
+  }
+
+  a{ color:inherit; text-decoration:none; }
+
+  a:focus-visible, button:focus-visible{
+    outline:2px solid var(--gold);
+    outline-offset:3px;
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ animation:none !important; transition:none !important; }
+  }
+
+  .wrap{ max-width:1080px; margin:0 auto; padding:0 32px; }
+
+  header{
+    border-bottom:1px solid var(--line);
+    padding:20px 0;
+  }
+  .nav{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+  }
+  .brand{
+    display:flex; align-items:center; gap:10px;
+    font-family:var(--display); font-size:1.5rem; letter-spacing:0.06em;
+  }
+  .brand .dot{
+    width:10px; height:10px; border-radius:50%;
+    background:var(--gold);
+    box-shadow:0 0 0 3px rgba(212,162,78,0.22);
+  }
+  .back{
+    font-family:var(--mono);
+    font-size:0.78rem;
+    letter-spacing:0.06em;
+    color:var(--slate);
+    text-transform:uppercase;
+  }
+  .back:hover{ color:var(--cream); }
+
+  .tower-head{
+    padding:56px 0 36px;
+    text-align:center;
+  }
+  .tower-head .eyebrow{
+    font-family:var(--mono);
+    font-size:0.78rem;
+    letter-spacing:0.14em;
+    color:var(--gold);
+    text-transform:uppercase;
+    margin-bottom:14px;
+  }
+  .tower-head h1{
+    font-family:var(--display);
+    font-size:clamp(2.4rem,5vw,3.6rem);
+    letter-spacing:0.01em;
+  }
+  .tower-head p{
+    color:var(--slate);
+    max-width:52ch;
+    margin:14px auto 0;
+  }
+
+  /* ---------- board ---------- */
+  .board{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:1px;
+    background:var(--line);
+    border:1px solid var(--line-strong);
+    border-radius:16px;
+    overflow:hidden;
+    margin-bottom:32px;
+  }
+
+  .stat{
+    background:var(--ink-soft);
+    padding:36px 28px;
+    position:relative;
+  }
+
+  .stat .code{
+    font-family:var(--mono);
+    font-size:0.7rem;
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+    margin-bottom:18px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .stat .code .led{
+    width:7px; height:7px;
+    border-radius:50%;
+    background:var(--green);
+    box-shadow:0 0 8px var(--green);
+  }
+
+  .stat .num{
+    font-family:var(--display);
+    font-size:3.6rem;
+    letter-spacing:0.01em;
+    line-height:1;
+    margin-bottom:10px;
+    font-variant-numeric:tabular-nums;
+  }
+
+  .stat .label{
+    color:var(--slate);
+    font-size:0.92rem;
+  }
+
+  .stat.visitors .code{ color:#8FA8D4; }
+  .stat.users .code{ color:var(--gold); }
+  .stat.downloads .code{ color:var(--rust); }
+
+  @media (max-width:820px){
+    .board{ grid-template-columns:1fr; }
+  }
+
+  /* ---------- breakdown ---------- */
+  .breakdown{
+    background:var(--ink-soft);
+    border:1px solid var(--line-strong);
+    border-radius:16px;
+    padding:30px 32px;
+    margin-bottom:40px;
+  }
+  .breakdown h2{
+    font-family:var(--display);
+    font-size:1.4rem;
+    letter-spacing:0.01em;
+    margin-bottom:20px;
+  }
+
+  .bar-row{
+    display:grid;
+    grid-template-columns:110px 1fr 70px;
+    align-items:center;
+    gap:16px;
+    margin-bottom:16px;
+  }
+  .bar-row:last-child{ margin-bottom:0; }
+
+  .bar-row .plat{
+    font-family:var(--mono);
+    font-size:0.8rem;
+    text-transform:uppercase;
+    letter-spacing:0.06em;
+    color:var(--slate);
+  }
+
+  .bar-track{
+    height:10px;
+    background:rgba(245,241,230,0.08);
+    border-radius:6px;
+    overflow:hidden;
+  }
+  .bar-fill{
+    height:100%;
+    border-radius:6px;
+    transition:width .6s ease;
+    width:0%;
+  }
+  .bar-fill.mobile{ background:var(--gold); }
+  .bar-fill.desktop{ background:#8FA8D4; }
+
+  .bar-row .count{
+    font-family:var(--mono);
+    text-align:right;
+    font-size:0.9rem;
+  }
+
+  /* ---------- footnote ---------- */
+  .footnote{
+    display:flex;
+    gap:12px;
+    align-items:flex-start;
+    background:rgba(212,162,78,0.06);
+    border:1px solid rgba(212,162,78,0.25);
+    border-radius:12px;
+    padding:18px 20px;
+    margin-bottom:60px;
+  }
+  .footnote .mark{
+    font-family:var(--mono);
+    color:var(--gold);
+    font-size:0.9rem;
+  }
+  .footnote p{
+    color:var(--slate);
+    font-size:0.88rem;
+  }
+  .footnote a{ color:var(--gold); text-decoration:underline; }
+
+  .status-line{
+    text-align:center;
+    font-family:var(--mono);
+    font-size:0.76rem;
+    color:var(--slate);
+    padding-bottom:60px;
+  }
+  .status-line.error{ color:var(--rust); }
+
+</style>
+</head>
+<body>
+
+  <header>
+    <div class="wrap nav">
+      <div class="brand"><span class="dot"></span>FAST TRAVEL</div>
+      <a href="index.html" class="back">← Back to site</a>
+    </div>
+  </header>
+
+  <div class="tower-head">
+    <div class="wrap">
+      <div class="eyebrow">Control Tower</div>
+      <h1>Live traffic report</h1>
+      <p>Visitors to the site, registered users in the database, and total app downloads — updated in real time from the Fast Travel backend.</p>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="board">
+      <div class="stat visitors">
+        <div class="code"><span class="led"></span>Visitors</div>
+        <div class="num" id="stat-visitors">—</div>
+        <div class="label">People who've landed on this site</div>
+      </div>
+      <div class="stat users">
+        <div class="code"><span class="led"></span>Users</div>
+        <div class="num" id="stat-users">—</div>
+        <div class="label">Accounts in the Fast Travel database</div>
+      </div>
+      <div class="stat downloads">
+        <div class="code"><span class="led"></span>Downloads</div>
+        <div class="num" id="stat-downloads">—</div>
+        <div class="label">Mobile + desktop app installs started</div>
+      </div>
+    </div>
+
+    <div class="breakdown">
+      <h2>Downloads by platform</h2>
+      <div class="bar-row">
+        <div class="plat">Mobile</div>
+        <div class="bar-track"><div class="bar-fill mobile" id="bar-mobile"></div></div>
+        <div class="count" id="count-mobile">—</div>
+      </div>
+      <div class="bar-row">
+        <div class="plat">Desktop</div>
+        <div class="bar-track"><div class="bar-fill desktop" id="bar-desktop"></div></div>
+        <div class="count" id="count-desktop">—</div>
+      </div>
+    </div>
+
+    <div class="footnote">
+      <span class="mark">ⓘ</span>
+      <p>
+        These three numbers come from Fast Travel's own backend, updated instantly on every visit, signup, and download click.
+        Deeper behavioral analytics — where visitors come from, how long they stay, bounce rate — are tracked separately through
+        <a href="https://analytics.google.com" target="_blank" rel="noopener">Google Analytics</a> and viewable in that dashboard directly.
+      </p>
+    </div>
+
+    <div class="status-line" id="status-line">Loading live data…</div>
+  </div>
+
+  <script>
+    async function loadStats(){
+      const statusEl = document.getElementById('status-line');
+      try{
+        const res = await fetch(window.FAST_TRAVEL_API + "/stats");
+        if(!res.ok) throw new Error("Request failed: " + res.status);
+        const data = await res.json();
+
+        document.getElementById('stat-visitors').textContent = data.visitors.toLocaleString();
+        document.getElementById('stat-users').textContent = data.users.toLocaleString();
+        document.getElementById('stat-downloads').textContent = data.downloads.total.toLocaleString();
+
+        document.getElementById('count-mobile').textContent = data.downloads.mobile.toLocaleString();
+        document.getElementById('count-desktop').textContent = data.downloads.desktop.toLocaleString();
+
+        const total = Math.max(data.downloads.total, 1); // avoid divide-by-zero
+        document.getElementById('bar-mobile').style.width = (data.downloads.mobile / total * 100) + "%";
+        document.getElementById('bar-desktop').style.width = (data.downloads.desktop / total * 100) + "%";
+
+        const now = new Date().toLocaleTimeString();
+        statusEl.textContent = "Last updated " + now + " · refreshes every 30s";
+        statusEl.classList.remove('error');
+      }catch(err){
+        statusEl.textContent = "Couldn't reach the backend (" + err.message + "). Retrying…";
+        statusEl.classList.add('error');
+      }
+    }
+
+    loadStats();
+    setInterval(loadStats, 30000);
+  </script>
+
+</body>
+</html>

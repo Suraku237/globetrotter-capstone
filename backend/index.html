@@ -8,20 +8,23 @@
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:wght@400;700&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 
 <!-- ============================================================
-     ANALYTICS SLOT
-     Paste your tracking snippet here (Google Analytics / Plausible /
-     Fathom / etc). Nothing is loaded yet — this is intentionally empty.
-     Example (Google Analytics 4):
-       <script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXX"></script>
-       <script>
-         window.dataLayer = window.dataLayer || [];
-         function gtag(){dataLayer.push(arguments);}
-         gtag('js', new Date());
-         gtag('config', 'G-XXXXXXX');
-       </script>
-     Example (Plausible, no cookies, one line):
-       <script defer data-domain="yourdomain.com" src="https://plausible.io/js/script.js"></script>
+     ANALYTICS
+     Google Analytics 4 — replace G-XXXXXXXXXX with your real
+     Measurement ID from analytics.google.com (Admin > Data Streams).
      ============================================================ -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){ dataLayer.push(arguments); }
+  gtag('js', new Date());
+  gtag('config', 'G-XXXXXXXXXX');
+</script>
+
+<!-- Backend URL used for the site's own visitor/user/download counters
+     (separate from GA4 above — see /analytics.html) -->
+<script>
+  window.FAST_TRAVEL_API = "http://109.199.120.38:8000";
+</script>
 
 <style>
 
@@ -783,10 +786,10 @@
             </div>
 
             <div class="cta-row">
-              <a href="#" class="btn btn-primary">
+              <a href="#" class="btn btn-primary" onclick="trackDownload('mobile')">
                 Get it on Mobile <span class="tag">iOS · Android</span>
               </a>
-              <a href="#" class="btn btn-outline">
+              <a href="#" class="btn btn-outline" onclick="trackDownload('desktop')">
                 Get it on Desktop <span class="tag">Win · Mac · Linux</span>
               </a>
             </div>
@@ -943,9 +946,27 @@
   <footer>
     <div class="wrap foot-row">
       <div class="brand"><span class="dot"></span>FAST TRAVEL</div>
-      <div class="fine">© 2026 FAST TRAVEL · BUILT FOR TRAVELERS, BY TRAVELERS</div>
+      <div class="fine">© 2026 FAST TRAVEL · BUILT FOR TRAVELERS, BY TRAVELERS · <a href="analytics.html" style="text-decoration:underline;">Control Tower</a></div>
     </div>
   </footer>
+
+  <script>
+    // Count this page load as a visit (fire-and-forget, doesn't block anything)
+    fetch(window.FAST_TRAVEL_API + "/stats/visit", { method: "POST" }).catch(() => {});
+
+    // Called by the download buttons above
+    function trackDownload(platform) {
+      // Our own counter, shown on /analytics.html
+      fetch(window.FAST_TRAVEL_API + "/stats/download/" + platform, { method: "POST" }).catch(() => {});
+      // GA4 event, viewable in the real Google Analytics dashboard
+      if (typeof gtag === "function") {
+        gtag('event', 'download_click', { platform: platform });
+      }
+      // Not preventing default: the "#" placeholder href just won't navigate.
+      // Once you have real download links, remove this line's "return false"
+      // is not needed — just replace href="#" with the real URL.
+    }
+  </script>
 
 </body>
 </html>

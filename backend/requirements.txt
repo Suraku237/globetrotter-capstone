@@ -6,4 +6,3 @@ python-jose[cryptography]==3.3.0
 python-multipart==0.0.9
 python-dotenv==1.0.1
 bcrypt==4.0.1
-# CI/CD auto-deploy test

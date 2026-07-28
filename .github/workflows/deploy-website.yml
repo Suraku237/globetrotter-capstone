@@ -11,6 +11,9 @@ jobs:
   deploy-website:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
       - name: Copy website/ to VPS
         uses: appleboy/scp-action@v0.1.7
         with:

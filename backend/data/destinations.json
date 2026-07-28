@@ -1,46 +1,125 @@
 [
   {
-    "id": "d55cb56d-bc88-4e86-8c1b-659e58d94c28",
-    "name": "Yaound\u00e9",
+    "id": "93facf64-6493-4f30-a353-83d82a9fcb82",
+    "name": "Yaoundé",
     "region": "Centre",
     "tags": [
       "city",
       "culture",
-      "museum"
+      "history"
     ],
     "image_url": "https://images.unsplash.com/photo-1518548419970-58e3b4079ab2?auto=format&fit=crop&w=1200&q=80"
   },
   {
-    "id": "6e51f7f5-ddf2-49be-9c43-49340fc3a190",
-    "name": "Mfoundi",
-    "region": "Centre",
+    "id": "674d4e1e-1d0e-42a0-95db-c14d96e8b67f",
+    "name": "Douala",
+    "region": "Littoral",
     "tags": [
       "city",
-      "market",
-      "business"
+      "nightlife"
     ],
-    "image_url": "https://images.unsplash.com/photo-1494526585095-c41746248156?auto=format&fit=crop&w=1200&q=80"
+    "image_url": "https://images.unsplash.com/photo-1449824913935-59a10b8d2000?auto=format&fit=crop&w=1200&q=80"
   },
   {
-    "id": "344eab3b-593b-4ab2-a643-c965e79996e4",
-    "name": "Mbankomo",
-    "region": "Centre",
+    "id": "079649cf-71f8-4f11-8b41-0ca60d505a0d",
+    "name": "Limbe",
+    "region": "Southwest",
     "tags": [
-      "nature",
-      "relax",
-      "lake"
+      "beach",
+      "relax"
     ],
-    "image_url": "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=80"
+    "image_url": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=80"
   },
   {
-    "id": "8ce1ac55-ba9a-4a69-9a39-4b85c773c1ee",
-    "name": "Nkolbisson",
-    "region": "Centre",
+    "id": "d64e4c02-94f5-4e6d-9ce0-acbea297aa18",
+    "name": "Kribi",
+    "region": "South",
     "tags": [
-      "local",
-      "food",
-      "community"
+      "beach",
+      "relax"
     ],
-    "image_url": "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=1200&q=80"
+    "image_url": "https://images.unsplash.com/photo-1519046904884-53103b34b206?auto=format&fit=crop&w=1200&q=80"
+  },
+  {
+    "id": "21227948-ff0e-419e-9250-cceed774aceb",
+    "name": "Foumban",
+    "region": "West",
+    "tags": [
+      "culture",
+      "history"
+    ],
+    "image_url": "https://images.unsplash.com/photo-1548013146-72479768bada?auto=format&fit=crop&w=1200&q=80"
+  },
+  {
+    "id": "6c8a9207-ae14-4738-afcc-b4cfd9fdb9fe",
+    "name": "Dschang",
+    "region": "West",
+    "tags": [
+      "mountain",
+      "relax"
+    ],
+    "image_url": "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?auto=format&fit=crop&w=1200&q=80"
+  },
+  {
+    "id": "0bc6b019-f11f-46c0-8166-d7a41870fe98",
+    "name": "Buea",
+    "region": "Southwest",
+    "tags": [
+      "mountain",
+      "hiking",
+      "adventure"
+    ],
+    "image_url": "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=1200&q=80"
+  },
+  {
+    "id": "e3b3b77e-530f-4061-ba1b-7aba5d287c6a",
+    "name": "Bamenda",
+    "region": "Northwest",
+    "tags": [
+      "mountain",
+      "hiking"
+    ],
+    "image_url": "https://images.unsplash.com/photo-1483728642387-6c3bdd6c93e5?auto=format&fit=crop&w=1200&q=80"
+  },
+  {
+    "id": "138e6bb4-bbc3-4f20-9802-5e9092a5bbeb",
+    "name": "Rhumsiki",
+    "region": "Far North",
+    "tags": [
+      "adventure",
+      "mountain"
+    ],
+    "image_url": "https://images.unsplash.com/photo-1509316785289-025f5b846b35?auto=format&fit=crop&w=1200&q=80"
+  },
+  {
+    "id": "6a8d4152-e86b-467c-acc4-d85d785783cf",
+    "name": "Waza National Park",
+    "region": "Far North",
+    "tags": [
+      "wildlife",
+      "safari"
+    ],
+    "image_url": "https://images.unsplash.com/photo-1516426122078-c23e76319801?auto=format&fit=crop&w=1200&q=80"
+  },
+  {
+    "id": "d0b6ffe5-a04f-4377-ae86-e72245eee6aa",
+    "name": "Ebolowa",
+    "region": "South",
+    "tags": [
+      "wildlife",
+      "safari",
+      "culture"
+    ],
+    "image_url": "https://images.unsplash.com/photo-1547471080-7cc2caa01a7e?auto=format&fit=crop&w=1200&q=80"
+  },
+  {
+    "id": "70d3882a-edcd-4e49-97c0-e213e18d8fe2",
+    "name": "Bafoussam",
+    "region": "West",
+    "tags": [
+      "culture",
+      "city"
+    ],
+    "image_url": "https://images.unsplash.com/photo-1524492412937-b28074a5d7da?auto=format&fit=crop&w=1200&q=80"
   }
 ]

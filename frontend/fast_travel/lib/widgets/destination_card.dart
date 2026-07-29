@@ -86,6 +86,15 @@ class DestinationCard extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
+              if (destination.description.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  destination.description,
+                  style: Theme.of(context).textTheme.bodySmall,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
               const SizedBox(height: 12),
               Flexible(
                 child: SingleChildScrollView(

@@ -4,6 +4,7 @@ class Destination {
   final String region;
   final List<String> tags;
   final String imageUrl;
+  final String description;
 
   Destination({
     required this.id,
@@ -11,6 +12,7 @@ class Destination {
     required this.region,
     required this.tags,
     required this.imageUrl,
+    this.description = '',
   });
 
   factory Destination.fromJson(Map<String, dynamic> json) => Destination(
@@ -19,6 +21,7 @@ class Destination {
         region: json['region'] as String,
         tags: List<String>.from(json['tags'] as List),
         imageUrl: (json['image_url'] ?? json['imageUrl'] ?? '').toString(),
+        description: (json['description'] ?? '').toString(),
       );
 }
 

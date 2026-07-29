@@ -5,6 +5,7 @@ from .auth import router as auth_router
 from .destinations import router as destinations_router
 from .itineraries import router as itineraries_router
 from .recommendations import router as recommendations_router
+from .stats import router as stats_router
 
 
 def create_app() -> FastAPI:
@@ -21,6 +22,7 @@ def create_app() -> FastAPI:
     app.include_router(destinations_router)
     app.include_router(recommendations_router)
     app.include_router(itineraries_router)
+    app.include_router(stats_router)
 
     @app.get("/health")
     def health():

@@ -10,5 +10,5 @@ services:
     environment:
       JWT_SECRET: ${JWT_SECRET}
     volumes:
-      - ./data:/app/data   # keeps your JSON data persistent across rebuilds
+      - ./data   # keeps your JSON data persistent across rebuilds
     restart: unless-stopped

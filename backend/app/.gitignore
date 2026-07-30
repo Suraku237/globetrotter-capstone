@@ -7,7 +7,7 @@ __pycache__/
 *.pyc
 
 # Data (JSON "database" files — don't commit user data)
-app/data/*.json
+data/*.json
 
 # OS
 .DS_Store

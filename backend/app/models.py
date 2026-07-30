@@ -87,34 +87,93 @@ def seed_destinations() -> None:
             "id": str(uuid.uuid4()),
             "name": "Yaoundé",
             "region": "Centre",
-            "tags": ["city", "culture", "museum"],
+            "tags": ["city", "culture", "history"],
             "image_url": "https://images.unsplash.com/photo-1518548419970-58e3b4079ab2?auto=format&fit=crop&w=1200&q=80",
         },
         {
             "id": str(uuid.uuid4()),
-            "name": "Mfoundi",
-            "region": "Centre",
-            "tags": ["city", "market", "business"],
-            "image_url": "https://images.unsplash.com/photo-1494526585095-c41746248156?auto=format&fit=crop&w=1200&q=80",
+            "name": "Douala",
+            "region": "Littoral",
+            "tags": ["city", "nightlife"],
+            "image_url": "https://images.unsplash.com/photo-1449824913935-59a10b8d2000?auto=format&fit=crop&w=1200&q=80",
         },
         {
             "id": str(uuid.uuid4()),
-            "name": "Mbankomo",
-            "region": "Centre",
-            "tags": ["nature", "relax", "lake"],
-            "image_url": "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=80",
+            "name": "Limbe",
+            "region": "Southwest",
+            "tags": ["beach", "relax"],
+            "image_url": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=80",
         },
         {
             "id": str(uuid.uuid4()),
-            "name": "Nkolbisson",
-            "region": "Centre",
-            "tags": ["local", "food", "community"],
-            "image_url": "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=1200&q=80",
+            "name": "Kribi",
+            "region": "South",
+            "tags": ["beach", "relax"],
+            "image_url": "https://images.unsplash.com/photo-1519046904884-53103b34b206?auto=format&fit=crop&w=1200&q=80",
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "name": "Foumban",
+            "region": "West",
+            "tags": ["culture", "history"],
+            "image_url": "https://images.unsplash.com/photo-1548013146-72479768bada?auto=format&fit=crop&w=1200&q=80",
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "name": "Dschang",
+            "region": "West",
+            "tags": ["mountain", "relax"],
+            "image_url": "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?auto=format&fit=crop&w=1200&q=80",
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "name": "Buea",
+            "region": "Southwest",
+            "tags": ["mountain", "hiking", "adventure"],
+            "image_url": "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=1200&q=80",
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "name": "Bamenda",
+            "region": "Northwest",
+            "tags": ["mountain", "hiking"],
+            "image_url": "https://images.unsplash.com/photo-1483728642387-6c3bdd6c93e5?auto=format&fit=crop&w=1200&q=80",
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "name": "Rhumsiki",
+            "region": "Far North",
+            "tags": ["adventure", "mountain"],
+            "image_url": "https://images.unsplash.com/photo-1509316785289-025f5b846b35?auto=format&fit=crop&w=1200&q=80",
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "name": "Waza National Park",
+            "region": "Far North",
+            "tags": ["wildlife", "safari"],
+            "image_url": "https://images.unsplash.com/photo-1516426122078-c23e76319801?auto=format&fit=crop&w=1200&q=80",
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "name": "Ebolowa",
+            "region": "South",
+            "tags": ["wildlife", "safari", "culture"],
+            "image_url": "https://images.unsplash.com/photo-1547471080-7cc2caa01a7e?auto=format&fit=crop&w=1200&q=80",
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "name": "Bafoussam",
+            "region": "West",
+            "tags": ["culture", "city"],
+            "image_url": "https://images.unsplash.com/photo-1524492412937-b28074a5d7da?auto=format&fit=crop&w=1200&q=80",
         },
     ]
+    # Only seed if the file doesn't exist yet or is genuinely empty.
+    # Never overwrite existing data — that data might be a manual edit,
+    # a git-deployed update, or real content added after launch.
     if DESTINATIONS_FILE.exists():
         current = _load(DESTINATIONS_FILE)
-        if current and all(d.get("name") in {"Yaoundé", "Mfoundi", "Mbankomo", "Nkolbisson"} for d in current):
+        if current:
             return
     _save(DESTINATIONS_FILE, sample)
 

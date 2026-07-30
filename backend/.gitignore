@@ -1,5 +1,6 @@
 # Secrets
 .env
+firebase-service-account.json
 
 # Python
 venv/
@@ -8,3 +9,7 @@ __pycache__/
 
 # Data (JSON "database" files — don't commit user data)
 data/*.json
+
+# OS
+.DS_Store
+Thumbs.db

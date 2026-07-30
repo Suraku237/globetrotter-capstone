@@ -1,4 +1,6 @@
 import 'package:flutter/foundation.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import '../models/models.dart';
 import 'api_service.dart';
 
@@ -45,8 +47,38 @@ class SessionState extends ChangeNotifier {
     }
   }
 
+  /// Signs in with Google via Firebase Auth, then exchanges the Firebase
+  /// ID token for this app's own JWT (same one email/password login uses).
+  Future<AppUser> signInWithGoogle() async {
+    final googleSignIn = GoogleSignIn();
+    final googleUser = await googleSignIn.signIn();
+    if (googleUser == null) {
+      // User cancelled the picker — not an error, just no-op.
+      throw ApiException('Sign-in cancelled');
+    }
+
+    final googleAuth = await googleUser.authentication;
+    final credential = GoogleAuthProvider.credential(
+      accessToken: googleAuth.accessToken,
+      idToken: googleAuth.idToken,
+    );
+
+    final firebaseUserCredential =
+        await FirebaseAuth.instance.signInWithCredential(credential);
+    final firebaseIdToken = await firebaseUserCredential.user!.getIdToken();
+
+    final user = await ApiService.instance.loginWithGoogle(
+      idToken: firebaseIdToken!,
+    );
+    currentUser = user;
+    notifyListeners();
+    return user;
+  }
+
   void signOut() {
     ApiService.instance.setToken(null);
+    FirebaseAuth.instance.signOut();
+    GoogleSignIn().signOut();
     currentUser = null;
     notifyListeners();
   }

@@ -92,6 +92,22 @@ class ApiService {
     });
   }
 
+  Future<AppUser> loginWithGoogle({required String idToken}) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/auth/google'),
+      headers: _headers,
+      body: jsonEncode({'id_token': idToken}),
+    );
+    final data = await _handle(res);
+    setToken(data['access_token'] as String);
+    return AppUser.fromJson({
+      'id': data['user_id'],
+      'email': data['email'],
+      'full_name': data['full_name'],
+      'role': data['role'],
+    });
+  }
+
   Future<List<Destination>> getDestinations({String? query}) async {
     final uri = Uri.parse('$baseUrl/destinations').replace(
       queryParameters:

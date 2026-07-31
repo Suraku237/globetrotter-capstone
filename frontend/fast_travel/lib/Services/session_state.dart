@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../models/models.dart';
 import 'api_service.dart';
@@ -47,40 +46,50 @@ class SessionState extends ChangeNotifier {
     }
   }
 
-  /// Signs in with Google via Firebase Auth, then exchanges the Firebase
-  /// ID token for this app's own JWT (same one email/password login uses).
+  /// Signs in with Google - sends the Google ID token directly to your backend
   Future<AppUser> signInWithGoogle() async {
-    final googleSignIn = GoogleSignIn(
-      clientId:
-          '866694354094-pn5kec29qfaq8nebpi8t6hnkgujb6s62.apps.googleusercontent.com',
-    );
-    final googleUser = await googleSignIn.signIn();
-    if (googleUser == null) {
-      // User cancelled the picker — not an error, just no-op.
-      throw ApiException('Sign-in cancelled');
+    print('=== STARTING GOOGLE SIGN-IN ===');
+    try {
+      final GoogleSignIn googleSignIn = GoogleSignIn(
+        clientId:
+            '866694354094-pn5kec29qfaq8nebpi8t6hnkgujb6s62.apps.googleusercontent.com',
+      );
+
+      print('1. Opening Google Sign-In...');
+      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
+
+      if (googleUser == null) {
+        throw ApiException('Sign-in cancelled');
+      }
+
+      print('2. User: ${googleUser.email}');
+
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
+      print('3. Got ID token: ${googleAuth.idToken?.substring(0, 30)}...');
+
+      if (googleAuth.idToken == null) {
+        throw ApiException('No ID token received from Google');
+      }
+
+      print('4. Sending token to backend...');
+      final user = await ApiService.instance.loginWithGoogle(
+        idToken: googleAuth.idToken!,
+      );
+
+      print('5. SUCCESS! User: ${user.fullName}');
+      currentUser = user;
+      notifyListeners();
+      return user;
+    } catch (e) {
+      print('=== ERROR ===');
+      print('Error: $e');
+      rethrow;
     }
-
-    final googleAuth = await googleUser.authentication;
-    final credential = GoogleAuthProvider.credential(
-      accessToken: googleAuth.accessToken,
-      idToken: googleAuth.idToken,
-    );
-
-    final firebaseUserCredential =
-        await FirebaseAuth.instance.signInWithCredential(credential);
-    final firebaseIdToken = await firebaseUserCredential.user!.getIdToken();
-
-    final user = await ApiService.instance.loginWithGoogle(
-      idToken: firebaseIdToken!,
-    );
-    currentUser = user;
-    notifyListeners();
-    return user;
   }
 
   void signOut() {
     ApiService.instance.setToken(null);
-    FirebaseAuth.instance.signOut();
     GoogleSignIn().signOut();
     currentUser = null;
     notifyListeners();

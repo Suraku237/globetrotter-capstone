@@ -52,7 +52,7 @@ class SessionState extends ChangeNotifier {
   Future<AppUser> signInWithGoogle() async {
     final googleSignIn = GoogleSignIn(
       clientId:
-          '866694354094-pn5kec29qfaq8nebpi8t6hnkgujb6s62.2pps.googleusercontent.com',
+          '866694354094-pn5kec29qfaq8nebpi8t6hnkgujb6s62.apps.googleusercontent.com',
     );
     final googleUser = await googleSignIn.signIn();
     if (googleUser == null) {

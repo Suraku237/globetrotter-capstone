@@ -50,7 +50,10 @@ class SessionState extends ChangeNotifier {
   /// Signs in with Google via Firebase Auth, then exchanges the Firebase
   /// ID token for this app's own JWT (same one email/password login uses).
   Future<AppUser> signInWithGoogle() async {
-    final googleSignIn = GoogleSignIn();
+    final googleSignIn = GoogleSignIn(
+      clientId:
+          '866694354094-pn5kec29qfaq8nebpi8t6hnkgujb6s62.2pps.googleusercontent.com',
+    );
     final googleUser = await googleSignIn.signIn();
     if (googleUser == null) {
       // User cancelled the picker — not an error, just no-op.

@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+import logging
+import requests
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -18,6 +20,9 @@ from .models import (
     pwd_context,
     save_users,
 )
+
+# Setup logging
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
@@ -106,42 +111,82 @@ class FirebaseTokenRequest(BaseModel):
 @router.post("/auth/google", response_model=TokenResponse)
 def login_with_google(payload: FirebaseTokenRequest):
     """
-    Accepts a Firebase ID token (from Google or Facebook sign-in on the
-    Flutter side), verifies it, and finds-or-creates a matching user —
-    then issues the same JWT normal email/password login would.
+    Accepts either a Firebase ID token OR a Google access token.
+    Verifies it and finds-or-creates a matching user.
     """
-    claims = verify_firebase_token(payload.id_token)
-
+    token = payload.id_token
+    logger.info(f"Received token, length: {len(token)}")
+    logger.info(f"Token preview: {token[:30]}...")
+    
+    claims = None
+    
+    # Try 1: Verify as Firebase ID token
+    try:
+        claims = verify_firebase_token(token)
+        logger.info(f"✅ Verified as Firebase ID token for: {claims.get('email')}")
+    except Exception as e:
+        logger.info(f"Not a Firebase ID token, trying as Google access token: {e}")
+        
+        # Try 2: Verify as Google access token
+        try:
+            response = requests.get(
+                f"https://www.googleapis.com/oauth2/v3/tokeninfo?access_token={token}"
+            )
+            if response.status_code != 200:
+                logger.error(f"Google token verification failed: {response.text}")
+                raise HTTPException(status_code=401, detail="Invalid Google token")
+            
+            token_info = response.json()
+            logger.info(f"✅ Verified as Google access token for: {token_info.get('email')}")
+            
+            # Convert to Firebase-like format
+            claims = {
+                'uid': token_info.get('sub'),
+                'email': token_info.get('email'),
+                'name': token_info.get('name'),
+                'picture': token_info.get('picture'),
+            }
+        except Exception as e2:
+            logger.error(f"❌ Token verification failed: {e2}")
+            raise HTTPException(status_code=401, detail="Invalid token")
+    
+    if not claims:
+        raise HTTPException(status_code=401, detail="Token verification failed")
+    
     email = claims.get("email")
     if not email:
         raise HTTPException(
             status_code=400,
             detail="This sign-in provider did not share an email address",
         )
+    
     full_name = claims.get("name") or email.split("@")[0]
-    firebase_uid = claims["uid"]
-
+    firebase_uid = claims.get("uid")
+    
     users = load_users()
     user = next((u for u in users if u["email"] == email), None)
-
+    
     if user is None:
         user = {
             "id": str(__import__("uuid").uuid4()),
             "email": email,
             "full_name": full_name,
             "role": "user",
-            "hashed_password": None,  # no password — social login only
+            "hashed_password": None,
             "firebase_uid": firebase_uid,
             "preferences": [],
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         users.append(user)
         save_users(users)
+        logger.info(f"✅ Created new user: {email}")
     elif not user.get("firebase_uid"):
-        # existing email/password account signing in with Google for the first time
         user["firebase_uid"] = firebase_uid
         save_users(users)
-
+        logger.info(f"✅ Updated existing user with firebase_uid: {email}")
+    else:
+        logger.info(f"✅ Existing user signed in: {email}")
+    
     token = create_access_token({"sub": user["id"], "role": user.get("role", "user")})
     return TokenResponse(
         access_token=token,

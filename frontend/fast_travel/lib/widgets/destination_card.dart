@@ -3,7 +3,6 @@ import '../models/models.dart';
 import '../theme/app_theme.dart';
 
 /// Tag -> icon, so cards read at a glance without needing photography
-/// (Phase 1 has no image pipeline yet).
 IconData _iconForTag(String tag) {
   switch (tag) {
     case 'beach':
@@ -39,9 +38,23 @@ class DestinationCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final primaryTag =
         destination.tags.isNotEmpty ? destination.tags.first : 'place';
-    final imageUrl = destination.imageUrl.isNotEmpty
-        ? destination.imageUrl
-        : 'https://images.unsplash.com/photo-1527631746610-bca00a040d60?auto=format&fit=crop&w=900&q=80';
+
+    // ==========================================
+    // FIX: Build the full image URL using imageUrl
+    // ==========================================
+    String getImageUrl() {
+      final rawUrl = destination.imageUrl;
+      if (rawUrl.isNotEmpty) {
+        // If it's already a full link (starts with http), use it directly
+        if (rawUrl.startsWith('http')) {
+          return rawUrl;
+        }
+        // Otherwise, prepend your backend URL to the relative path
+        return 'http://109.199.120.38:8000$rawUrl';
+      }
+      // Ultimate fallback placeholder if imageUrl is empty
+      return 'https://images.unsplash.com/photo-1527631746610-bca00a040d60?auto=format&fit=crop&w=900&q=80';
+    }
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -58,7 +71,7 @@ class DestinationCard extends StatelessWidget {
                   height: 118,
                   width: double.infinity,
                   child: Image.network(
-                    imageUrl,
+                    getImageUrl(),
                     fit: BoxFit.cover,
                     errorBuilder: (context, error, stackTrace) => Container(
                       color: AppColors.canopy,

@@ -6,16 +6,17 @@ from . import auth, destinations, itineraries, recommendations, stats
 
 app = FastAPI(title="GlobeTrotter API", version="1.0.0")
 
-# Add CORS middleware
+# Update CORS to allow your localhost to load images
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],  # <--- CRITICAL: This allows the browser to read image headers
 )
 
-# Serve static files (images) - make sure the directory exists
+# Ensure images directory exists and serve static files
 images_dir = "/app/data/images"
 if os.path.exists(images_dir):
     app.mount("/images", StaticFiles(directory=images_dir), name="images")

@@ -22,11 +22,6 @@ class ApiService {
   void setToken(String? token) => _token = token;
   bool get isAuthenticated => _token != null;
 
-  // Adjust these once you know your setup:
-  // - Web / desktop dev: localhost works.
-  // - Android emulator: localhost on the HOST machine is 10.0.2.2 from inside the emulator.
-  // - Real phone on the same Wi-Fi as your PC: use your PC's LAN IP.
-  // - Production: your Contabo domain, e.g. https://api.yourdomain.com
   static String get baseUrl {
     const prodUrl = String.fromEnvironment('API_BASE_URL', defaultValue: '');
     if (prodUrl.isNotEmpty) return prodUrl;
@@ -35,7 +30,7 @@ class ApiService {
     if (defaultTargetPlatform == TargetPlatform.android) {
       return 'http://109.199.120.38:8000';
     }
-    return 'http://109.199.120.38:8000'; // iOS simulator, desktop
+    return 'http://109.199.120.38:8000';
   }
 
   Map<String, String> get _headers => {
@@ -140,8 +135,30 @@ class ApiService {
           (query != null && query.isNotEmpty) ? {'q': query} : null,
     );
     final res = await http.get(uri, headers: _headers);
-    final data = await _handle(res) as List;
-    return data.map((e) => Destination.fromJson(e)).toList();
+
+    print('📤 API: Getting destinations');
+    print('📥 Response status: ${res.statusCode}');
+
+    if (res.statusCode != 200) {
+      throw ApiException('Failed to load destinations: ${res.statusCode}');
+    }
+
+    final dynamic jsonData = jsonDecode(res.body);
+
+    // New format: {"destinations": [...]}
+    if (jsonData is Map<String, dynamic> &&
+        jsonData.containsKey('destinations')) {
+      final List data = jsonData['destinations'] as List;
+      print('✅ Got ${data.length} destinations');
+      return data.map((e) => Destination.fromJson(e)).toList();
+    }
+    // Old format: [...]
+    else if (jsonData is List) {
+      print('✅ Got ${jsonData.length} destinations');
+      return jsonData.map((e) => Destination.fromJson(e)).toList();
+    } else {
+      throw ApiException('Unexpected response format');
+    }
   }
 
   Future<List<Destination>> getRecommendations() async {

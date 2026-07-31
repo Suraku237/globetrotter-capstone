@@ -29,6 +29,13 @@
             {
               "client_id": "347020498011-6e27qgc8lkje1uo3bb6anq17eekm5d18.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "347020498011-1m0nusiqrecrstg9i4dlfskcn8lk894g.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.fastTravel"
+              }
             }
           ]
         }

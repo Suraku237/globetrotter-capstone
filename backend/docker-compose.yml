@@ -10,6 +10,6 @@ services:
     environment:
       JWT_SECRET: ${JWT_SECRET}
     volumes:
-      - app/data   # keeps your JSON data persistent across rebuilds
+      - /app/data   # keeps your JSON data persistent across rebuilds
       - ./firebase-service-account.json:/app/firebase-service-account.json:ro
     restart: unless-stopped

@@ -11,6 +11,12 @@ class SessionState extends ChangeNotifier {
 
   bool get isSignedIn => currentUser != null;
 
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    clientId:
+        '866694354094-pn5kec29qfaq8nebpi8t6hnkgujb6s62.apps.googleusercontent.com',
+    scopes: ['email', 'profile', 'openid'],
+  );
+
   Future<AppUser> login(String email, String password) async {
     try {
       final user = await ApiService.instance.login(
@@ -46,17 +52,11 @@ class SessionState extends ChangeNotifier {
     }
   }
 
-  /// Signs in with Google - sends the Google ID token directly to your backend
   Future<AppUser> signInWithGoogle() async {
     print('=== STARTING GOOGLE SIGN-IN ===');
     try {
-      final GoogleSignIn googleSignIn = GoogleSignIn(
-        clientId:
-            '866694354094-pn5kec29qfaq8nebpi8t6hnkgujb6s62.apps.googleusercontent.com',
-      );
-
       print('1. Opening Google Sign-In...');
-      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
 
       if (googleUser == null) {
         throw ApiException('Sign-in cancelled');
@@ -66,18 +66,28 @@ class SessionState extends ChangeNotifier {
 
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
-      print('3. Got ID token: ${googleAuth.idToken?.substring(0, 30)}...');
 
-      if (googleAuth.idToken == null) {
-        throw ApiException('No ID token received from Google');
+      print('3. Access token exists: ${googleAuth.accessToken != null}');
+      print('4. ID token exists: ${googleAuth.idToken != null}');
+
+      String tokenToSend;
+      if (googleAuth.idToken != null && googleAuth.idToken!.isNotEmpty) {
+        tokenToSend = googleAuth.idToken!;
+        print('   Using ID token');
+      } else if (googleAuth.accessToken != null &&
+          googleAuth.accessToken!.isNotEmpty) {
+        tokenToSend = googleAuth.accessToken!;
+        print('   Using access token (ID token not available)');
+      } else {
+        throw ApiException('No token received from Google');
       }
 
-      print('4. Sending token to backend...');
+      print('5. Sending token to backend...');
       final user = await ApiService.instance.loginWithGoogle(
-        idToken: googleAuth.idToken!,
+        idToken: tokenToSend,
       );
 
-      print('5. SUCCESS! User: ${user.fullName}');
+      print('6. SUCCESS! User: ${user.fullName}');
       currentUser = user;
       notifyListeners();
       return user;
@@ -90,7 +100,7 @@ class SessionState extends ChangeNotifier {
 
   void signOut() {
     ApiService.instance.setToken(null);
-    GoogleSignIn().signOut();
+    _googleSignIn.signOut();
     currentUser = null;
     notifyListeners();
   }

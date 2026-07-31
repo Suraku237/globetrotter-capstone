@@ -61,6 +61,7 @@ class ApiService {
     required String fullName,
     required String role,
   }) async {
+    print('📤 API: Register called for: $email');
     final res = await http.post(
       Uri.parse('$baseUrl/register'),
       headers: _headers,
@@ -72,11 +73,13 @@ class ApiService {
       }),
     );
     final data = await _handle(res, okStatus: 201);
+    print('✅ Registration successful');
     return AppUser.fromJson(data);
   }
 
   Future<AppUser> login(
       {required String email, required String password}) async {
+    print('📤 API: Login called for: $email');
     final res = await http.post(
       Uri.parse('$baseUrl/login'),
       headers: _headers,
@@ -84,6 +87,7 @@ class ApiService {
     );
     final data = await _handle(res);
     setToken(data['access_token'] as String);
+    print('✅ Login successful');
     return AppUser.fromJson({
       'id': data['user_id'],
       'email': data['email'],
@@ -95,7 +99,8 @@ class ApiService {
   Future<AppUser> loginWithGoogle({required String idToken}) async {
     print('📤 API: loginWithGoogle called');
     print('📤 Token length: ${idToken.length}');
-    print('📤 Token preview: ${idToken.substring(0, 30)}...');
+    print(
+        '📤 Token preview: ${idToken.substring(0, idToken.length > 30 ? 30 : idToken.length)}...');
     print('📤 URL: $baseUrl/auth/google');
 
     try {
@@ -106,7 +111,8 @@ class ApiService {
       );
 
       print('📥 Response status: ${res.statusCode}');
-      print('📥 Response body: ${res.body}');
+      print(
+          '📥 Response body: ${res.body.substring(0, res.body.length > 100 ? 100 : res.body.length)}...');
 
       if (res.statusCode != 200) {
         throw ApiException('Server returned ${res.statusCode}: ${res.body}');
@@ -139,11 +145,13 @@ class ApiService {
   }
 
   Future<List<Destination>> getRecommendations() async {
+    print('📤 API: Getting recommendations');
     final res = await http.get(
       Uri.parse('$baseUrl/recommendations'),
       headers: _headers,
     );
     final data = await _handle(res) as List;
+    print('✅ Got ${data.length} recommendations');
     return data.map((e) => Destination.fromJson(e)).toList();
   }
 
@@ -154,6 +162,7 @@ class ApiService {
     required String endDate,
     String? notes,
   }) async {
+    print('📤 API: Creating itinerary: $title');
     final res = await http.post(
       Uri.parse('$baseUrl/itineraries'),
       headers: _headers,
@@ -166,15 +175,18 @@ class ApiService {
       }),
     );
     final data = await _handle(res, okStatus: 201);
+    print('✅ Itinerary created');
     return Itinerary.fromJson(data);
   }
 
   Future<List<Itinerary>> getItineraries() async {
+    print('📤 API: Getting itineraries');
     final res = await http.get(
       Uri.parse('$baseUrl/itineraries'),
       headers: _headers,
     );
     final data = await _handle(res) as List;
+    print('✅ Got ${data.length} itineraries');
     return data.map((e) => Itinerary.fromJson(e)).toList();
   }
 }

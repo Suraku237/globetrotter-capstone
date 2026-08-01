@@ -34,27 +34,28 @@ class DestinationCard extends StatelessWidget {
 
   const DestinationCard({super.key, required this.destination, this.onTap});
 
+  // Helper to construct the correct image URL
+  String _getImageUrl() {
+    final rawUrl = destination.imageUrl;
+
+    // If the URL exists and is not empty
+    if (rawUrl.isNotEmpty) {
+      // If it's already a full HTTP link, return it as-is
+      if (rawUrl.startsWith('http')) {
+        return rawUrl;
+      }
+      // Otherwise, prepend the backend URL
+      return 'http://109.199.120.38:8000$rawUrl';
+    }
+
+    // Fallback image if no URL is available
+    return 'https://images.unsplash.com/photo-1527631746610-bca00a040d60?auto=format&fit=crop&w=900&q=80';
+  }
+
   @override
   Widget build(BuildContext context) {
     final primaryTag =
         destination.tags.isNotEmpty ? destination.tags.first : 'place';
-
-    // ==========================================
-    // FIX: Build the full image URL using imageUrl
-    // ==========================================
-    String getImageUrl() {
-      final rawUrl = destination.imageUrl;
-      if (rawUrl.isNotEmpty) {
-        // If it's already a full link (starts with http), use it directly
-        if (rawUrl.startsWith('http')) {
-          return rawUrl;
-        }
-        // Otherwise, prepend your backend URL to the relative path
-        return 'http://109.199.120.38:8000$rawUrl';
-      }
-      // Ultimate fallback placeholder if imageUrl is empty
-      return 'https://images.unsplash.com/photo-1527631746610-bca00a040d60?auto=format&fit=crop&w=900&q=80';
-    }
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -65,13 +66,14 @@ class DestinationCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Image Section
               ClipRRect(
                 borderRadius: BorderRadius.circular(14),
                 child: SizedBox(
                   height: 118,
                   width: double.infinity,
                   child: Image.network(
-                    getImageUrl(),
+                    _getImageUrl(),
                     fit: BoxFit.cover,
                     errorBuilder: (context, error, stackTrace) => Container(
                       color: AppColors.canopy,
@@ -85,20 +87,28 @@ class DestinationCard extends StatelessWidget {
                   ),
                 ),
               ),
+
               const SizedBox(height: 14),
+
+              // Title
               Text(
                 destination.name,
                 style: Theme.of(context).textTheme.titleLarge,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
+
               const SizedBox(height: 4),
+
+              // Region
               Text(
                 destination.region.toUpperCase(),
                 style: Theme.of(context).textTheme.labelSmall,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
+
+              // Description
               if (destination.description.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 Text(
@@ -108,7 +118,10 @@ class DestinationCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ],
+
               const SizedBox(height: 12),
+
+              // Tags
               Flexible(
                 child: SingleChildScrollView(
                   child: Wrap(

@@ -1,3 +1,5 @@
+import '../Services/api_service.dart';
+
 class Destination {
   final String id;
   final String name;
@@ -15,14 +17,34 @@ class Destination {
     this.description = '',
   });
 
-  factory Destination.fromJson(Map<String, dynamic> json) => Destination(
-        id: json['id'] as String,
-        name: json['name'] as String,
-        region: json['region'] as String,
-        tags: List<String>.from(json['tags'] as List),
-        imageUrl: (json['image_url'] ?? json['imageUrl'] ?? '').toString(),
-        description: (json['description'] ?? '').toString(),
-      );
+  factory Destination.fromJson(Map<String, dynamic> json) {
+    // Newer backend schema stores photos as a list of relative paths:
+    //   "images": ["/images/destinations/dest_001.jpg"]
+    // Older schema (or manual data) may still use a flat "image_url" field.
+    // Build a full, absolute, loadable URL either way.
+    String resolvedImageUrl = '';
+
+    final images = json['images'];
+    if (images is List && images.isNotEmpty) {
+      final first = images.first.toString();
+      resolvedImageUrl =
+          first.startsWith('http') ? first : '${ApiService.baseUrl}$first';
+    } else {
+      final flat = (json['image_url'] ?? json['imageUrl'] ?? '').toString();
+      resolvedImageUrl = flat.startsWith('http') || flat.isEmpty
+          ? flat
+          : '${ApiService.baseUrl}$flat';
+    }
+
+    return Destination(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      region: json['region'] as String,
+      tags: List<String>.from(json['tags'] as List),
+      imageUrl: resolvedImageUrl,
+      description: (json['description'] ?? '').toString(),
+    );
+  }
 }
 
 class Itinerary {

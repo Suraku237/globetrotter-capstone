@@ -144,21 +144,30 @@ class ApiService {
     }
 
     final dynamic jsonData = jsonDecode(res.body);
+    List<dynamic> rawList = [];
 
     // New format: {"destinations": [...]}
     if (jsonData is Map<String, dynamic> &&
         jsonData.containsKey('destinations')) {
-      final List data = jsonData['destinations'] as List;
-      print('✅ Got ${data.length} destinations');
-      return data.map((e) => Destination.fromJson(e)).toList();
+      rawList = jsonData['destinations'] as List;
+      print('✅ Got ${rawList.length} destinations');
     }
     // Old format: [...]
     else if (jsonData is List) {
-      print('✅ Got ${jsonData.length} destinations');
-      return jsonData.map((e) => Destination.fromJson(e)).toList();
+      rawList = jsonData;
+      print('✅ Got ${rawList.length} destinations');
     } else {
       throw ApiException('Unexpected response format');
     }
+
+    // 🚨 CRITICAL FIX: Strip out network 'images' and 'image_url' entirely
+    // BEFORE passing it to the model!
+    for (var item in rawList) {
+      item.remove('images');
+      item.remove('image_url');
+    }
+
+    return rawList.map((e) => Destination.fromJson(e)).toList();
   }
 
   Future<List<Destination>> getRecommendations() async {

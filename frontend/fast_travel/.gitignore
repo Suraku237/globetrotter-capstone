@@ -43,3 +43,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# 🚀 NEW: Ignore the images in the local Flutter project
+assets/images/

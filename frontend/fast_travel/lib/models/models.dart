@@ -5,7 +5,7 @@ class Destination {
   final String name;
   final String region;
   final List<String> tags;
-  final String imageUrl;
+  final String imageAsset; // Single string for local asset path
   final String description;
 
   Destination({
@@ -13,35 +13,37 @@ class Destination {
     required this.name,
     required this.region,
     required this.tags,
-    required this.imageUrl,
+    required this.imageAsset,
     this.description = '',
   });
 
   factory Destination.fromJson(Map<String, dynamic> json) {
-    // Newer backend schema stores photos as a list of relative paths:
-    //   "images": ["/images/destinations/dest_001.jpg"]
-    // Older schema (or manual data) may still use a flat "image_url" field.
-    // Build a full, absolute, loadable URL either way.
-    String resolvedImageUrl = '';
+    // 🔥 FIX: Generate a clean filename based on the actual Destination NAME
+    // This converts "Olembe Stadium" -> "olembe_stadium.jpg"
+    // It also handles French characters (é, è, ê, ç, etc.)
+    String nameSlug = (json['name'] as String)
+        .toLowerCase()
+        .replaceAll(' ', '_')
+        .replaceAll("'", '')
+        .replaceAll('-', '_')
+        .replaceAll('é', 'e')
+        .replaceAll('è', 'e')
+        .replaceAll('ê', 'e')
+        .replaceAll('î', 'i')
+        .replaceAll('ô', 'o')
+        .replaceAll('û', 'u')
+        .replaceAll('ç', 'c')
+        .replaceAll('á', 'a')
+        .replaceAll(' ', '_'); // Ensures double spaces don't break it
 
-    final images = json['images'];
-    if (images is List && images.isNotEmpty) {
-      final first = images.first.toString();
-      resolvedImageUrl =
-          first.startsWith('http') ? first : '${ApiService.baseUrl}$first';
-    } else {
-      final flat = (json['image_url'] ?? json['imageUrl'] ?? '').toString();
-      resolvedImageUrl = flat.startsWith('http') || flat.isEmpty
-          ? flat
-          : '${ApiService.baseUrl}$flat';
-    }
+    String assetPath = 'assets/images/$nameSlug.jpg';
 
     return Destination(
       id: json['id'] as String,
       name: json['name'] as String,
       region: json['region'] as String,
       tags: List<String>.from(json['tags'] as List),
-      imageUrl: resolvedImageUrl,
+      imageAsset: assetPath,
       description: (json['description'] ?? '').toString(),
     );
   }

@@ -34,24 +34,6 @@ class DestinationCard extends StatelessWidget {
 
   const DestinationCard({super.key, required this.destination, this.onTap});
 
-  // Helper to construct the correct image URL
-  String _getImageUrl() {
-    final rawUrl = destination.imageUrl;
-
-    // If the URL exists and is not empty
-    if (rawUrl.isNotEmpty) {
-      // If it's already a full HTTP link, return it as-is
-      if (rawUrl.startsWith('http')) {
-        return rawUrl;
-      }
-      // Otherwise, prepend the backend URL
-      return 'http://109.199.120.38:8000$rawUrl';
-    }
-
-    // Fallback image if no URL is available
-    return 'https://images.unsplash.com/photo-1527631746610-bca00a040d60?auto=format&fit=crop&w=900&q=80';
-  }
-
   @override
   Widget build(BuildContext context) {
     final primaryTag =
@@ -72,8 +54,9 @@ class DestinationCard extends StatelessWidget {
                 child: SizedBox(
                   height: 118,
                   width: double.infinity,
-                  child: Image.network(
-                    _getImageUrl(),
+                  // 🔥 USES LOCAL ASSET
+                  child: Image.asset(
+                    destination.imageAsset,
                     fit: BoxFit.cover,
                     errorBuilder: (context, error, stackTrace) => Container(
                       color: AppColors.canopy,

@@ -54,7 +54,8 @@ class _ItinerariesScreenState extends State<ItinerariesScreen> {
           name: 'Unknown',
           region: '',
           tags: const [],
-          imageUrl: '',
+          imageAsset: '', // ✅ FIXED: Use 'imageAsset' instead of 'images'
+          description: '',
         ),
       )
       .name;

@@ -21,18 +21,17 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # 2. 👇 FIXED: Use the RELATIVE path to the mounted volume inside the container
-    # In your docker-compose.yml, you mount ./data to /data (or similar)
-    # We just need to tell FastAPI to look inside that mounted folder.
-    
-    images_directory = "/data/images/destinations"  # <-- THIS IS THE FIX
+    # 2. 👇 FIXED: The correct path based on your docker-compose.yml mount
+    # You mapped ./data to /app/data, so the images are at /app/data/images/destinations
+    images_directory = "/app/data/images/destinations"
     
     # Safety check (optional, but good for debugging in logs)
     if not os.path.exists(images_directory):
         print(f"⚠️ WARNING: Image directory not found at {images_directory}. Check your docker-compose mount.")
     else:
+        # Note: We are mounting to "/images/destinations" to match your JSON paths
         app.mount(
-            "/images", 
+            "/images/destinations", 
             StaticFiles(directory=images_directory), 
             name="images"
         )

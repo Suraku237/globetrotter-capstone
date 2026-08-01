@@ -9,9 +9,13 @@ router = APIRouter()
 
 @router.get("/destinations")
 def get_destinations(q: Optional[str] = None) -> List[Dict[str, Any]]:
-    destinations = load_destinations()
+    # 1. Load the data
+    data = load_destinations()
     
-    # 1. Handle search query (your existing filter logic)
+    # 2. YOUR JSON has a wrapper "destinations". Extract the actual list.
+    destinations = data.get("destinations", [])  
+    
+    # 3. Handle search query
     if q:
         q_lower = q.lower()
         destinations = [
@@ -22,13 +26,18 @@ def get_destinations(q: Optional[str] = None) -> List[Dict[str, Any]]:
             or any(q_lower in tag for tag in d["tags"])
         ]
 
-    # 2. 👇 FIX THE IMAGE URLS HERE 👇
-    # This ensures Flutter gets a full URL path to the image
+    # 4. 👇 FIX THE IMAGE URLS HERE 👇
     for dest in destinations:
-        if "image" in dest and dest["image"]:
-            # If the JSON has "dest_001.jpg", change it to "/images/dest_001.jpg"
-            # This matches the static mount we set up in __init__.py
-            if not dest["image"].startswith("/"):
-                dest["image"] = f"/images/{dest['image']}"
+        # Your JSON uses an ARRAY called "images", not a string called "image"
+        if "images" in dest and isinstance(dest["images"], list):
+            # Change "/images/destinations/dest_001.jpg" to "/images/dest_001.jpg"
+            # (Removes the extra "destinations" folder from the path so it matches your mount)
+            dest["images"] = [
+                img.replace("/images/destinations/", "/images/") 
+                for img in dest["images"]
+            ]
+            
+            # (Optional) If you want to flatten it to a single string for Flutter:
+            # dest["image"] = dest["images"][0] if dest["images"] else ""
 
     return destinations

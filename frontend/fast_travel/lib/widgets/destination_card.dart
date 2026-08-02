@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
+import '../screens/home/destination_detail_screen.dart';
 
 /// Tag -> icon, so cards read at a glance without needing photography
 IconData _iconForTag(String tag) {
@@ -39,22 +40,29 @@ class DestinationCard extends StatelessWidget {
     final primaryTag =
         destination.tags.isNotEmpty ? destination.tags.first : 'place';
 
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) =>
+                DestinationDetailScreen(destination: destination),
+          ),
+        );
+      },
+      child: Card(
+        clipBehavior: Clip.antiAlias,
         child: Padding(
           padding: const EdgeInsets.all(18),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Image Section
+              // ✅ BIGGER IMAGE SIZE
               ClipRRect(
                 borderRadius: BorderRadius.circular(14),
                 child: SizedBox(
-                  height: 118,
+                  height: 135, // <--- INCREASED FROM 118 TO 135
                   width: double.infinity,
-                  // 🔥 USES LOCAL ASSET
                   child: Image.asset(
                     destination.imageAsset,
                     fit: BoxFit.cover,
@@ -97,7 +105,7 @@ class DestinationCard extends StatelessWidget {
                 Text(
                   destination.description,
                   style: Theme.of(context).textTheme.bodySmall,
-                  maxLines: 3,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
               ],

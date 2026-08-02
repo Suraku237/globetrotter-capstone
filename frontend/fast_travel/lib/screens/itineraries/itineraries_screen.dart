@@ -3,6 +3,7 @@ import '../../models/models.dart';
 import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/empty_state.dart';
+import 'map_view_screen.dart'; // ✅ UPDATED: Now points to the standalone map screen
 
 class ItinerariesScreen extends StatefulWidget {
   const ItinerariesScreen({super.key});
@@ -54,7 +55,7 @@ class _ItinerariesScreenState extends State<ItinerariesScreen> {
           name: 'Unknown',
           region: '',
           tags: const [],
-          imageAsset: '', // ✅ FIXED: Use 'imageAsset' instead of 'images'
+          imageAsset: '',
           description: '',
         ),
       )
@@ -98,25 +99,88 @@ class _ItinerariesScreenState extends State<ItinerariesScreen> {
               separatorBuilder: (context, index) => const SizedBox(height: 10),
               itemBuilder: (context, i) {
                 final it = _items[i];
+                final destination = _destinations.firstWhere(
+                  (d) => d.id == it.destinationId,
+                  orElse: () => Destination(
+                    id: it.destinationId,
+                    name: 'Unknown',
+                    region: '',
+                    tags: const [],
+                    imageAsset: '',
+                    description: '',
+                  ),
+                );
+
                 return Card(
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 18, vertical: 10),
-                    leading: Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: AppColors.teal,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(Icons.card_travel_rounded,
-                          color: Colors.white),
-                    ),
-                    title: Text(it.title,
-                        style: Theme.of(context).textTheme.titleMedium),
-                    subtitle: Text(
-                      '${_destinationName(it.destinationId)}  ·  ${it.startDate} → ${it.endDate}',
-                      style: Theme.of(context).textTheme.labelSmall,
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Row(
+                      children: [
+                        // Leading Icon (Car)
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: AppColors.teal,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.directions_car_rounded,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+
+                        // Trip Info (Title, Destination, Dates)
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                it.title,
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${_destinationName(it.destinationId)}  ·  ${it.startDate} → ${it.endDate}',
+                                style: Theme.of(context).textTheme.labelSmall,
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(width: 12),
+
+                        // ✅ VISIBLE "MAP" BUTTON (Now opens MapViewScreen)
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => MapViewScreen(
+                                  destLat: 3.9004,
+                                  destLng: 11.5489,
+                                  destName: destination.name,
+                                ),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.map, size: 16),
+                          label: const Text('Map'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.ochre,
+                            foregroundColor: AppColors.ink,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 );

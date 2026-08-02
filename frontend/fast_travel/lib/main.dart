@@ -7,6 +7,7 @@ import 'screens/auth/login_screen.dart';
 import 'screens/home/discover_screen.dart';
 import 'screens/home/recommendations_screen.dart';
 import 'screens/itineraries/itineraries_screen.dart';
+import 'screens/home/map_screen.dart'; // ✅ This imports ExploreMapScreen
 import 'Services/session_state.dart';
 import 'theme/app_theme.dart';
 import 'widgets/adaptive_shell.dart';
@@ -156,7 +157,12 @@ class _HomeShell extends StatefulWidget {
 class _HomeShellState extends State<_HomeShell> {
   int _index = 0;
 
-  static const _titles = ['Discover Yaoundé', 'For You', 'My Trips'];
+  static const _titles = [
+    'Discover Yaoundé',
+    'For You',
+    'My Trips',
+    'Explore Map'
+  ];
 
   Widget get _body {
     switch (_index) {
@@ -164,6 +170,8 @@ class _HomeShellState extends State<_HomeShell> {
         return const RecommendationsScreen();
       case 2:
         return const ItinerariesScreen();
+      case 3:
+        return ExploreMapScreen(); // ✅ Correctly matched class name
       default:
         return const DiscoverScreen();
     }

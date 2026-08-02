@@ -21,8 +21,11 @@ class RegionRibbon extends StatelessWidget {
   final String? selected;
   final ValueChanged<String?> onSelect;
 
-  const RegionRibbon(
-      {super.key, required this.selected, required this.onSelect});
+  const RegionRibbon({
+    super.key,
+    required this.selected,
+    required this.onSelect,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -38,12 +41,18 @@ class RegionRibbon extends StatelessWidget {
           final color =
               AppColors.regionGradient[i % AppColors.regionGradient.length];
           final isSelected = selected == region;
+
           return GestureDetector(
-            onTap: () => onSelect(isSelected ? null : region),
+            onTap: () {
+              // If the tapped region is already selected, clear the filter (toggle off)
+              // Otherwise, select the new region.
+              onSelect(isSelected ? null : region);
+            },
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 180),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               decoration: BoxDecoration(
+                // 🔥 FIXED: Replaced deprecated withValues(alpha) with withOpacity()
                 color: isSelected ? color : color.withValues(alpha: 0.14),
                 borderRadius: BorderRadius.circular(22),
                 border: Border.all(

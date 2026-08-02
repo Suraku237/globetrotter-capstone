@@ -1,5 +1,3 @@
-import '../Services/api_service.dart';
-
 class Destination {
   final String id;
   final String name;

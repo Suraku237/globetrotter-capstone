@@ -11,6 +11,7 @@ class AdaptiveShell extends StatelessWidget {
   final String title;
   final List<Widget>? actions;
 
+  // ✅ UPDATED: Added 4th destination: Map
   static const _destinations = [
     (
       icon: Icons.explore_outlined,
@@ -23,6 +24,7 @@ class AdaptiveShell extends StatelessWidget {
       label: 'For You'
     ),
     (icon: Icons.map_outlined, selected: Icons.map_rounded, label: 'My Trips'),
+    (icon: Icons.public_outlined, selected: Icons.public_rounded, label: 'Map'),
   ];
 
   const AdaptiveShell({
@@ -67,8 +69,8 @@ class AdaptiveShell extends StatelessWidget {
             onDestinationSelected: onDestinationSelected,
             backgroundColor: AppColors.canopy,
             extended: MediaQuery.sizeOf(context).width >= 1024,
-            leading: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 24),
+            leading: const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
               child: Icon(Icons.travel_explore_rounded,
                   color: AppColors.ochre, size: 32),
             ),

@@ -5,6 +5,8 @@ class Destination {
   final List<String> tags;
   final String imageAsset; // Single string for local asset path
   final String description;
+  final double lat; // ✅ NEW: Latitude from VPS
+  final double lng; // ✅ NEW: Longitude from VPS
 
   Destination({
     required this.id,
@@ -12,13 +14,13 @@ class Destination {
     required this.region,
     required this.tags,
     required this.imageAsset,
-    this.description = '',
+    required this.description,
+    required this.lat, // ✅ ADD TO CONSTRUCTOR
+    required this.lng, // ✅ ADD TO CONSTRUCTOR
   });
 
   factory Destination.fromJson(Map<String, dynamic> json) {
     // 🔥 FIX: Generate a clean filename based on the actual Destination NAME
-    // This converts "Olembe Stadium" -> "olembe_stadium.jpg"
-    // It also handles French characters (é, è, ê, ç, etc.)
     String nameSlug = (json['name'] as String)
         .toLowerCase()
         .replaceAll(' ', '_')
@@ -32,7 +34,7 @@ class Destination {
         .replaceAll('û', 'u')
         .replaceAll('ç', 'c')
         .replaceAll('á', 'a')
-        .replaceAll(' ', '_'); // Ensures double spaces don't break it
+        .replaceAll(' ', '_');
 
     String assetPath = 'assets/images/$nameSlug.jpg';
 
@@ -43,6 +45,9 @@ class Destination {
       tags: List<String>.from(json['tags'] as List),
       imageAsset: assetPath,
       description: (json['description'] ?? '').toString(),
+      // ✅ PARSE COORDINATES FROM THE API
+      lat: (json['lat'] as num?)?.toDouble() ?? 0.0,
+      lng: (json['lng'] as num?)?.toDouble() ?? 0.0,
     );
   }
 }

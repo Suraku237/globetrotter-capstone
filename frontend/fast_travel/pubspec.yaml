@@ -16,10 +16,11 @@ dependencies:
   firebase_auth: ^5.5.0
   google_sign_in: ^6.2.2
 
-  # ✅ NEW FREE OPENSTREETMAP PACKAGES (No credit card needed)
+  # ✅ MAP AND ROUTING PACKAGES
   flutter_map: ^7.0.0
   latlong2: ^0.9.1
   geolocator: ^11.1.0
+  url_launcher: ^6.3.0  # ✅ NEW: Added to open external maps
 
 dev_dependencies:
   flutter_test:

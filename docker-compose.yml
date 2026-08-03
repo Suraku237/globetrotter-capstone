@@ -1,0 +1,16 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      JWT_SECRET: ${JWT_SECRET}
+    volumes:
+      # 👇 CHANGE THIS: Bind-mount your actual data folder to /app/data inside the container
+      - ./data:/app/data
+      - ./firebase-service-account.json:/app/firebase-service-account.json:ro
+    restart: unless-stopped

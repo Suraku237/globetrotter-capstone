@@ -1,7 +1,10 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
 import '../../theme/app_theme.dart';
 import '../../models/models.dart';
 import '../../services/api_service.dart';
@@ -20,12 +23,15 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
   LatLng? _currentLocation;
   bool _loadingLocation = false;
   bool _loadingDestinations = true;
-
   bool _isLocationEnabled = false;
   bool _isWaitingForPermission = false;
 
   List<Destination> _allDestinations = [];
   List<Destination> _searchResults = [];
+
+  final List<Polyline> _polylines = [];
+
+  String? _activeGoDestinationId;
 
   @override
   void initState() {
@@ -113,8 +119,8 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
 
     try {
       Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.best,
-        timeLimit: const Duration(seconds: 10),
+        desiredAccuracy: LocationAccuracy.bestForNavigation,
+        timeLimit: const Duration(seconds: 15),
       );
 
       if (mounted) {
@@ -124,6 +130,7 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
           _loadingLocation = false;
           _isWaitingForPermission = false;
         });
+
         _mapController.move(_currentLocation!, 16.0);
       }
     } catch (e) {
@@ -140,9 +147,128 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
     }
   }
 
+  // ✅ SWITCHED TO OSRM ROUTING API (FREE, NO BLOCK)
+  Future<void> _drawRoute(double destLat, double destLng) async {
+    if (_currentLocation == null) return;
+    if (_currentLocation!.latitude == 0.0 &&
+        _currentLocation!.longitude == 0.0) {
+      print("❌ Invalid location (0.0, 0.0). Waiting for GPS lock...");
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content:
+                Text('Waiting for GPS location... Try again in 5 seconds.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _polylines.clear();
+    });
+
+    // ✅ SWITCH TO OSRM (No API key needed, no university firewall block)
+    final String url =
+        'https://router.project-osrm.org/route/v1/driving/${_currentLocation!.longitude},${_currentLocation!.latitude};${destLng},${destLat}?overview=full&geometries=geojson';
+
+    try {
+      final response = await http.get(Uri.parse(url));
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+
+        if (decoded['routes'] == null || decoded['routes'].isEmpty) {
+          print("❌ No route features found in response");
+          print(
+              "📍 Current location: ${_currentLocation!.latitude}, ${_currentLocation!.longitude}");
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text('No route found. Try another destination.')),
+          );
+          return;
+        }
+
+        final geometry = decoded['routes'][0]['geometry']['coordinates'];
+
+        List<LatLng> routePoints = [];
+        for (var coord in geometry) {
+          routePoints.add(LatLng(coord[1], coord[0]));
+        }
+
+        setState(() {
+          _polylines.add(
+            Polyline(
+              points: routePoints,
+              color: Colors.blue,
+              strokeWidth: 4,
+            ),
+          );
+        });
+        print("✅ Route drawn successfully!");
+      } else {
+        print("❌ Route error: ${response.body}");
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Route API Error: ${response.statusCode}')),
+        );
+      }
+    } catch (e) {
+      print("❌ Exception drawing route: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to connect to route server.')),
+      );
+    }
+  }
+
   void _showErrorDialog(String message) {
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Widget _buildCustomLocationMarker() {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.blue.withOpacity(0.3),
+                blurRadius: 15,
+                spreadRadius: 5,
+              ),
+            ],
+          ),
+        ),
+        Container(
+          width: 30,
+          height: 30,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.white,
+            border: Border.all(color: Colors.blue, width: 3),
+          ),
+        ),
+        Container(
+          width: 14,
+          height: 14,
+          decoration: const BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF2196F3), Color(0xFF0D47A1)],
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.blue,
+                blurRadius: 4,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
   @override
@@ -229,6 +355,7 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
                       userAgentPackageName: 'fast_travel',
                       subdomains: const ['a', 'b', 'c'],
                     ),
+                    PolylineLayer(polylines: _polylines),
                     if (_currentLocation != null)
                       MarkerLayer(
                         markers: [
@@ -236,8 +363,7 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
                             point: _currentLocation!,
                             width: 40,
                             height: 40,
-                            child: const Icon(Icons.my_location,
-                                color: Colors.blue, size: 40),
+                            child: _buildCustomLocationMarker(),
                           ),
                         ],
                       ),
@@ -269,6 +395,15 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
                           const SizedBox(height: 8),
                       itemBuilder: (context, index) {
                         final dest = _searchResults[index];
+                        final bool isGoActive =
+                            _activeGoDestinationId == dest.id;
+
+                        final bool isButtonEnabled = _currentLocation != null &&
+                            _currentLocation!.latitude != 0.0 &&
+                            _currentLocation!.longitude != 0.0 &&
+                            _currentLocation!.latitude > 1.0 &&
+                            _currentLocation!.longitude > 1.0;
+
                         return Container(
                           decoration: BoxDecoration(
                             color: Colors.white,
@@ -281,44 +416,80 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
                               ),
                             ],
                           ),
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.all(8),
-                            leading: ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: SizedBox(
-                                width: 60,
-                                height: 60,
-                                child: Image.asset(
-                                  dest.imageAsset,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) =>
-                                      Container(
-                                    color: AppColors.canopy,
-                                    alignment: Alignment.center,
-                                    child: const Icon(Icons.image,
-                                        color: Colors.white),
+                          child: Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Row(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: SizedBox(
+                                    width: 60,
+                                    height: 60,
+                                    child: Image.asset(
+                                      dest.imageAsset,
+                                      fit: BoxFit.cover,
+                                      errorBuilder:
+                                          (context, error, stackTrace) =>
+                                              Container(
+                                        color: AppColors.canopy,
+                                        alignment: Alignment.center,
+                                        child: const Icon(Icons.image,
+                                            color: Colors.white),
+                                      ),
+                                    ),
                                   ),
                                 ),
-                              ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        dest.name,
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.bold),
+                                      ),
+                                      Text(
+                                        dest.description,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                            fontSize: 12,
+                                            color: AppColors.clay),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                SizedBox(
+                                  height: 36,
+                                  child: ElevatedButton.icon(
+                                    onPressed: isButtonEnabled
+                                        ? () {
+                                            setState(() {
+                                              _activeGoDestinationId = dest.id;
+                                            });
+                                            _drawRoute(dest.lat, dest.lng);
+                                          }
+                                        : null,
+                                    icon: const Icon(Icons.directions_car,
+                                        size: 16),
+                                    label: const Text('Go',
+                                        style: TextStyle(fontSize: 12)),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: isGoActive
+                                          ? Colors.blue
+                                          : Colors.green,
+                                      foregroundColor: Colors.white,
+                                      elevation: 0,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                            title: Text(
-                              dest.name,
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            subtitle: Text(
-                              dest.description,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                  fontSize: 12, color: AppColors.clay),
-                            ),
-                            trailing: const Icon(
-                                Icons.arrow_forward_ios_rounded,
-                                size: 16),
-                            onTap: () {
-                              // Navigate to DestinationDetailScreen
-                            },
                           ),
                         );
                       },

@@ -3,7 +3,7 @@ import '../../models/models.dart';
 import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/empty_state.dart';
-import 'map_view_screen.dart'; // ✅ UPDATED: Now points to the standalone map screen
+import 'map_view_screen.dart';
 
 class ItinerariesScreen extends StatefulWidget {
   const ItinerariesScreen({super.key});
@@ -57,6 +57,8 @@ class _ItinerariesScreenState extends State<ItinerariesScreen> {
           tags: const [],
           imageAsset: '',
           description: '',
+          lat: 0.0, // ✅ FIX: Added lat
+          lng: 0.0, // ✅ FIX: Added lng
         ),
       )
       .name;
@@ -108,6 +110,8 @@ class _ItinerariesScreenState extends State<ItinerariesScreen> {
                     tags: const [],
                     imageAsset: '',
                     description: '',
+                    lat: 0.0, // ✅ FIX: Added lat
+                    lng: 0.0, // ✅ FIX: Added lng
                   ),
                 );
 
@@ -120,7 +124,6 @@ class _ItinerariesScreenState extends State<ItinerariesScreen> {
                     padding: const EdgeInsets.all(16.0),
                     child: Row(
                       children: [
-                        // Leading Icon (Car)
                         Container(
                           width: 44,
                           height: 44,
@@ -134,8 +137,6 @@ class _ItinerariesScreenState extends State<ItinerariesScreen> {
                           ),
                         ),
                         const SizedBox(width: 14),
-
-                        // Trip Info (Title, Destination, Dates)
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -152,10 +153,7 @@ class _ItinerariesScreenState extends State<ItinerariesScreen> {
                             ],
                           ),
                         ),
-
                         const SizedBox(width: 12),
-
-                        // ✅ VISIBLE "MAP" BUTTON (Now opens MapViewScreen)
                         ElevatedButton.icon(
                           onPressed: () {
                             Navigator.push(

@@ -48,6 +48,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     } on ApiException catch (e) {
       setState(() => _error = e.message);
     } catch (e) {
+      debugPrint('Registration failed with a non-API error: $e');
       setState(
         () => _error = 'Could not reach the server. Is the backend running?',
       );

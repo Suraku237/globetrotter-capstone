@@ -1,0 +1,127 @@
+import json
+import os
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional
+
+from dotenv import load_dotenv
+from pydantic import BaseModel, EmailStr
+from passlib.context import CryptContext
+
+
+def load_environment() -> None:
+    env_files = [
+        Path(__file__).resolve().parent / ".env",
+        Path(__file__).resolve().parent.parent / ".env",
+    ]
+    for env_file in env_files:
+        if env_file.exists():
+            load_dotenv(env_file, override=False)
+
+
+load_environment()
+
+SECRET_KEY = os.getenv("JWT_SECRET")
+if not SECRET_KEY:
+    raise RuntimeError(
+        "JWT_SECRET is not set. Create a .env file in auth-service/ with "
+        "JWT_SECRET=<output of `openssl rand -hex 32`>, or set it as an env var."
+    )
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
+
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+DATA_DIR.mkdir(exist_ok=True)
+USERS_FILE = DATA_DIR / "users.json"
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+class RegisterRequest(BaseModel):
+    email: EmailStr
+    password: str
+    full_name: str
+    role: Optional[str] = "user"
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    role: str
+    user_id: str
+    email: str
+    full_name: str
+
+
+def _load(path: Path) -> list:
+    if not path.exists():
+        return []
+    with open(path, "r") as f:
+        return json.load(f)
+
+
+def _save(path: Path, data: list) -> None:
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2, default=str)
+
+
+def seed_users() -> None:
+    users = _load(USERS_FILE)
+    existing_emails = {u.get("email") for u in users if u.get("email")}
+
+    sample_users = [
+        {
+            "id": str(uuid.uuid4()),
+            "email": "admin@example.com",
+            "full_name": "Admin User",
+            "role": "admin",
+            "hashed_password": pwd_context.hash("admin123"),
+            "preferences": [],
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "email": "worker@example.com",
+            "full_name": "Worker User",
+            "role": "worker",
+            "hashed_password": pwd_context.hash("worker123"),
+            "preferences": [],
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "email": "user@example.com",
+            "full_name": "Regular User",
+            "role": "user",
+            "hashed_password": pwd_context.hash("user123"),
+            "preferences": [],
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        },
+    ]
+
+    added = False
+    for sample_user in sample_users:
+        if sample_user["email"] not in existing_emails:
+            users.append(sample_user)
+            existing_emails.add(sample_user["email"])
+            added = True
+
+    if added or not USERS_FILE.exists():
+        _save(USERS_FILE, users)
+
+
+seed_users()
+
+
+def load_users() -> list:
+    return _load(USERS_FILE)
+
+
+def save_users(users: list) -> None:
+    _save(USERS_FILE, users)

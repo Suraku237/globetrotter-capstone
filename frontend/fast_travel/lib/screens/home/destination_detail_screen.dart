@@ -30,8 +30,8 @@ class DestinationDetailScreen extends StatelessWidget {
                 child: SizedBox(
                   width: double.infinity,
                   height: 500,
-                  child: Image.asset(
-                    destination.imageAsset,
+                  child: Image.network(
+                    destination.imageUrl,
                     fit: BoxFit.cover,
                     errorBuilder: (context, error, stackTrace) => Container(
                       color: AppColors.canopy,

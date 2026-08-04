@@ -1,16 +1,34 @@
 version: "3.9"
 
 services:
-  backend:
+  auth-service:
     build:
-      context: .
-      dockerfile: app/Dockerfile
-    ports:
-      - "8000:8000"
+      context: ./auth-service
     environment:
       JWT_SECRET: ${JWT_SECRET}
     volumes:
-      # 👇 CHANGE THIS: Bind-mount your actual data folder to /app/data inside the container
-      - ./data:/app/data
+      - ./shared/data:/app/data
       - ./firebase-service-account.json:/app/firebase-service-account.json:ro
+    restart: unless-stopped
+
+  data-service:
+    build:
+      context: ./data-service
+    environment:
+      JWT_SECRET: ${JWT_SECRET}
+    volumes:
+      - ./shared/data:/app/data
+    restart: unless-stopped
+
+  api-gateway:
+    build:
+      context: ./api-gateway
+    ports:
+      - "8000:8000"
+    environment:
+      AUTH_SERVICE_URL: http://auth-service:8000
+      DATA_SERVICE_URL: http://data-service:8000
+    depends_on:
+      - auth-service
+      - data-service
     restart: unless-stopped

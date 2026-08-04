@@ -3,49 +3,40 @@ class Destination {
   final String name;
   final String region;
   final List<String> tags;
-  final String imageAsset; // Single string for local asset path
+  final String imageUrl; // Fully-qualified URL served by the data-service
   final String description;
-  final double lat; // ✅ NEW: Latitude from VPS
-  final double lng; // ✅ NEW: Longitude from VPS
+  final double lat;
+  final double lng;
 
   Destination({
     required this.id,
     required this.name,
     required this.region,
     required this.tags,
-    required this.imageAsset,
+    required this.imageUrl,
     required this.description,
-    required this.lat, // ✅ ADD TO CONSTRUCTOR
-    required this.lng, // ✅ ADD TO CONSTRUCTOR
+    required this.lat,
+    required this.lng,
   });
 
-  factory Destination.fromJson(Map<String, dynamic> json) {
-    // 🔥 FIX: Generate a clean filename based on the actual Destination NAME
-    String nameSlug = (json['name'] as String)
-        .toLowerCase()
-        .replaceAll(' ', '_')
-        .replaceAll("'", '')
-        .replaceAll('-', '_')
-        .replaceAll('é', 'e')
-        .replaceAll('è', 'e')
-        .replaceAll('ê', 'e')
-        .replaceAll('î', 'i')
-        .replaceAll('ô', 'o')
-        .replaceAll('û', 'u')
-        .replaceAll('ç', 'c')
-        .replaceAll('á', 'a')
-        .replaceAll(' ', '_');
-
-    String assetPath = 'assets/images/$nameSlug.jpg';
+  // baseUrl is the API gateway origin (e.g. http://host:8000); destination
+  // images are served from there, at whatever relative path the backend
+  // returns in `images` (e.g. /images/dest_001.jpg).
+  factory Destination.fromJson(Map<String, dynamic> json, {required String baseUrl}) {
+    final images = json['images'];
+    String imageUrl = '';
+    if (images is List && images.isNotEmpty) {
+      final first = images.first.toString();
+      imageUrl = first.startsWith('http') ? first : '$baseUrl$first';
+    }
 
     return Destination(
       id: json['id'] as String,
       name: json['name'] as String,
       region: json['region'] as String,
       tags: List<String>.from(json['tags'] as List),
-      imageAsset: assetPath,
+      imageUrl: imageUrl,
       description: (json['description'] ?? '').toString(),
-      // ✅ PARSE COORDINATES FROM THE API
       lat: (json['lat'] as num?)?.toDouble() ?? 0.0,
       lng: (json['lng'] as num?)?.toDouble() ?? 0.0,
     );
@@ -93,9 +84,9 @@ class AppUser {
   });
 
   factory AppUser.fromJson(Map<String, dynamic> json) => AppUser(
-        id: json['id'] as String,
-        email: json['email'] as String,
-        fullName: json['full_name'] as String,
+        id: (json['id'] ?? '').toString(),
+        email: (json['email'] ?? '').toString(),
+        fullName: (json['full_name'] ?? '').toString(),
         role: (json['role'] ?? 'user').toString(),
       );
 }

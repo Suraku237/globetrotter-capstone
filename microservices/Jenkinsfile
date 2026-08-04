@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        DEPLOY_DIR = '/opt/fast_travel/backend'
+        DEPLOY_DIR = '/opt/fast_travel/microservices'
     }
 
     stages {
@@ -15,11 +15,11 @@ pipeline {
         stage('Test') {
             steps {
                 sh '''
-                    cd backend
+                    cd microservices/data-service
                     python3 -m venv .venv
                     . .venv/bin/activate
                     pip install --no-cache-dir -r requirements-dev.txt
-                    python -m pytest app/tests -v
+                    JWT_SECRET=ci-test-secret python -m pytest tests -v
                 '''
             }
         }
@@ -27,7 +27,7 @@ pipeline {
         stage('Build') {
             steps {
                 sh '''
-                    cd backend
+                    cd microservices
                     docker compose -f docker-compose.yml build
                 '''
             }
@@ -39,6 +39,7 @@ pipeline {
                     cd ${DEPLOY_DIR}
                     git fetch --all
                     git reset --hard origin/main
+                    cd microservices
                     docker compose up -d --build
                     docker image prune -f
                 '''

@@ -63,8 +63,8 @@ class DestinationCard extends StatelessWidget {
                 child: SizedBox(
                   height: 135, // <--- INCREASED FROM 118 TO 135
                   width: double.infinity,
-                  child: Image.asset(
-                    destination.imageAsset,
+                  child: Image.network(
+                    destination.imageUrl,
                     fit: BoxFit.cover,
                     errorBuilder: (context, error, stackTrace) => Container(
                       color: AppColors.canopy,

@@ -38,6 +38,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } on ApiException catch (e) {
       setState(() => _error = e.message);
     } catch (e) {
+      debugPrint('Login failed with a non-API error: $e');
       setState(
         () => _error = 'Could not reach the server. Is the backend running?',
       );

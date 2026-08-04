@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "backend/**"
+      - "microservices/**"
   workflow_dispatch:
 
 jobs:

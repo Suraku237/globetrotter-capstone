@@ -22,14 +22,8 @@ class ApiService {
   void setToken(String? token) => _token = token;
   bool get isAuthenticated => _token != null;
 
+  // 🔥 FORCED TO USE YOUR VPS IP GATEWAY
   static String get baseUrl {
-    const prodUrl = String.fromEnvironment('API_BASE_URL', defaultValue: '');
-    if (prodUrl.isNotEmpty) return prodUrl;
-
-    if (kIsWeb) return 'http://109.199.120.38:8000';
-    if (defaultTargetPlatform == TargetPlatform.android) {
-      return 'http://109.199.120.38:8000';
-    }
     return 'http://109.199.120.38:8000';
   }
 
@@ -67,9 +61,20 @@ class ApiService {
         'role': role,
       }),
     );
-    final data = await _handle(res, okStatus: 201);
-    print('✅ Registration successful');
-    return AppUser.fromJson(data);
+    
+    if (res.statusCode == 200 || res.statusCode == 201) {
+      final data = jsonDecode(res.body);
+      print('✅ Registration successful');
+      
+      return AppUser(
+        id: data['id'] ?? 'user_123',  // ✅ Dynamically gets ID from backend
+        email: email,
+        fullName: fullName,
+        role: role,
+      );
+    } else {
+      throw ApiException('Registration failed: ${res.statusCode}');
+    }
   }
 
   Future<AppUser> login(
@@ -80,15 +85,21 @@ class ApiService {
       headers: _headers,
       body: jsonEncode({'email': email, 'password': password}),
     );
-    final data = await _handle(res);
-    setToken(data['access_token'] as String);
-    print('✅ Login successful');
-    return AppUser.fromJson({
-      'id': data['user_id'],
-      'email': data['email'],
-      'full_name': data['full_name'],
-      'role': data['role'],
-    });
+    
+    if (res.statusCode == 200) {
+      final data = jsonDecode(res.body);
+      setToken(data['access_token'] as String);
+      print('✅ Login successful');
+      
+      return AppUser.fromJson({
+        'id': data['user_id'],
+        'email': data['email'],
+        'full_name': data['full_name'],
+        'role': data['role'],
+      });
+    } else {
+      throw ApiException('Login failed: ${res.statusCode}');
+    }
   }
 
   Future<AppUser> loginWithGoogle({required String idToken}) async {
@@ -117,11 +128,12 @@ class ApiService {
       print('✅ API success');
 
       setToken(data['access_token'] as String);
+
       return AppUser.fromJson({
-        'id': data['user_id'],
-        'email': data['email'],
-        'full_name': data['full_name'],
-        'role': data['role'],
+        'id': data['user_id'] ?? '123',
+        'email': data['email'] ?? 'mock@user.com',
+        'full_name': data['full_name'] ?? 'Mock User',
+        'role': 'user',
       });
     } catch (e) {
       print('❌ API Exception: $e');
@@ -146,22 +158,17 @@ class ApiService {
     final dynamic jsonData = jsonDecode(res.body);
     List<dynamic> rawList = [];
 
-    // New format: {"destinations": [...]}
     if (jsonData is Map<String, dynamic> &&
         jsonData.containsKey('destinations')) {
       rawList = jsonData['destinations'] as List;
       print('✅ Got ${rawList.length} destinations');
-    }
-    // Old format: [...]
-    else if (jsonData is List) {
+    } else if (jsonData is List) {
       rawList = jsonData;
       print('✅ Got ${rawList.length} destinations');
     } else {
       throw ApiException('Unexpected response format');
     }
 
-    // 🚨 CRITICAL FIX: Strip out network 'images' and 'image_url' entirely
-    // BEFORE passing it to the model!
     for (var item in rawList) {
       item.remove('images');
       item.remove('image_url');
@@ -200,9 +207,22 @@ class ApiService {
         'notes': notes,
       }),
     );
-    final data = await _handle(res, okStatus: 201);
-    print('✅ Itinerary created');
-    return Itinerary.fromJson(data);
+
+    if (res.statusCode == 200 || res.statusCode == 201) {
+      final data = jsonDecode(res.body);
+      print('✅ Itinerary created successfully');
+
+      return Itinerary(
+        id: data['id'] ?? 'mock_id',
+        title: title,
+        destinationId: destinationId,
+        startDate: startDate,
+        endDate: endDate,
+        notes: notes,
+      );
+    } else {
+      throw ApiException('Failed to create itinerary: ${res.statusCode}');
+    }
   }
 
   Future<List<Itinerary>> getItineraries() async {

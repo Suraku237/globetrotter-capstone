@@ -95,7 +95,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                       color: AppColors.ink,
                     ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               TextField(
                 controller: _searchController,
                 decoration: InputDecoration(

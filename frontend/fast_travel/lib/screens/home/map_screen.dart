@@ -474,7 +474,7 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
                                         : null,
                                     icon: const Icon(Icons.directions_car,
                                         size: 16),
-                                    label: const Text('Go',
+                                    label: const Text('show path',
                                         style: TextStyle(fontSize: 12)),
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: isGoActive

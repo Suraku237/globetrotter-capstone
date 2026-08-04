@@ -37,6 +37,7 @@ class _ItinerariesScreenState extends State<ItinerariesScreen> {
       setState(() {
         _items = results[0] as List<Itinerary>;
         _destinations = results[1] as List<Destination>;
+        _loading = false;
       });
     } on ApiException catch (e) {
       setState(() => _error = e.message);
@@ -57,16 +58,442 @@ class _ItinerariesScreenState extends State<ItinerariesScreen> {
           tags: const [],
           imageAsset: '',
           description: '',
-          lat: 0.0, // ✅ FIX: Added lat
-          lng: 0.0, // ✅ FIX: Added lng
+          lat: 0.0,
+          lng: 0.0,
         ),
       )
       .name;
 
+  String _getCountdown(String startDate) {
+    try {
+      final start = DateTime.parse(startDate);
+      final now = DateTime.now();
+      final difference = start.difference(now).inDays;
+      if (difference < 0) return 'Started!';
+      if (difference == 0) return 'Today!';
+      return '$difference days';
+    } catch (_) {
+      return '--';
+    }
+  }
+
+  List<Destination> _getSafeDestinations() {
+    if (_destinations.isNotEmpty) return _destinations;
+
+    return [
+      Destination(
+          id: 'dest_001',
+          name: 'Olembe Stadium',
+          region: 'Centre',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_002',
+          name: 'Reunification Monument',
+          region: 'Centre',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_003',
+          name: 'National Museum of Cameroon',
+          region: 'Centre',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_004',
+          name: 'Mvog-Betsi Zoological Garden',
+          region: 'Centre',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_005',
+          name: 'Marché Mokolo',
+          region: 'Centre',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_006',
+          name: 'Basilique Marie-Reine-des-Apostres',
+          region: 'Centre',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_007',
+          name: 'Mont Febe',
+          region: 'Centre',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_008',
+          name: 'Douala',
+          region: 'Littoral',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_009',
+          name: 'Rond-Point Deido',
+          region: 'Littoral',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_010',
+          name: 'La Nouvelle Liberté',
+          region: 'Littoral',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_011',
+          name: 'Ekom Nkam Waterfalls',
+          region: 'Littoral',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_012',
+          name: 'Wouri River Bridge',
+          region: 'Littoral',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_013',
+          name: 'Mount Cameroon',
+          region: 'Southwest',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_014',
+          name: 'Limbe Beach',
+          region: 'Southwest',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_015',
+          name: 'Limbe Wildlife Centre',
+          region: 'Southwest',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_016',
+          name: 'Korup National Park',
+          region: 'Southwest',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_017',
+          name: 'Foumban',
+          region: 'West',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_018',
+          name: 'Foumban Royal Palace',
+          region: 'West',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_019',
+          name: 'Bafoussam',
+          region: 'West',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_020',
+          name: 'Dschang',
+          region: 'West',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_021',
+          name: 'Kribi',
+          region: 'South',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_022',
+          name: 'Lobé Waterfalls',
+          region: 'South',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_023',
+          name: 'Waza National Park',
+          region: 'Far North',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_024',
+          name: 'Rhumsiki',
+          region: 'Far North',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_025',
+          name: 'Garoua',
+          region: 'North',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_026',
+          name: 'Cathedral Sainte Therese',
+          region: 'North',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_027',
+          name: 'Ngaoundéré',
+          region: 'Adamawa',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_028',
+          name: 'Bamenda',
+          region: 'Northwest',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_029',
+          name: 'Bafut Palace',
+          region: 'Northwest',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_030',
+          name: 'Kumbo',
+          region: 'Northwest',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_031',
+          name: 'Charles Atangana Statue',
+          region: 'Centre',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_032',
+          name: 'Canal Olympia',
+          region: 'Centre',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_033',
+          name: 'Unity Palace',
+          region: 'Centre',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_034',
+          name: 'Our Lady of Victories Cathedral',
+          region: 'Centre',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_035',
+          name: 'Saint Peter and Paul Cathedral',
+          region: 'Littoral',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_036',
+          name: 'Le Pacha',
+          region: 'Centre',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_037',
+          name: 'Le Délice',
+          region: 'Centre',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_038',
+          name: 'Dja Wildlife Reserve',
+          region: 'South',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_039',
+          name: 'Havana Lounge',
+          region: 'Centre',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_040',
+          name: 'Mfoundi Lake',
+          region: 'Centre',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_041',
+          name: 'Mefou National Park',
+          region: 'Centre',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_042',
+          name: 'Meli Waterfalls',
+          region: 'Littoral',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_043',
+          name: 'Marche Mokolo Street Food',
+          region: 'Centre',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_044',
+          name: 'Reunification Monument Statue',
+          region: 'Centre',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+      Destination(
+          id: 'dest_045',
+          name: 'Mfoundi Mall',
+          region: 'Centre',
+          tags: [],
+          imageAsset: '',
+          description: '',
+          lat: 0.0,
+          lng: 0.0),
+    ];
+  }
+
   Future<void> _openCreateDialog() async {
     final created = await showDialog<bool>(
       context: context,
-      builder: (_) => _CreateItineraryDialog(destinations: _destinations),
+      builder: (_) =>
+          _CreateItineraryDialog(destinations: _getSafeDestinations()),
     );
     if (created == true) _load();
   }
@@ -110,8 +537,8 @@ class _ItinerariesScreenState extends State<ItinerariesScreen> {
                     tags: const [],
                     imageAsset: '',
                     description: '',
-                    lat: 0.0, // ✅ FIX: Added lat
-                    lng: 0.0, // ✅ FIX: Added lng
+                    lat: 0.0,
+                    lng: 0.0,
                   ),
                 );
 
@@ -124,19 +551,25 @@ class _ItinerariesScreenState extends State<ItinerariesScreen> {
                     padding: const EdgeInsets.all(16.0),
                     child: Row(
                       children: [
-                        Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: AppColors.teal,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(
-                            Icons.directions_car_rounded,
-                            color: Colors.white,
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: SizedBox(
+                            width: 50,
+                            height: 50,
+                            child: Image.asset(
+                              destination.imageAsset,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  Container(
+                                color: AppColors.canopy,
+                                alignment: Alignment.center,
+                                child: const Icon(Icons.image,
+                                    color: Colors.white),
+                              ),
+                            ),
                           ),
                         ),
-                        const SizedBox(width: 14),
+                        const SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -154,6 +587,19 @@ class _ItinerariesScreenState extends State<ItinerariesScreen> {
                           ),
                         ),
                         const SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            const Text('Starts in',
+                                style: TextStyle(fontSize: 10)),
+                            Text(
+                              _getCountdown(it.startDate),
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 14),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(width: 8),
                         ElevatedButton.icon(
                           onPressed: () {
                             Navigator.push(
@@ -213,6 +659,7 @@ class _CreateItineraryDialogState extends State<_CreateItineraryDialog> {
   final _formKey = GlobalKey<FormState>();
   final _title = TextEditingController();
   final _notes = TextEditingController();
+
   String? _destinationId;
   DateTime? _start;
   DateTime? _end;
@@ -247,6 +694,7 @@ class _CreateItineraryDialogState extends State<_CreateItineraryDialog> {
       _error = null;
     });
     try {
+      // ✅ We don't need to store the result, just call it
       await ApiService.instance.createItinerary(
         title: _title.text.trim(),
         destinationId: _destinationId!,
@@ -254,6 +702,8 @@ class _CreateItineraryDialogState extends State<_CreateItineraryDialog> {
         endDate: _fmt(_end!),
         notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
       );
+
+      // ✅ Close the dialog immediately
       if (mounted) Navigator.of(context).pop(true);
     } on ApiException catch (e) {
       setState(() => _error = e.message);
@@ -297,13 +747,25 @@ class _CreateItineraryDialogState extends State<_CreateItineraryDialog> {
                 ),
                 const SizedBox(height: 14),
                 DropdownButtonFormField<String>(
-                  initialValue: _destinationId,
-                  decoration: const InputDecoration(labelText: 'Destination'),
-                  items: widget.destinations
-                      .map((d) => DropdownMenuItem(
-                          value: d.id, child: Text('${d.name} (${d.region})')))
-                      .toList(),
-                  onChanged: (v) => setState(() => _destinationId = v),
+                  value: _destinationId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Destination',
+                    border: OutlineInputBorder(),
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  ),
+                  items: widget.destinations.map((dest) {
+                    return DropdownMenuItem<String>(
+                      value: dest.id,
+                      child: Text('${dest.name} (${dest.region})'),
+                    );
+                  }).toList(),
+                  onChanged: (String? newValue) {
+                    setState(() {
+                      _destinationId = newValue;
+                    });
+                  },
                 ),
                 const SizedBox(height: 14),
                 Row(

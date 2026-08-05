@@ -222,8 +222,9 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
         );
       }
     } catch (e) {
+      debugPrint('Route fetch error: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to connect to route server.')),
+        SnackBar(content: Text('Failed to connect to route server: $e')),
       );
     }
   }

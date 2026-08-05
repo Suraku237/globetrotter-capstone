@@ -3,7 +3,7 @@ import '../../models/models.dart';
 import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/empty_state.dart';
-import 'map_view_screen.dart';
+import 'itinerary_map_screen.dart';
 
 class ItinerariesScreen extends StatefulWidget {
   const ItinerariesScreen({super.key});
@@ -605,16 +605,16 @@ class _ItinerariesScreenState extends State<ItinerariesScreen> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => MapViewScreen(
-                                  destLat: 3.9004,
-                                  destLng: 11.5489,
+                                builder: (context) => ItineraryMapScreen(
+                                  destLat: destination.lat,
+                                  destLng: destination.lng,
                                   destName: destination.name,
                                 ),
                               ),
                             );
                           },
-                          icon: const Icon(Icons.map, size: 16),
-                          label: const Text('Map'),
+                          icon: const Icon(Icons.directions_rounded, size: 16),
+                          label: const Text('Show path'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.ochre,
                             foregroundColor: AppColors.ink,

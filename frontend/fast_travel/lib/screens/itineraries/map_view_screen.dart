@@ -22,7 +22,13 @@ class MapViewScreen extends StatefulWidget {
 }
 
 class _MapViewScreenState extends State<MapViewScreen> {
-  Future<void> _onMapCreated(MapLibreMapController controller) async {
+  MapLibreMapController? _controller;
+
+  // maplibre_gl only allows adding annotations (symbols/lines) once the
+  // style has actually finished loading — onMapCreated fires too early.
+  Future<void> _onStyleLoaded() async {
+    final controller = _controller;
+    if (controller == null) return;
     final bytes = await buildPinMarkerBytes(color: Colors.red);
     await controller.addImage('dest-pin', bytes);
     await controller.addSymbol(
@@ -45,7 +51,8 @@ class _MapViewScreenState extends State<MapViewScreen> {
       body: use3DMap
           ? MapLibreMap(
               styleString: mapStyleUrl,
-              onMapCreated: _onMapCreated,
+              onMapCreated: (controller) => _controller = controller,
+              onStyleLoadedCallback: _onStyleLoaded,
               initialCameraPosition: CameraPosition(
                 target: LatLng(widget.destLat, widget.destLng),
                 zoom: 15.0,

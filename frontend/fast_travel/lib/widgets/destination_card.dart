@@ -57,39 +57,44 @@ class DestinationCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ✅ BIGGER IMAGE SIZE
-              ClipRRect(
-                borderRadius: BorderRadius.circular(14),
-                child: SizedBox(
-                  height: 135, // <--- INCREASED FROM 118 TO 135
-                  width: double.infinity,
-                  child: Image.asset(
-                    destination.imageAsset,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => Container(
-                      color: AppColors.canopy,
-                      alignment: Alignment.center,
-                      child: Icon(
-                        _iconForTag(primaryTag),
-                        color: AppColors.ochre,
-                        size: 28,
+              // Sized as a proportion of whatever height the grid cell
+              // actually gives this card (rather than a fixed pixel height)
+              // so it can never claim more room than the text below needs —
+              // that mismatch is what caused the overflow.
+              Expanded(
+                flex: 5,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: Image.asset(
+                      destination.imageAsset,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        color: AppColors.canopy,
+                        alignment: Alignment.center,
+                        child: Icon(
+                          _iconForTag(primaryTag),
+                          color: AppColors.ochre,
+                          size: 28,
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
 
-              const SizedBox(height: 14),
+              const SizedBox(height: 10),
 
               // Title
               Text(
                 destination.name,
                 style: Theme.of(context).textTheme.titleLarge,
-                maxLines: 2,
+                maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
 
-              const SizedBox(height: 4),
+              const SizedBox(height: 2),
 
               // Region
               Text(
@@ -99,21 +104,11 @@ class DestinationCard extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
 
-              // Description
-              if (destination.description.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  destination.description,
-                  style: Theme.of(context).textTheme.bodySmall,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
 
               // Tags
-              Flexible(
+              Expanded(
+                flex: 2,
                 child: SingleChildScrollView(
                   child: Wrap(
                     spacing: 6,

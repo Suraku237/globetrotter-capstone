@@ -25,21 +25,21 @@ class _SelectDestinationMapState extends State<SelectDestinationMap> {
 
   MapLibreMapController? _mapLibreController;
   Symbol? _symbol;
-  bool _pinImageRegistered = false;
+  // maplibre_gl only allows adding annotations (symbols/lines) once the
+  // style has actually finished loading — onMapCreated fires too early.
+  bool _styleLoaded = false;
 
-  Future<void> _onMapLibreCreated(MapLibreMapController controller) async {
-    _mapLibreController = controller;
+  Future<void> _onStyleLoaded() async {
+    final controller = _mapLibreController;
+    if (controller == null) return;
+    final bytes = await buildPinMarkerBytes(color: Colors.red);
+    await controller.addImage('pick-pin', bytes);
+    setState(() => _styleLoaded = true);
   }
 
   Future<void> _onMapLibreClick(Point<double> point, LatLng latLng) async {
     final controller = _mapLibreController;
-    if (controller == null) return;
-
-    if (!_pinImageRegistered) {
-      final bytes = await buildPinMarkerBytes(color: Colors.red);
-      await controller.addImage('pick-pin', bytes);
-      _pinImageRegistered = true;
-    }
+    if (controller == null || !_styleLoaded) return;
 
     if (_symbol == null) {
       _symbol = await controller.addSymbol(
@@ -61,7 +61,8 @@ class _SelectDestinationMapState extends State<SelectDestinationMap> {
           use3DMap
               ? MapLibreMap(
                   styleString: mapStyleUrl,
-                  onMapCreated: _onMapLibreCreated,
+                  onMapCreated: (controller) => _mapLibreController = controller,
+                  onStyleLoadedCallback: _onStyleLoaded,
                   onMapClick: _onMapLibreClick,
                   initialCameraPosition: const CameraPosition(
                     target: LatLng(_kInitialLat, _kInitialLng),

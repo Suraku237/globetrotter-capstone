@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        DEPLOY_DIR = '/opt/fast_travel/microservices'
+        DEPLOY_DIR = '/opt/fast_travel_micro'
     }
 
     stages {
@@ -40,6 +40,37 @@ pipeline {
                     git fetch --all
                     git reset --hard origin/main
                     cd microservices
+
+                    # Generate the JWT signing secret once; reused on every later deploy.
+                    if [ ! -f .env ]; then
+                        echo "JWT_SECRET=$(openssl rand -hex 32)" > .env
+                        echo "Generated new JWT_SECRET (first deploy on this host)"
+                    fi
+
+                    # Always leave a real file here — docker compose turns a missing
+                    # bind-mount source into an empty directory, which breaks the
+                    # container. An empty file is harmless: Google sign-in just stays
+                    # disabled (register/login are unaffected) until a real credential
+                    # is configured below.
+                    touch -a firebase-service-account.json
+                '''
+
+                // Optional: only copies a real credential over the placeholder if the
+                // 'firebase-service-account' Secret file credential has been added in
+                // Jenkins. If it hasn't, the deploy still proceeds — Google sign-in
+                // just isn't available yet.
+                script {
+                    try {
+                        withCredentials([file(credentialsId: 'firebase-service-account', variable: 'FIREBASE_CRED_FILE')]) {
+                            sh 'cp "$FIREBASE_CRED_FILE" ${DEPLOY_DIR}/microservices/firebase-service-account.json'
+                        }
+                    } catch (err) {
+                        echo "No 'firebase-service-account' Jenkins credential configured — Google sign-in stays disabled. Email/password auth is unaffected."
+                    }
+                }
+
+                sh '''
+                    cd ${DEPLOY_DIR}/microservices
                     docker compose up -d --build
                     docker image prune -f
                 '''

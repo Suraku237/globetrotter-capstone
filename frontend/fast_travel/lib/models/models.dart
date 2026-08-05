@@ -3,7 +3,7 @@ class Destination {
   final String name;
   final String region;
   final List<String> tags;
-  final String imageUrl; // Fully-qualified URL served by the data-service
+  final String imageAsset; // Single string for local asset path
   final String description;
   final double lat;
   final double lng;
@@ -13,29 +13,36 @@ class Destination {
     required this.name,
     required this.region,
     required this.tags,
-    required this.imageUrl,
+    required this.imageAsset,
     required this.description,
     required this.lat,
     required this.lng,
   });
 
-  // baseUrl is the API gateway origin (e.g. http://host:8000); destination
-  // images are served from there, at whatever relative path the backend
-  // returns in `images` (e.g. /images/dest_001.jpg).
-  factory Destination.fromJson(Map<String, dynamic> json, {required String baseUrl}) {
-    final images = json['images'];
-    String imageUrl = '';
-    if (images is List && images.isNotEmpty) {
-      final first = images.first.toString();
-      imageUrl = first.startsWith('http') ? first : '$baseUrl$first';
-    }
+  factory Destination.fromJson(Map<String, dynamic> json) {
+    String nameSlug = (json['name'] as String)
+        .toLowerCase()
+        .replaceAll(' ', '_')
+        .replaceAll("'", '')
+        .replaceAll('-', '_')
+        .replaceAll('é', 'e')
+        .replaceAll('è', 'e')
+        .replaceAll('ê', 'e')
+        .replaceAll('î', 'i')
+        .replaceAll('ô', 'o')
+        .replaceAll('û', 'u')
+        .replaceAll('ç', 'c')
+        .replaceAll('á', 'a')
+        .replaceAll(' ', '_');
+
+    String assetPath = 'assets/images/$nameSlug.jpg';
 
     return Destination(
       id: json['id'] as String,
       name: json['name'] as String,
       region: json['region'] as String,
       tags: List<String>.from(json['tags'] as List),
-      imageUrl: imageUrl,
+      imageAsset: assetPath,
       description: (json['description'] ?? '').toString(),
       lat: (json['lat'] as num?)?.toDouble() ?? 0.0,
       lng: (json['lng'] as num?)?.toDouble() ?? 0.0,

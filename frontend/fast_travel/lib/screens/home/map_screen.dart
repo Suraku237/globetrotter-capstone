@@ -425,8 +425,8 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
                                   child: SizedBox(
                                     width: 60,
                                     height: 60,
-                                    child: Image.network(
-                                      dest.imageUrl,
+                                    child: Image.asset(
+                                      dest.imageAsset,
                                       fit: BoxFit.cover,
                                       errorBuilder:
                                           (context, error, stackTrace) =>

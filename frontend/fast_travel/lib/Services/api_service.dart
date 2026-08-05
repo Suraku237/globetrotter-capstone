@@ -169,9 +169,12 @@ class ApiService {
       throw ApiException('Unexpected response format');
     }
 
-    return rawList
-        .map((e) => Destination.fromJson(e, baseUrl: baseUrl))
-        .toList();
+    for (var item in rawList) {
+      item.remove('images');
+      item.remove('image_url');
+    }
+
+    return rawList.map((e) => Destination.fromJson(e)).toList();
   }
 
   Future<List<Destination>> getRecommendations() async {
@@ -182,7 +185,7 @@ class ApiService {
     );
     final data = await _handle(res) as List;
     print('✅ Got ${data.length} recommendations');
-    return data.map((e) => Destination.fromJson(e, baseUrl: baseUrl)).toList();
+    return data.map((e) => Destination.fromJson(e)).toList();
   }
 
   Future<Itinerary> createItinerary({

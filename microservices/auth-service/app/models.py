@@ -57,6 +57,11 @@ class TokenResponse(BaseModel):
     user_id: str
     email: str
     full_name: str
+    avatar_url: Optional[str] = None
+
+
+class UpdateProfileRequest(BaseModel):
+    full_name: str
 
 
 def _load(path: Path) -> list:

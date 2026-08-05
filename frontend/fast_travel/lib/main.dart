@@ -3,11 +3,14 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
+import 'screens/admin/pending_destinations_screen.dart';
+import 'screens/assistant/assistant_screen.dart';
 import 'screens/auth/login_screen.dart';
+import 'screens/feed/feed_screen.dart';
 import 'screens/home/discover_screen.dart';
-import 'screens/home/recommendations_screen.dart';
 import 'screens/itineraries/itineraries_screen.dart';
 import 'screens/home/map_screen.dart'; // ✅ This imports ExploreMapScreen
+import 'screens/profile/profile_screen.dart';
 import 'Services/session_state.dart';
 import 'theme/app_theme.dart';
 import 'widgets/adaptive_shell.dart';
@@ -72,6 +75,24 @@ class _AdminHomeScreen extends StatelessWidget {
         backgroundColor: AppColors.canopy,
         actions: [
           IconButton(
+            tooltip: 'Ask the assistant',
+            icon: Icon(Icons.forum_rounded, color: AppColors.inkSoft),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const AssistantScreen()),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Profile',
+            icon: Icon(Icons.account_circle_rounded, color: AppColors.inkSoft),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ProfileScreen(session: session),
+              ),
+            ),
+          ),
+          IconButton(
             tooltip: 'Sign out',
             icon: Icon(Icons.logout_rounded, color: AppColors.inkSoft),
             onPressed: session.signOut,
@@ -97,6 +118,20 @@ class _AdminHomeScreen extends StatelessWidget {
               subtitle: const Text('Review signups and role access.'),
             ),
           ),
+          const SizedBox(height: 12),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.fact_check_rounded),
+              title: const Text('Review destination submissions'),
+              subtitle: const Text('Approve or reject user-suggested destinations.'),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const PendingDestinationsScreen(),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -114,6 +149,24 @@ class _WorkerHomeScreen extends StatelessWidget {
         title: const Text('Worker platform'),
         backgroundColor: AppColors.canopy,
         actions: [
+          IconButton(
+            tooltip: 'Ask the assistant',
+            icon: Icon(Icons.forum_rounded, color: AppColors.inkSoft),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const AssistantScreen()),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Profile',
+            icon: Icon(Icons.account_circle_rounded, color: AppColors.inkSoft),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ProfileScreen(session: session),
+              ),
+            ),
+          ),
           IconButton(
             tooltip: 'Sign out',
             icon: Icon(Icons.logout_rounded, color: AppColors.inkSoft),
@@ -140,6 +193,20 @@ class _WorkerHomeScreen extends StatelessWidget {
               subtitle: const Text('Coordinate itineraries and check-ins.'),
             ),
           ),
+          const SizedBox(height: 12),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.fact_check_rounded),
+              title: const Text('Review destination submissions'),
+              subtitle: const Text('Approve or reject user-suggested destinations.'),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const PendingDestinationsScreen(),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -159,7 +226,7 @@ class _HomeShellState extends State<_HomeShell> {
 
   static const _titles = [
     'Discover Yaoundé',
-    'For You',
+    'Feed',
     'My Trips',
     'Explore Map'
   ];
@@ -167,7 +234,7 @@ class _HomeShellState extends State<_HomeShell> {
   Widget get _body {
     switch (_index) {
       case 1:
-        return const RecommendationsScreen();
+        return FeedScreen(session: widget.session);
       case 2:
         return const ItinerariesScreen();
       case 3:
@@ -184,6 +251,24 @@ class _HomeShellState extends State<_HomeShell> {
       selectedIndex: _index,
       onDestinationSelected: (i) => setState(() => _index = i),
       actions: [
+        IconButton(
+          tooltip: 'Ask the assistant',
+          icon: Icon(Icons.forum_rounded, color: AppColors.inkSoft),
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const AssistantScreen()),
+          ),
+        ),
+        IconButton(
+          tooltip: 'Profile',
+          icon: Icon(Icons.account_circle_rounded, color: AppColors.inkSoft),
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ProfileScreen(session: widget.session),
+            ),
+          ),
+        ),
         IconButton(
           tooltip: 'Sign out',
           icon: Icon(Icons.logout_rounded, color: AppColors.inkSoft),

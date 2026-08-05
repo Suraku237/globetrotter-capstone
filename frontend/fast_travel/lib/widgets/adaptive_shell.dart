@@ -19,9 +19,9 @@ class AdaptiveShell extends StatelessWidget {
       label: 'Discover'
     ),
     (
-      icon: Icons.auto_awesome_outlined,
-      selected: Icons.auto_awesome_rounded,
-      label: 'For You'
+      icon: Icons.dynamic_feed_outlined,
+      selected: Icons.dynamic_feed_rounded,
+      label: 'Feed'
     ),
     (icon: Icons.map_outlined, selected: Icons.map_rounded, label: 'My Trips'),
     (icon: Icons.public_outlined, selected: Icons.public_rounded, label: 'Map'),

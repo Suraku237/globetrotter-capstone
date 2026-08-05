@@ -26,6 +26,10 @@
 	<string>$(PRODUCT_COPYRIGHT)</string>
 	<key>NSMainNibFile</key>
 	<string>MainMenu</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Fast Travel uses the microphone so you can talk to the AI travel assistant.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Fast Travel uses speech recognition to turn what you say to the AI travel assistant into text.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 </dict>

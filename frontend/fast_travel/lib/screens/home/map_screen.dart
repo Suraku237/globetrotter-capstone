@@ -1,13 +1,14 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:latlong2/latlong.dart' as ll;
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
-import 'package:url_launcher/url_launcher.dart';
+import 'package:maplibre_gl/maplibre_gl.dart';
 import '../../theme/app_theme.dart';
 import '../../models/models.dart';
 import '../../services/api_service.dart';
+import '../../widgets/map_platform.dart';
 
 class ExploreMapScreen extends StatefulWidget {
   const ExploreMapScreen({super.key});
@@ -20,7 +21,10 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
   final MapController _mapController = MapController();
   final TextEditingController _searchController = TextEditingController();
 
-  LatLng? _currentLocation;
+  MapLibreMapController? _mapLibreController;
+  Line? _routeLine;
+
+  ll.LatLng? _currentLocation;
   bool _loadingLocation = false;
   bool _loadingDestinations = true;
   bool _isLocationEnabled = false;
@@ -125,17 +129,26 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
 
       if (mounted) {
         setState(() {
-          _currentLocation = LatLng(position.latitude, position.longitude);
+          _currentLocation = ll.LatLng(position.latitude, position.longitude);
           _isLocationEnabled = true;
           _loadingLocation = false;
           _isWaitingForPermission = false;
         });
 
-        _mapController.move(_currentLocation!, 16.0);
+        if (use3DMap) {
+          await _mapLibreController?.animateCamera(
+            CameraUpdate.newLatLngZoom(
+              LatLng(_currentLocation!.latitude, _currentLocation!.longitude),
+              16.0,
+            ),
+          );
+        } else {
+          _mapController.move(_currentLocation!, 16.0);
+        }
       }
     } catch (e) {
       setState(() {
-        _currentLocation = const LatLng(3.8480, 11.5021);
+        _currentLocation = const ll.LatLng(3.8480, 11.5021);
         _isLocationEnabled = false;
         _loadingLocation = false;
         _isWaitingForPermission = false;
@@ -147,12 +160,13 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
     }
   }
 
-  // ✅ SWITCHED TO OSRM ROUTING API (FREE, NO BLOCK)
+  // Free OSRM public routing API — no key needed. Rendering the resulting
+  // line differs by map engine (flutter_map's Polyline widget vs MapLibre's
+  // addLine), but the fetch/parse logic is identical either way.
   Future<void> _drawRoute(double destLat, double destLng) async {
     if (_currentLocation == null) return;
     if (_currentLocation!.latitude == 0.0 &&
         _currentLocation!.longitude == 0.0) {
-      print("❌ Invalid location (0.0, 0.0). Waiting for GPS lock...");
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
             content:
@@ -161,11 +175,6 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
       return;
     }
 
-    setState(() {
-      _polylines.clear();
-    });
-
-    // ✅ SWITCH TO OSRM (No API key needed, no university firewall block)
     final String url =
         'https://router.project-osrm.org/route/v1/driving/${_currentLocation!.longitude},${_currentLocation!.latitude};${destLng},${destLat}?overview=full&geometries=geojson';
 
@@ -176,9 +185,6 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
         final decoded = jsonDecode(response.body);
 
         if (decoded['routes'] == null || decoded['routes'].isEmpty) {
-          print("❌ No route features found in response");
-          print(
-              "📍 Current location: ${_currentLocation!.latitude}, ${_currentLocation!.longitude}");
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
                 content: Text('No route found. Try another destination.')),
@@ -187,30 +193,35 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
         }
 
         final geometry = decoded['routes'][0]['geometry']['coordinates'];
+        final routePoints =
+            geometry.map<ll.LatLng>((c) => ll.LatLng(c[1], c[0])).toList();
 
-        List<LatLng> routePoints = [];
-        for (var coord in geometry) {
-          routePoints.add(LatLng(coord[1], coord[0]));
-        }
-
-        setState(() {
-          _polylines.add(
-            Polyline(
-              points: routePoints,
-              color: Colors.blue,
-              strokeWidth: 4,
+        if (use3DMap && _mapLibreController != null) {
+          final controller = _mapLibreController!;
+          if (_routeLine != null) {
+            await controller.removeLine(_routeLine!);
+          }
+          _routeLine = await controller.addLine(
+            LineOptions(
+              geometry:
+                  routePoints.map((p) => LatLng(p.latitude, p.longitude)).toList(),
+              lineColor: '#2196F3',
+              lineWidth: 4.0,
             ),
           );
-        });
-        print("✅ Route drawn successfully!");
+        } else {
+          setState(() {
+            _polylines
+              ..clear()
+              ..add(Polyline(points: routePoints, color: Colors.blue, strokeWidth: 4));
+          });
+        }
       } else {
-        print("❌ Route error: ${response.body}");
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Route API Error: ${response.statusCode}')),
         );
       }
     } catch (e) {
-      print("❌ Exception drawing route: $e");
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Failed to connect to route server.')),
       );
@@ -267,6 +278,50 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
             ],
           ),
         ),
+      ],
+    );
+  }
+
+  Widget _buildMap() {
+    final center = _currentLocation ?? const ll.LatLng(3.8480, 11.5021);
+
+    if (use3DMap) {
+      return MapLibreMap(
+        styleString: mapStyleUrl,
+        myLocationEnabled: _isLocationEnabled,
+        onMapCreated: (controller) => _mapLibreController = controller,
+        initialCameraPosition: CameraPosition(
+          target: LatLng(center.latitude, center.longitude),
+          zoom: 13.0,
+          tilt: 45,
+        ),
+      );
+    }
+
+    return FlutterMap(
+      mapController: _mapController,
+      options: MapOptions(
+        initialCenter: center,
+        initialZoom: 13.0,
+      ),
+      children: [
+        TileLayer(
+          urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+          userAgentPackageName: 'fast_travel',
+          subdomains: const ['a', 'b', 'c'],
+        ),
+        PolylineLayer(polylines: _polylines),
+        if (_currentLocation != null)
+          MarkerLayer(
+            markers: [
+              Marker(
+                point: _currentLocation!,
+                width: 40,
+                height: 40,
+                child: _buildCustomLocationMarker(),
+              ),
+            ],
+          ),
       ],
     );
   }
@@ -341,34 +396,7 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(16),
-                child: FlutterMap(
-                  mapController: _mapController,
-                  options: MapOptions(
-                    initialCenter:
-                        _currentLocation ?? const LatLng(3.8480, 11.5021),
-                    initialZoom: 13.0,
-                  ),
-                  children: [
-                    TileLayer(
-                      urlTemplate:
-                          'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'fast_travel',
-                      subdomains: const ['a', 'b', 'c'],
-                    ),
-                    PolylineLayer(polylines: _polylines),
-                    if (_currentLocation != null)
-                      MarkerLayer(
-                        markers: [
-                          Marker(
-                            point: _currentLocation!,
-                            width: 40,
-                            height: 40,
-                            child: _buildCustomLocationMarker(),
-                          ),
-                        ],
-                      ),
-                  ],
-                ),
+                child: _buildMap(),
               ),
             ),
             const SizedBox(height: 16),

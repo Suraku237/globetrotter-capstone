@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:latlong2/latlong.dart' as ll;
 import 'package:geolocator/geolocator.dart';
+import 'package:maplibre_gl/maplibre_gl.dart';
+import '../../widgets/map_marker_icon.dart';
+import '../../widgets/map_platform.dart';
 
 class ItineraryMapScreen extends StatefulWidget {
   final double destLat;
@@ -22,7 +25,7 @@ class ItineraryMapScreen extends StatefulWidget {
 
 class _ItineraryMapScreenState extends State<ItineraryMapScreen> {
   final MapController _mapController = MapController();
-  LatLng? _currentLocation;
+  ll.LatLng? _currentLocation;
   bool _loading = true;
 
   @override
@@ -57,11 +60,15 @@ class _ItineraryMapScreenState extends State<ItineraryMapScreen> {
       Position position = await Geolocator.getCurrentPosition();
       if (mounted) {
         setState(() {
-          _currentLocation = LatLng(position.latitude, position.longitude);
+          _currentLocation = ll.LatLng(position.latitude, position.longitude);
           _loading = false;
         });
-        // Move the map camera to the user's location
-        _mapController.move(_currentLocation!, 14.0);
+        // Move the map camera to the user's location (flutter_map/desktop only —
+        // the MapLibre branch is built fresh with _currentLocation already as
+        // its initial camera target, so it needs no post-load move).
+        if (!use3DMap) {
+          _mapController.move(_currentLocation!, 14.0);
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -71,6 +78,18 @@ class _ItineraryMapScreenState extends State<ItineraryMapScreen> {
         );
       }
     }
+  }
+
+  Future<void> _onMapLibreCreated(MapLibreMapController controller) async {
+    final bytes = await buildPinMarkerBytes(color: Colors.red);
+    await controller.addImage('dest-pin', bytes);
+    await controller.addSymbol(
+      SymbolOptions(
+        geometry: LatLng(widget.destLat, widget.destLng),
+        iconImage: 'dest-pin',
+        iconSize: 0.5,
+      ),
+    );
   }
 
   @override
@@ -87,33 +106,44 @@ class _ItineraryMapScreenState extends State<ItineraryMapScreen> {
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
       ),
-      body: FlutterMap(
-        mapController: _mapController,
-        options: MapOptions(
-          initialCenter: _currentLocation!,
-          initialZoom: 14.0,
-        ),
-        children: [
-          TileLayer(
-            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-            userAgentPackageName: 'fast_travel',
-          ),
-          MarkerLayer(
-            markers: [
-              Marker(
-                point: LatLng(widget.destLat, widget.destLng),
-                width: 40,
-                height: 40,
-                child: const Icon(
-                  Icons.location_on,
-                  color: Colors.red,
-                  size: 40,
-                ),
+      body: use3DMap
+          ? MapLibreMap(
+              styleString: mapStyleUrl,
+              myLocationEnabled: true,
+              onMapCreated: _onMapLibreCreated,
+              initialCameraPosition: CameraPosition(
+                target: LatLng(_currentLocation!.latitude, _currentLocation!.longitude),
+                zoom: 14.0,
+                tilt: 45,
               ),
-            ],
-          ),
-        ],
-      ),
+            )
+          : FlutterMap(
+              mapController: _mapController,
+              options: MapOptions(
+                initialCenter: _currentLocation!,
+                initialZoom: 14.0,
+              ),
+              children: [
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'fast_travel',
+                ),
+                MarkerLayer(
+                  markers: [
+                    Marker(
+                      point: ll.LatLng(widget.destLat, widget.destLng),
+                      width: 40,
+                      height: 40,
+                      child: const Icon(
+                        Icons.location_on,
+                        color: Colors.red,
+                        size: 40,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
     );
   }
 }

@@ -26,6 +26,12 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Fast Travel uses the microphone so you can talk to the AI travel assistant.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Fast Travel uses speech recognition to turn what you say to the AI travel assistant into text.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Fast Travel uses your location to show it on the map and find routes to destinations.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

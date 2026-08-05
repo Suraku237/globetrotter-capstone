@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart'
     show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
 
 import '../models/models.dart';
 
@@ -96,6 +97,7 @@ class ApiService {
         'email': data['email'],
         'full_name': data['full_name'],
         'role': data['role'],
+        'avatar_url': data['avatar_url'],
       });
     } else {
       throw ApiException('Login failed: ${res.statusCode}');
@@ -134,6 +136,7 @@ class ApiService {
         'email': data['email'] ?? 'mock@user.com',
         'full_name': data['full_name'] ?? 'Mock User',
         'role': 'user',
+        'avatar_url': data['avatar_url'],
       });
     } catch (e) {
       print('❌ API Exception: $e');
@@ -234,5 +237,142 @@ class ApiService {
     final data = await _handle(res) as List;
     print('✅ Got ${data.length} itineraries');
     return data.map((e) => Itinerary.fromJson(e)).toList();
+  }
+
+  // ---- Profile ----
+
+  Future<AppUser> updateProfile({required String fullName}) async {
+    final res = await http.patch(
+      Uri.parse('$baseUrl/me'),
+      headers: _headers,
+      body: jsonEncode({'full_name': fullName}),
+    );
+    final data = await _handle(res);
+    return AppUser.fromJson(data as Map<String, dynamic>);
+  }
+
+  Future<AppUser> uploadAvatar(XFile file) async {
+    final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/me/avatar'));
+    if (_token != null) request.headers['Authorization'] = 'Bearer $_token';
+    final bytes = await file.readAsBytes();
+    request.files
+        .add(http.MultipartFile.fromBytes('file', bytes, filename: file.name));
+
+    final streamed = await request.send();
+    final res = await http.Response.fromStream(streamed);
+    final data = await _handle(res);
+    return AppUser.fromJson(data as Map<String, dynamic>);
+  }
+
+  // ---- Social feed ----
+
+  Future<List<Post>> getPosts() async {
+    final res =
+        await http.get(Uri.parse('$baseUrl/posts'), headers: _headers);
+    final data = await _handle(res) as List;
+    return data.map((e) => Post.fromJson(e)).toList();
+  }
+
+  Future<Post> createPost({required String text, XFile? image}) async {
+    final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/posts'));
+    if (_token != null) request.headers['Authorization'] = 'Bearer $_token';
+    request.fields['text'] = text;
+    if (image != null) {
+      final bytes = await image.readAsBytes();
+      request.files.add(
+        http.MultipartFile.fromBytes('image', bytes, filename: image.name),
+      );
+    }
+
+    final streamed = await request.send();
+    final res = await http.Response.fromStream(streamed);
+    final data = await _handle(res, okStatus: 201);
+    return Post.fromJson(data as Map<String, dynamic>);
+  }
+
+  Future<Post> likePost(String postId) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/posts/$postId/like'),
+      headers: _headers,
+    );
+    final data = await _handle(res);
+    return Post.fromJson(data as Map<String, dynamic>);
+  }
+
+  Future<Post> addComment(String postId, String text) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/posts/$postId/comments'),
+      headers: _headers,
+      body: jsonEncode({'text': text}),
+    );
+    final data = await _handle(res, okStatus: 201);
+    return Post.fromJson(data as Map<String, dynamic>);
+  }
+
+  // ---- Destination suggestions ----
+
+  Future<Destination> submitDestination({
+    required String name,
+    required String description,
+    required double lat,
+    required double lng,
+    required XFile image,
+  }) async {
+    final request =
+        http.MultipartRequest('POST', Uri.parse('$baseUrl/destinations'));
+    if (_token != null) request.headers['Authorization'] = 'Bearer $_token';
+    request.fields['name'] = name;
+    request.fields['description'] = description;
+    request.fields['lat'] = lat.toString();
+    request.fields['lng'] = lng.toString();
+    final bytes = await image.readAsBytes();
+    request.files.add(
+      http.MultipartFile.fromBytes('image', bytes, filename: image.name),
+    );
+
+    final streamed = await request.send();
+    final res = await http.Response.fromStream(streamed);
+    final data = await _handle(res, okStatus: 201);
+    return Destination.fromJson(data as Map<String, dynamic>);
+  }
+
+  Future<List<Destination>> getPendingDestinations() async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/destinations/pending'),
+      headers: _headers,
+    );
+    final data = await _handle(res) as List;
+    return data.map((e) => Destination.fromJson(e)).toList();
+  }
+
+  Future<void> approveDestination(String id) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/destinations/$id/approve'),
+      headers: _headers,
+    );
+    await _handle(res);
+  }
+
+  Future<void> rejectDestination(String id) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/destinations/$id/reject'),
+      headers: _headers,
+    );
+    await _handle(res);
+  }
+
+  // ---- AI assistant ----
+
+  Future<String> askAssistant({
+    required String message,
+    List<Map<String, String>> history = const [],
+  }) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/assistant/chat'),
+      headers: _headers,
+      body: jsonEncode({'message': message, 'history': history}),
+    );
+    final data = await _handle(res);
+    return (data as Map<String, dynamic>)['reply'] as String;
   }
 }

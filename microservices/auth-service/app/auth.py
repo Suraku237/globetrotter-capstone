@@ -77,6 +77,7 @@ def login(payload: LoginRequest):
         user_id=user["id"],
         email=user["email"],
         full_name=user["full_name"],
+        avatar_url=user.get("avatar_url"),
     )
 
 
@@ -168,4 +169,5 @@ def login_with_google(payload: FirebaseTokenRequest):
         user_id=user["id"],
         email=user["email"],
         full_name=user["full_name"],
+        avatar_url=user.get("avatar_url"),
     )

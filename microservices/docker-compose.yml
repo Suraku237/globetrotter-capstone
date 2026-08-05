@@ -14,6 +14,7 @@ services:
       context: ./data-service
     environment:
       JWT_SECRET: ${JWT_SECRET}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
     volumes:
       - ./shared/data:/app/data
     restart: unless-stopped

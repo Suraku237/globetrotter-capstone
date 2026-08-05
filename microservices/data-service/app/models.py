@@ -29,11 +29,18 @@ if not SECRET_KEY:
     )
 ALGORITHM = "HS256"
 
+# Optional — unlike JWT_SECRET, a missing key here shouldn't take down the
+# whole service (destinations/itineraries/posts don't need it). assistant.py
+# checks for this itself and returns a clear error only when /assistant/chat
+# is actually called without it configured.
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 DATA_DIR.mkdir(exist_ok=True)
 USERS_FILE = DATA_DIR / "users.json"
 DESTINATIONS_FILE = DATA_DIR / "destinations.json"
 ITINERARIES_FILE = DATA_DIR / "itineraries.json"
+POSTS_FILE = DATA_DIR / "posts.json"
 
 
 class ItineraryCreate(BaseModel):
@@ -42,6 +49,10 @@ class ItineraryCreate(BaseModel):
     start_date: str
     end_date: str
     notes: Optional[str] = None
+
+
+class CommentCreate(BaseModel):
+    text: str
 
 
 def _load(path: Path):
@@ -67,9 +78,28 @@ def load_destinations() -> list:
     return data
 
 
+def save_destinations(destinations: list) -> None:
+    # Preserve the {"destinations": [...]} wrapper if that's how the file
+    # is currently shaped; fall back to a plain list otherwise.
+    existing = _load(DESTINATIONS_FILE)
+    if isinstance(existing, dict):
+        existing["destinations"] = destinations
+        _save(DESTINATIONS_FILE, existing)
+    else:
+        _save(DESTINATIONS_FILE, destinations)
+
+
 def load_itineraries() -> list:
     return _load(ITINERARIES_FILE)
 
 
 def save_itineraries(itineraries: list) -> None:
     _save(ITINERARIES_FILE, itineraries)
+
+
+def load_posts() -> list:
+    return _load(POSTS_FILE)
+
+
+def save_posts(posts: list) -> None:
+    _save(POSTS_FILE, posts)

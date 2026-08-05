@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:latlong2/latlong.dart' as ll;
+import 'package:maplibre_gl/maplibre_gl.dart';
+import '../../widgets/map_marker_icon.dart';
+import '../../widgets/map_platform.dart';
 
-class MapViewScreen extends StatelessWidget {
+class MapViewScreen extends StatefulWidget {
   final double destLat;
   final double destLng;
   final String destName;
@@ -15,39 +18,66 @@ class MapViewScreen extends StatelessWidget {
   });
 
   @override
+  State<MapViewScreen> createState() => _MapViewScreenState();
+}
+
+class _MapViewScreenState extends State<MapViewScreen> {
+  Future<void> _onMapCreated(MapLibreMapController controller) async {
+    final bytes = await buildPinMarkerBytes(color: Colors.red);
+    await controller.addImage('dest-pin', bytes);
+    await controller.addSymbol(
+      SymbolOptions(
+        geometry: LatLng(widget.destLat, widget.destLng),
+        iconImage: 'dest-pin',
+        iconSize: 0.6,
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('📍 $destName'),
+        title: Text('📍 ${widget.destName}'),
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
       ),
-      body: FlutterMap(
-        options: MapOptions(
-          initialCenter: LatLng(destLat, destLng),
-          initialZoom: 15.0,
-        ),
-        children: [
-          TileLayer(
-            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-            userAgentPackageName: 'fast_travel',
-          ),
-          MarkerLayer(
-            markers: [
-              Marker(
-                point: LatLng(destLat, destLng),
-                width: 50,
-                height: 50,
-                child: const Icon(
-                  Icons.location_on,
-                  color: Colors.red,
-                  size: 50,
-                ),
+      body: use3DMap
+          ? MapLibreMap(
+              styleString: mapStyleUrl,
+              onMapCreated: _onMapCreated,
+              initialCameraPosition: CameraPosition(
+                target: LatLng(widget.destLat, widget.destLng),
+                zoom: 15.0,
+                tilt: 45,
               ),
-            ],
-          ),
-        ],
-      ),
+            )
+          : FlutterMap(
+              options: MapOptions(
+                initialCenter: ll.LatLng(widget.destLat, widget.destLng),
+                initialZoom: 15.0,
+              ),
+              children: [
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'fast_travel',
+                ),
+                MarkerLayer(
+                  markers: [
+                    Marker(
+                      point: ll.LatLng(widget.destLat, widget.destLng),
+                      width: 50,
+                      height: 50,
+                      child: const Icon(
+                        Icons.location_on,
+                        color: Colors.red,
+                        size: 50,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
     );
   }
 }

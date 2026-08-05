@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:image_picker/image_picker.dart';
 import '../models/models.dart';
 import 'api_service.dart';
 
@@ -95,6 +96,20 @@ class SessionState extends ChangeNotifier {
       print('=== ERROR ===');
       print('Error: $e');
       rethrow;
+    }
+  }
+
+  Future<void> updateProfile({String? fullName, XFile? avatarFile}) async {
+    AppUser? updated;
+    if (fullName != null && fullName.trim().isNotEmpty) {
+      updated = await ApiService.instance.updateProfile(fullName: fullName.trim());
+    }
+    if (avatarFile != null) {
+      updated = await ApiService.instance.uploadAvatar(avatarFile);
+    }
+    if (updated != null) {
+      currentUser = updated;
+      notifyListeners();
     }
   }
 

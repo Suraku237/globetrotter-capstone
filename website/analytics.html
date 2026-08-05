@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Fast Travel — Control Tower</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:wght@400;700&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
 <!-- Same backend URL used by index.html's tracking calls -->
 <script>
@@ -15,19 +15,20 @@
 <style>
 
   :root{
-    --ink:        #0B1D33;
-    --ink-soft:   #142A47;
-    --cream:      #F5F1E6;
-    --gold:       #D4A24E;
-    --rust:       #C1443C;
+    /* GlobeTrotter palette — matches frontend/fast_travel/lib/theme/app_theme.dart */
+    --ink:        #14291F; /* canopy */
+    --ink-soft:   #1E3A2C; /* canopyLight */
+    --cream:      #F4EDD9; /* sand */
+    --gold:       #E2A33D; /* ochre */
+    --rust:       #B5482E; /* clay */
     --green:      #4E8C6B;
-    --slate:      #93A0B2;
-    --line:       rgba(245,241,230,0.14);
-    --line-strong:rgba(245,241,230,0.28);
+    --slate:      #C8BFA0;
+    --line:       rgba(244,237,217,0.14);
+    --line-strong:rgba(244,237,217,0.28);
 
-    --display: 'Bebas Neue', sans-serif;
-    --mono:    'Space Mono', monospace;
-    --body:    'Work Sans', sans-serif;
+    --display: 'Fraunces', serif;
+    --mono:    'IBM Plex Mono', monospace;
+    --body:    'Inter', sans-serif;
   }
 
   *{ box-sizing:border-box; margin:0; padding:0; }
@@ -69,7 +70,7 @@
   .brand .dot{
     width:10px; height:10px; border-radius:50%;
     background:var(--gold);
-    box-shadow:0 0 0 3px rgba(212,162,78,0.22);
+    box-shadow:0 0 0 3px rgba(226,163,61,0.22);
   }
   .back{
     font-family:var(--mono);
@@ -194,7 +195,7 @@
 
   .bar-track{
     height:10px;
-    background:rgba(245,241,230,0.08);
+    background:rgba(244,237,217,0.08);
     border-radius:6px;
     overflow:hidden;
   }
@@ -218,8 +219,8 @@
     display:flex;
     gap:12px;
     align-items:flex-start;
-    background:rgba(212,162,78,0.06);
-    border:1px solid rgba(212,162,78,0.25);
+    background:rgba(226,163,61,0.06);
+    border:1px solid rgba(226,163,61,0.25);
     border-radius:12px;
     padding:18px 20px;
     margin-bottom:60px;
@@ -309,6 +310,31 @@
   </div>
 
   <script>
+    // Animates a stat number counting up from its previous value to the new
+    // one — only actually moves when the value changed, so the 30s refresh
+    // doesn't re-animate identical numbers every time.
+    const prevValues = {};
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    function animateNumber(id, target){
+      const el = document.getElementById(id);
+      const from = prevValues[id] ?? 0;
+      prevValues[id] = target;
+      if(prefersReducedMotion || from === target){
+        el.textContent = target.toLocaleString();
+        return;
+      }
+      const duration = 700;
+      const start = performance.now();
+      function tick(now){
+        const progress = Math.min((now - start) / duration, 1);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        const value = Math.round(from + (target - from) * eased);
+        el.textContent = value.toLocaleString();
+        if(progress < 1) requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+    }
+
     async function loadStats(){
       const statusEl = document.getElementById('status-line');
       try{
@@ -316,9 +342,9 @@
         if(!res.ok) throw new Error("Request failed: " + res.status);
         const data = await res.json();
 
-        document.getElementById('stat-visitors').textContent = data.visitors.toLocaleString();
-        document.getElementById('stat-users').textContent = data.users.toLocaleString();
-        document.getElementById('stat-downloads').textContent = data.downloads.total.toLocaleString();
+        animateNumber('stat-visitors', data.visitors);
+        animateNumber('stat-users', data.users);
+        animateNumber('stat-downloads', data.downloads.total);
 
         document.getElementById('count-mobile').textContent = data.downloads.mobile.toLocaleString();
         document.getElementById('count-desktop').textContent = data.downloads.desktop.toLocaleString();

@@ -5,6 +5,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/destination_card.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/region_ribbon.dart';
+import '../discover/suggest_destination_screen.dart';
 import 'destination_detail_screen.dart';
 
 class DiscoverScreen extends StatefulWidget {
@@ -168,6 +169,16 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             ],
           ),
         ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const SuggestDestinationScreen(),
+          ),
+        ),
+        icon: const Icon(Icons.add_location_alt_rounded),
+        label: const Text('Suggest a destination'),
       ),
     );
   }

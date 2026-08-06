@@ -22,7 +22,10 @@ router = APIRouter(prefix="/assistant", tags=["assistant"])
 
 GEMINI_URL = (
     "https://generativelanguage.googleapis.com/v1beta/models/"
-    "gemini-2.5-flash:generateContent"
+    # "-latest" alias instead of a pinned version — gemini-2.5-flash got cut
+    # off for new API keys/projects and started 404ing; the alias tracks
+    # whatever Google currently recommends instead of going stale again.
+    "gemini-flash-latest:generateContent"
 )
 
 

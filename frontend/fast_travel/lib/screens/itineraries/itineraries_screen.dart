@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/models.dart';
-import '../../services/api_service.dart';
+import '../../Services/api_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/empty_state.dart';
 import 'itinerary_map_screen.dart';
@@ -17,6 +17,7 @@ class _ItinerariesScreenState extends State<ItinerariesScreen> {
   List<Destination> _destinations = [];
   bool _loading = true;
   String? _error;
+  bool _errorIsNetwork = false;
 
   @override
   void initState() {
@@ -28,6 +29,7 @@ class _ItinerariesScreenState extends State<ItinerariesScreen> {
     setState(() {
       _loading = true;
       _error = null;
+      _errorIsNetwork = false;
     });
     try {
       final results = await Future.wait([
@@ -40,9 +42,19 @@ class _ItinerariesScreenState extends State<ItinerariesScreen> {
         _loading = false;
       });
     } on ApiException catch (e) {
-      setState(() => _error = e.message);
+      // A 401 signs the user out and returns them to the login screen
+      // (see ApiService.onUnauthorized in main.dart), so there's nothing
+      // useful to show here — just avoid flashing a confusing error first.
+      if (e.isUnauthorized) return;
+      setState(() {
+        _error = e.message;
+        _errorIsNetwork = false;
+      });
     } catch (_) {
-      setState(() => _error = 'Could not reach the server.');
+      setState(() {
+        _error = 'Could not reach the server.';
+        _errorIsNetwork = true;
+      });
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -506,8 +518,11 @@ class _ItinerariesScreenState extends State<ItinerariesScreen> {
           const Center(child: CircularProgressIndicator())
         else if (_error != null)
           EmptyState(
-            icon: Icons.wifi_off_rounded,
-            title: "Can't reach the server",
+            icon: _errorIsNetwork
+                ? Icons.wifi_off_rounded
+                : Icons.error_outline_rounded,
+            title:
+                _errorIsNetwork ? "Can't reach the server" : 'Something went wrong',
             message: _error!,
             onRetry: _load,
           )
@@ -706,6 +721,13 @@ class _CreateItineraryDialogState extends State<_CreateItineraryDialog> {
       // ✅ Close the dialog immediately
       if (mounted) Navigator.of(context).pop(true);
     } on ApiException catch (e) {
+      // A 401 signs the user out (see ApiService.onUnauthorized in
+      // main.dart) and the login screen takes over — just close the dialog
+      // instead of showing an error that's about to disappear anyway.
+      if (e.isUnauthorized) {
+        if (mounted) Navigator.of(context).pop(false);
+        return;
+      }
       setState(() => _error = e.message);
     } catch (_) {
       setState(() => _error = 'Could not reach the server.');

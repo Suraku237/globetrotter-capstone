@@ -11,6 +11,7 @@ import 'screens/home/discover_screen.dart';
 import 'screens/itineraries/itineraries_screen.dart';
 import 'screens/home/map_screen.dart'; // ✅ This imports ExploreMapScreen
 import 'screens/profile/profile_screen.dart';
+import 'Services/api_service.dart';
 import 'Services/session_state.dart';
 import 'theme/app_theme.dart';
 import 'widgets/adaptive_shell.dart';
@@ -32,6 +33,15 @@ class GlobeTrotterApp extends StatefulWidget {
 
 class _GlobeTrotterAppState extends State<GlobeTrotterApp> {
   final _session = SessionState();
+
+  @override
+  void initState() {
+    super.initState();
+    // A rejected token (expired, or otherwise invalid) should always drop
+    // the user back on the login screen instead of leaving screens stuck
+    // showing a stale "can't reach server" error.
+    ApiService.instance.onUnauthorized = _session.signOut;
+  }
 
   @override
   Widget build(BuildContext context) {

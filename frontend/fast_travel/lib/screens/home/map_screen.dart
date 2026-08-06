@@ -7,7 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:maplibre_gl/maplibre_gl.dart';
 import '../../theme/app_theme.dart';
 import '../../models/models.dart';
-import '../../services/api_service.dart';
+import '../../Services/api_service.dart';
 import '../../widgets/map_platform.dart';
 
 class ExploreMapScreen extends StatefulWidget {
@@ -23,6 +23,7 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
 
   MapLibreMapController? _mapLibreController;
   Line? _routeLine;
+  Circle? _locationCircle;
 
   ll.LatLng? _currentLocation;
   bool _loadingLocation = false;
@@ -142,6 +143,7 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
               16.0,
             ),
           );
+          await _syncLocationMarker();
         } else {
           _mapController.move(_currentLocation!, 16.0);
         }
@@ -192,9 +194,12 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
           return;
         }
 
-        final geometry = decoded['routes'][0]['geometry']['coordinates'];
-        final routePoints =
-            geometry.map<ll.LatLng>((c) => ll.LatLng(c[1], c[0])).toList();
+        final List<dynamic> geometry =
+            decoded['routes'][0]['geometry']['coordinates'];
+        final List<ll.LatLng> routePoints = geometry
+            .map<ll.LatLng>((c) => ll.LatLng(
+                (c[1] as num).toDouble(), (c[0] as num).toDouble()))
+            .toList();
 
         if (use3DMap && _mapLibreController != null) {
           final controller = _mapLibreController!;
@@ -226,6 +231,28 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to connect to route server: $e')),
       );
+    }
+  }
+
+  // MapLibre's built-in `myLocationEnabled` puck is unreliable on Flutter
+  // Web, so the 3D map gets its own explicit ping — flutter_map's 2D branch
+  // already draws one via MarkerLayer/_buildCustomLocationMarker.
+  Future<void> _syncLocationMarker() async {
+    final controller = _mapLibreController;
+    if (controller == null || _currentLocation == null) return;
+
+    final options = CircleOptions(
+      geometry: LatLng(_currentLocation!.latitude, _currentLocation!.longitude),
+      circleRadius: 9.0,
+      circleColor: '#2196F3',
+      circleStrokeColor: '#FFFFFF',
+      circleStrokeWidth: 3.0,
+    );
+
+    if (_locationCircle != null) {
+      await controller.updateCircle(_locationCircle!, options);
+    } else {
+      _locationCircle = await controller.addCircle(options);
     }
   }
 
@@ -290,7 +317,10 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
       return MapLibreMap(
         styleString: mapStyleUrl,
         myLocationEnabled: _isLocationEnabled,
-        onMapCreated: (controller) => _mapLibreController = controller,
+        onMapCreated: (controller) {
+          _mapLibreController = controller;
+          _syncLocationMarker();
+        },
         initialCameraPosition: CameraPosition(
           target: LatLng(center.latitude, center.longitude),
           zoom: 13.0,
@@ -389,19 +419,22 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
                 ),
               ),
             const SizedBox(height: 12),
-            Container(
-              height: 280,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.clay.withOpacity(0.2)),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: _buildMap(),
+            Expanded(
+              flex: 5,
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.clay.withOpacity(0.2)),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: _buildMap(),
+                ),
               ),
             ),
             const SizedBox(height: 16),
             Expanded(
+              flex: 1,
               child: _searchResults.isEmpty
                   ? Center(
                       child: Column(
@@ -485,7 +518,7 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
                                         overflow: TextOverflow.ellipsis,
                                         style: TextStyle(
                                             fontSize: 12,
-                                            color: AppColors.clay),
+                                            color: AppColors.inkSoft),
                                       ),
                                     ],
                                   ),

@@ -10,7 +10,9 @@ import '../models/models.dart';
 
 class ApiException implements Exception {
   final String message;
-  ApiException(this.message);
+  final int? statusCode;
+  ApiException(this.message, {this.statusCode});
+  bool get isUnauthorized => statusCode == 401;
   @override
   String toString() => message;
 }
@@ -22,6 +24,13 @@ class ApiService {
   String? _token;
   void setToken(String? token) => _token = token;
   bool get isAuthenticated => _token != null;
+
+  // Called whenever a request comes back 401 — the token has been rejected
+  // by the backend (expired, or issued against a different user store than
+  // the service that's validating it). Wired up in main.dart to sign the
+  // user out and drop them back on the login screen instead of leaving the
+  // app stuck showing a stale, misleading error.
+  void Function()? onUnauthorized;
 
   // 🔥 FORCED TO USE YOUR VPS IP GATEWAY
   static String get baseUrl {
@@ -42,7 +51,11 @@ class ApiService {
       final parsed = jsonDecode(res.body);
       detail = parsed['detail']?.toString() ?? res.body;
     } catch (_) {}
-    throw ApiException(detail);
+    if (res.statusCode == 401) {
+      _token = null;
+      onUnauthorized?.call();
+    }
+    throw ApiException(detail, statusCode: res.statusCode);
   }
 
   Future<AppUser> register({
@@ -154,9 +167,7 @@ class ApiService {
     print('📤 API: Getting destinations');
     print('📥 Response status: ${res.statusCode}');
 
-    if (res.statusCode != 200) {
-      throw ApiException('Failed to load destinations: ${res.statusCode}');
-    }
+    await _handle(res);
 
     final dynamic jsonData = jsonDecode(res.body);
     List<dynamic> rawList = [];
@@ -211,21 +222,17 @@ class ApiService {
       }),
     );
 
-    if (res.statusCode == 200 || res.statusCode == 201) {
-      final data = jsonDecode(res.body);
-      print('✅ Itinerary created successfully');
+    final data = await _handle(res, okStatus: 201);
+    print('✅ Itinerary created successfully');
 
-      return Itinerary(
-        id: data['id'] ?? 'mock_id',
-        title: title,
-        destinationId: destinationId,
-        startDate: startDate,
-        endDate: endDate,
-        notes: notes,
-      );
-    } else {
-      throw ApiException('Failed to create itinerary: ${res.statusCode}');
-    }
+    return Itinerary(
+      id: data['id'] ?? 'mock_id',
+      title: title,
+      destinationId: destinationId,
+      startDate: startDate,
+      endDate: endDate,
+      notes: notes,
+    );
   }
 
   Future<List<Itinerary>> getItineraries() async {

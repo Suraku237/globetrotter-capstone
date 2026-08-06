@@ -131,9 +131,12 @@ class _ItineraryMapScreenState extends State<ItineraryMapScreen> {
         return;
       }
 
-      final geometry = decoded['routes'][0]['geometry']['coordinates'];
-      final routePoints =
-          geometry.map<ll.LatLng>((c) => ll.LatLng(c[1], c[0])).toList();
+      final List<dynamic> geometry =
+          decoded['routes'][0]['geometry']['coordinates'];
+      final List<ll.LatLng> routePoints = geometry
+          .map<ll.LatLng>((c) => ll.LatLng(
+              (c[1] as num).toDouble(), (c[0] as num).toDouble()))
+          .toList();
 
       if (use3DMap && _mapLibreController != null) {
         final controller = _mapLibreController!;

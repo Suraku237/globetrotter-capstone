@@ -280,7 +280,11 @@ class ApiService {
     return data.map((e) => Post.fromJson(e)).toList();
   }
 
-  Future<Post> createPost({required String text, XFile? image}) async {
+  Future<Post> createPost({
+    required String text,
+    XFile? image,
+    XFile? video,
+  }) async {
     final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/posts'));
     if (_token != null) request.headers['Authorization'] = 'Bearer $_token';
     request.fields['text'] = text;
@@ -288,6 +292,12 @@ class ApiService {
       final bytes = await image.readAsBytes();
       request.files.add(
         http.MultipartFile.fromBytes('image', bytes, filename: image.name),
+      );
+    }
+    if (video != null) {
+      final bytes = await video.readAsBytes();
+      request.files.add(
+        http.MultipartFile.fromBytes('video', bytes, filename: video.name),
       );
     }
 

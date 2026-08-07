@@ -142,6 +142,7 @@ class Post {
   final String? authorAvatar;
   final String text;
   final String? image;
+  final String? video;
   final String createdAt;
   final List<String> likes;
   final List<Comment> comments;
@@ -153,6 +154,7 @@ class Post {
     this.authorAvatar,
     required this.text,
     this.image,
+    this.video,
     required this.createdAt,
     required this.likes,
     required this.comments,
@@ -165,6 +167,7 @@ class Post {
         authorAvatar: json['author_avatar'] as String?,
         text: (json['text'] ?? '').toString(),
         image: json['image'] as String?,
+        video: json['video'] as String?,
         createdAt: (json['created_at'] ?? '').toString(),
         likes: List<String>.from(json['likes'] as List? ?? []),
         comments: (json['comments'] as List? ?? [])

@@ -1,19 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:video_player/video_player.dart';
 import '../Services/api_service.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
 
-/// A full-bleed, TikTok-style post: the photo (or a gradient for text-only
-/// posts) fills the whole card, caption + author sit bottom-left over a
-/// scrim, and like/comment live in a vertical rail on the right — meant to
-/// be paged through one-at-a-time (see FeedScreen's vertical PageView),
-/// not scrolled as a list.
+/// A full-bleed, TikTok-style post: the photo/video (or a gradient for
+/// text-only posts) fills the whole card, caption + author sit bottom-left
+/// over a scrim, and like/comment live in a vertical rail on the right —
+/// meant to be paged through one-at-a-time (see FeedScreen's vertical
+/// PageView), not scrolled as a list.
 class PostCard extends StatefulWidget {
   final Post post;
   final String currentUserId;
   final VoidCallback onLike;
   final VoidCallback onOpenComments;
   final double borderRadius;
+  // Whether this card is the one currently on-screen in the PageView — a
+  // video only plays while its card is active, and pauses otherwise so
+  // multiple clips don't play (and play audio) at once.
+  final bool isActive;
 
   const PostCard({
     super.key,
@@ -22,6 +27,7 @@ class PostCard extends StatefulWidget {
     required this.onLike,
     required this.onOpenComments,
     this.borderRadius = 0,
+    this.isActive = true,
   });
 
   @override
@@ -32,6 +38,8 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
   late final AnimationController _burstController;
   late final Animation<double> _burstScale;
   late final Animation<double> _burstOpacity;
+
+  VideoPlayerController? _videoController;
 
   @override
   void initState() {
@@ -49,11 +57,45 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
       TweenSequenceItem(tween: ConstantTween(1.0), weight: 35),
       TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.0), weight: 45),
     ]).animate(_burstController);
+    _initVideo();
+  }
+
+  void _initVideo() {
+    final video = widget.post.video;
+    if (video == null) return;
+    final controller =
+        VideoPlayerController.networkUrl(Uri.parse('${ApiService.baseUrl}$video'));
+    _videoController = controller;
+    controller.setLooping(true);
+    controller.initialize().then((_) {
+      if (!mounted) return;
+      setState(() {});
+      if (widget.isActive) controller.play();
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant PostCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.post.id != widget.post.id) {
+      _videoController?.dispose();
+      _videoController = null;
+      _initVideo();
+      return;
+    }
+    final controller = _videoController;
+    if (controller == null || !controller.value.isInitialized) return;
+    if (widget.isActive && !oldWidget.isActive) {
+      controller.play();
+    } else if (!widget.isActive && oldWidget.isActive) {
+      controller.pause();
+    }
   }
 
   @override
   void dispose() {
     _burstController.dispose();
+    _videoController?.dispose();
     super.dispose();
   }
 
@@ -68,15 +110,28 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
     final post = widget.post;
     final liked = post.likes.contains(widget.currentUserId);
     final hasImage = post.image != null;
+    final hasVideo = post.video != null;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(widget.borderRadius),
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // Background: the post's photo, or a brand-toned gradient for
-          // text-only posts so the full-bleed layout still feels intentional.
-          if (hasImage)
+          // Background: the post's video, photo, or a brand-toned gradient
+          // for text-only posts so the full-bleed layout still feels
+          // intentional.
+          if (hasVideo)
+            (_videoController != null && _videoController!.value.isInitialized)
+                ? FittedBox(
+                    fit: BoxFit.cover,
+                    child: SizedBox(
+                      width: _videoController!.value.size.width,
+                      height: _videoController!.value.size.height,
+                      child: VideoPlayer(_videoController!),
+                    ),
+                  )
+                : const _FallbackBackground()
+          else if (hasImage)
             Image.network(
               '${ApiService.baseUrl}${post.image}',
               fit: BoxFit.cover,

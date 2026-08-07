@@ -7,6 +7,10 @@ class EmptyState extends StatelessWidget {
   final String message;
   final VoidCallback? onRetry;
   final String retryLabel;
+  // Screens with a dark/near-black background (e.g. the video feed) need
+  // light text here instead of the default dark-on-light styling, or the
+  // whole state becomes unreadable.
+  final bool light;
 
   const EmptyState({
     super.key,
@@ -15,28 +19,46 @@ class EmptyState extends StatelessWidget {
     required this.message,
     this.onRetry,
     this.retryLabel = 'Try again',
+    this.light = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final iconColor = light ? Colors.white70 : AppColors.inkSoft;
+    final titleStyle = Theme.of(context).textTheme.titleLarge?.copyWith(
+          color: light ? Colors.white : null,
+        );
+    final messageStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
+          color: light ? Colors.white70 : null,
+        );
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 40, color: AppColors.inkSoft),
+            Icon(icon, size: 40, color: iconColor),
             const SizedBox(height: 12),
-            Text(title, style: Theme.of(context).textTheme.titleLarge),
+            Text(title, style: titleStyle),
             const SizedBox(height: 6),
             Text(
               message,
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium,
+              style: messageStyle,
             ),
             if (onRetry != null) ...[
               const SizedBox(height: 16),
-              OutlinedButton(onPressed: onRetry, child: Text(retryLabel)),
+              OutlinedButton(
+                onPressed: onRetry,
+                style: light
+                    ? OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: const BorderSide(color: Colors.white70),
+                      )
+                    : null,
+                child: Text(retryLabel),
+              ),
             ],
           ],
         ),

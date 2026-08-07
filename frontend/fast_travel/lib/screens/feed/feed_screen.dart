@@ -26,6 +26,8 @@ class _FeedScreenState extends State<FeedScreen> {
   List<Post> _posts = [];
   bool _loading = true;
   String? _error;
+  bool _errorIsNetwork = false;
+  int _currentPage = 0;
 
   @override
   void initState() {
@@ -43,14 +45,24 @@ class _FeedScreenState extends State<FeedScreen> {
     setState(() {
       _loading = true;
       _error = null;
+      _errorIsNetwork = false;
     });
     try {
       final posts = await ApiService.instance.getPosts();
       setState(() => _posts = posts);
     } on ApiException catch (e) {
-      setState(() => _error = e.message);
+      // A 401 signs the user out and returns them to the login screen (see
+      // ApiService.onUnauthorized in main.dart) — nothing to show here.
+      if (e.isUnauthorized) return;
+      setState(() {
+        _error = e.message;
+        _errorIsNetwork = false;
+      });
     } catch (_) {
-      setState(() => _error = 'Could not reach the server.');
+      setState(() {
+        _error = 'Could not reach the server.';
+        _errorIsNetwork = true;
+      });
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -97,11 +109,17 @@ class _FeedScreenState extends State<FeedScreen> {
         child: RefreshIndicator(
           onRefresh: _loadPosts,
           child: _loading
-              ? const Center(child: CircularProgressIndicator())
+              ? const Center(
+                  child: CircularProgressIndicator(color: AppColors.sand))
               : _error != null
                   ? EmptyState(
-                      icon: Icons.wifi_off_rounded,
-                      title: "Can't reach the server",
+                      light: true,
+                      icon: _errorIsNetwork
+                          ? Icons.wifi_off_rounded
+                          : Icons.error_outline_rounded,
+                      title: _errorIsNetwork
+                          ? "Can't reach the server"
+                          : 'Something went wrong',
                       message: _error!,
                       onRetry: _loadPosts,
                     )
@@ -110,6 +128,7 @@ class _FeedScreenState extends State<FeedScreen> {
                           children: const [
                             SizedBox(height: 120),
                             EmptyState(
+                              light: true,
                               icon: Icons.dynamic_feed_rounded,
                               title: 'No posts yet',
                               message:
@@ -130,6 +149,8 @@ class _FeedScreenState extends State<FeedScreen> {
                                 controller: _pageController,
                                 scrollDirection: Axis.vertical,
                                 itemCount: _posts.length,
+                                onPageChanged: (index) =>
+                                    setState(() => _currentPage = index),
                                 itemBuilder: (context, index) {
                                   final post = _posts[index];
                                   return Padding(
@@ -140,6 +161,7 @@ class _FeedScreenState extends State<FeedScreen> {
                                       post: post,
                                       currentUserId: currentUserId,
                                       borderRadius: isWide ? 24 : 0,
+                                      isActive: index == _currentPage,
                                       onLike: () => _toggleLike(post),
                                       onOpenComments: () async {
                                         await Navigator.push(

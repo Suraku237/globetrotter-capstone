@@ -90,7 +90,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Discover Yaoundé',
+                'Discover with fast travel ',
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                       color: AppColors.ink,
@@ -139,11 +139,15 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                             : GridView.builder(
                                 padding:
                                     const EdgeInsets.only(bottom: 20, top: 4),
+                                // Target a fixed card width and let the
+                                // column count adapt to it, instead of a
+                                // fixed column count that squeezes cards
+                                // (and their images) smaller as the screen
+                                // narrows.
                                 gridDelegate:
-                                    const SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 4, // 🟢 CHANGED FROM 2 TO 4
-                                  childAspectRatio:
-                                      0.65, // 🟢 ADJUSTED FOR SMALLER CARDS
+                                    const SliverGridDelegateWithMaxCrossAxisExtent(
+                                  maxCrossAxisExtent: 200,
+                                  childAspectRatio: 0.65,
                                   crossAxisSpacing: 10,
                                   mainAxisSpacing: 10,
                                 ),

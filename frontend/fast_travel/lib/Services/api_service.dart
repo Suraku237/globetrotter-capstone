@@ -37,6 +37,15 @@ class ApiService {
     return 'http://109.199.120.38:8000';
   }
 
+  // Media paths from the backend are either relative (served by this
+  // gateway, e.g. avatars) or already-absolute URLs (post photos/videos,
+  // hosted on Firebase Storage). Only relative ones need baseUrl prefixed.
+  static String resolveUrl(String path) {
+    return path.startsWith('http://') || path.startsWith('https://')
+        ? path
+        : '$baseUrl$path';
+  }
+
   Map<String, String> get _headers => {
         'Content-Type': 'application/json',
         if (_token != null) 'Authorization': 'Bearer $_token',

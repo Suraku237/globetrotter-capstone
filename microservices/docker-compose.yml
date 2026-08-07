@@ -15,8 +15,10 @@ services:
     environment:
       JWT_SECRET: ${JWT_SECRET}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      FIREBASE_STORAGE_BUCKET: ${FIREBASE_STORAGE_BUCKET:-}
     volumes:
       - ./shared/data:/app/data
+      - ./firebase-service-account.json:/app/firebase-service-account.json:ro
     restart: unless-stopped
 
   api-gateway:

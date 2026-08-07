@@ -63,8 +63,9 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
   void _initVideo() {
     final video = widget.post.video;
     if (video == null) return;
-    final controller =
-        VideoPlayerController.networkUrl(Uri.parse('${ApiService.baseUrl}$video'));
+    final controller = VideoPlayerController.networkUrl(
+      Uri.parse(ApiService.resolveUrl(video)),
+    );
     _videoController = controller;
     controller.setLooping(true);
     controller.initialize().then((_) {
@@ -133,7 +134,7 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
                 : const _FallbackBackground()
           else if (hasImage)
             Image.network(
-              '${ApiService.baseUrl}${post.image}',
+              ApiService.resolveUrl(post.image!),
               fit: BoxFit.cover,
               errorBuilder: (context, error, stackTrace) => const _FallbackBackground(),
             )
@@ -267,7 +268,7 @@ class _FallbackBackground extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [AppColors.canopyLight, AppColors.canopy],
+          colors: [AppColors.teal, AppColors.ochre],
         ),
       ),
     );

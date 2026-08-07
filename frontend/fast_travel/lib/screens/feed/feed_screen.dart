@@ -167,8 +167,11 @@ class _FeedScreenState extends State<FeedScreen> {
                                         await Navigator.push(
                                           context,
                                           MaterialPageRoute(
-                                            builder: (context) =>
-                                                PostCommentsScreen(post: post),
+                                            builder: (context) => PostCommentsScreen(
+                                              posts: _posts,
+                                              initialIndex: index,
+                                              currentUserId: currentUserId,
+                                            ),
                                           ),
                                         );
                                         _loadPosts();

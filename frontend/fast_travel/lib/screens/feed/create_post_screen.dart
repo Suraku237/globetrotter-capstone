@@ -86,7 +86,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   }
 
   Future<void> _submit() async {
-    if (_textController.text.trim().isEmpty) return;
+    if (_textController.text.trim().isEmpty && !_hasMedia) return;
 
     setState(() {
       _posting = true;

@@ -1,30 +1,32 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
+// Sanity tests that don't touch Firebase or the network — GlobeTrotterApp
+// itself calls Firebase.initializeApp() on build (unavailable in a plain
+// widget-test environment), and AppTheme.light() resolves Google Fonts
+// over the network at construction, so both are avoided here in favor of
+// exercising a self-contained widget under the default Material theme.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:fast_travel/main.dart';
+import 'package:fast_travel/widgets/empty_state.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const GlobeTrotterApp());
+  testWidgets('EmptyState renders its title, message, and retry action',
+      (tester) async {
+    var retried = false;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: EmptyState(
+          icon: Icons.wifi_off_rounded,
+          title: 'No connection',
+          message: 'Check your network and try again.',
+          onRetry: () => retried = true,
+        ),
+      ),
+    ));
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    expect(find.text('No connection'), findsOneWidget);
+    expect(find.text('Check your network and try again.'), findsOneWidget);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    await tester.tap(find.text('Try again'));
+    expect(retried, isTrue);
   });
 }

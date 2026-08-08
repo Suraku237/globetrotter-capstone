@@ -1,0 +1,30 @@
+# One-time manual setup on the VPS — this file is NOT applied automatically
+# by Jenkins. Jenkins only keeps the `fast_travel_frontend` container
+# (frontend/fast_travel/docker-compose.yml) up to date on port 8081; routing
+# your existing DuckDNS domain to that port is a one-off nginx change.
+#
+# If your DuckDNS domain already has a server block in sites-available
+# (e.g. because it used to serve static files directly), just replace its
+# `location /` with the `proxy_pass` block below instead of adding a new
+# file — nginx will reject two server blocks claiming the same
+# server_name on the same port.
+#
+# Otherwise, to add it as a new site:
+#   1. Copy this file to /etc/nginx/sites-available/fasttravel-app
+#   2. Replace YOUR_DOMAIN.duckdns.org below with your actual DuckDNS domain
+#   3. Enable it and reload nginx:
+#        sudo ln -s /etc/nginx/sites-available/fasttravel-app /etc/nginx/sites-enabled/
+#        sudo nginx -t && sudo systemctl reload nginx
+
+server {
+    listen 80;
+    server_name YOUR_DOMAIN.duckdns.org;
+
+    location / {
+        proxy_pass http://127.0.0.1:8081;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}

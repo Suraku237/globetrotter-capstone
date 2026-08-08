@@ -6,10 +6,19 @@ FROM ghcr.io/cirruslabs/flutter:stable AS build
 WORKDIR /app
 
 COPY pubspec.yaml pubspec.lock ./
-RUN flutter pub get
+RUN --mount=type=cache,target=/root/.pub-cache \
+    flutter pub get
 
 COPY . .
-RUN flutter build web --release \
+# Cache mounts persist Gradle's downloaded distribution/dependencies and the
+# Dart pub cache across separate `docker build` runs (BuildKit-only — but
+# `docker compose build` already uses BuildKit by default). Without these,
+# every single build re-downloads Gradle + the Android toolchain from
+# scratch, which is what made the very first build take several minutes on
+# the "Running Gradle task 'assembleDebug'" step.
+RUN --mount=type=cache,target=/root/.pub-cache \
+    --mount=type=cache,target=/root/.gradle \
+    flutter build web --release \
  && flutter build apk --debug
 
 # ---- Runtime stage -----------------------------------------------------

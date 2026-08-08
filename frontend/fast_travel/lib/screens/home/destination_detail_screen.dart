@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../Services/api_service.dart';
 import '../../models/models.dart';
 import '../../theme/app_theme.dart';
 
@@ -30,8 +31,8 @@ class DestinationDetailScreen extends StatelessWidget {
                 child: SizedBox(
                   width: double.infinity,
                   height: 500,
-                  child: Image.asset(
-                    destination.imageAsset,
+                  child: Image.network(
+                    ApiService.resolveUrl(destination.imageUrl ?? ''),
                     fit: BoxFit.cover,
                     errorBuilder: (context, error, stackTrace) => Container(
                       color: AppColors.canopy,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../Services/api_service.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
 import '../screens/home/destination_detail_screen.dart';
@@ -67,8 +68,8 @@ class DestinationCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(14),
                   child: SizedBox(
                     width: double.infinity,
-                    child: Image.asset(
-                      destination.imageAsset,
+                    child: Image.network(
+                      ApiService.resolveUrl(destination.imageUrl ?? ''),
                       fit: BoxFit.cover,
                       errorBuilder: (context, error, stackTrace) => Container(
                         color: AppColors.canopy,

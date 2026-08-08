@@ -3,21 +3,19 @@ class Destination {
   final String name;
   final String region;
   final List<String> tags;
-  final String imageAsset; // Single string for local asset path
   final String description;
   final double lat;
   final double lng;
   final String status; // 'approved' | 'pending' | 'rejected'
-  final String? imageUrl; // Backend-served path (e.g. /images/dest_x.jpg),
-  // only populated for pending-review flows — the rest of the app renders
-  // via [imageAsset] (bundled local assets).
+  // Backend-served path (e.g. /images/dest_001.jpg) — resolve with
+  // ApiService.resolveUrl before passing to Image.network.
+  final String? imageUrl;
 
   Destination({
     required this.id,
     required this.name,
     required this.region,
     required this.tags,
-    required this.imageAsset,
     required this.description,
     required this.lat,
     required this.lng,
@@ -26,29 +24,11 @@ class Destination {
   });
 
   factory Destination.fromJson(Map<String, dynamic> json) {
-    String nameSlug = (json['name'] as String)
-        .toLowerCase()
-        .replaceAll(' ', '_')
-        .replaceAll("'", '')
-        .replaceAll('-', '_')
-        .replaceAll('é', 'e')
-        .replaceAll('è', 'e')
-        .replaceAll('ê', 'e')
-        .replaceAll('î', 'i')
-        .replaceAll('ô', 'o')
-        .replaceAll('û', 'u')
-        .replaceAll('ç', 'c')
-        .replaceAll('á', 'a')
-        .replaceAll(' ', '_');
-
-    String assetPath = 'assets/images/$nameSlug.jpg';
-
     return Destination(
       id: json['id'] as String,
       name: json['name'] as String,
       region: json['region'] as String,
       tags: List<String>.from(json['tags'] as List),
-      imageAsset: assetPath,
       description: (json['description'] ?? '').toString(),
       lat: (json['lat'] as num?)?.toDouble() ?? 0.0,
       lng: (json['lng'] as num?)?.toDouble() ?? 0.0,

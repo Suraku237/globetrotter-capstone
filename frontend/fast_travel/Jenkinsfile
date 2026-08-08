@@ -6,6 +6,16 @@
 pipeline {
     agent none
 
+    // The default per-stage-agent checkout does a full clone (entire git
+    // history — every image/video/APK ever committed, even long-deleted
+    // ones, ~150MB+ here). On a slow/unstable connection that repeatedly
+    // blew past Jenkins' checkout retry limit before finishing. Disabled
+    // here in favor of an explicit shallow clone (depth 1) in the one
+    // stage that actually needs the source.
+    options {
+        skipDefaultCheckout()
+    }
+
     environment {
         // Must match the label given to the PC's node in Jenkins
         // (Manage Jenkins > Nodes > New Node).
@@ -17,6 +27,12 @@ pipeline {
         stage('Build (PC)') {
             agent { label "${PC_AGENT_LABEL}" }
             steps {
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: '*/main']],
+                    extensions: [[$class: 'CloneOption', shallow: true, depth: 1, noTags: false, timeout: 30]],
+                    userRemoteConfigs: [[url: 'https://github.com/Suraku237/globetrotter-capstone', credentialsId: 'github-creds']]
+                ])
                 dir('frontend/fast_travel') {
                     bat 'flutter pub get'
                     // Only real analyzer ERRORs block the deploy —
@@ -32,7 +48,8 @@ pipeline {
         stage('Deploy (VPS)') {
             // If your Jenkins controller's built-in node uses a different
             // label than "built-in" (check Manage Jenkins > Nodes), update
-            // this to match.
+            // this to match. No checkout needed here — this stage only
+            // copies the files the PC stage already built (via unstash).
             agent { label 'built-in' }
             steps {
                 unstash 'web-build'

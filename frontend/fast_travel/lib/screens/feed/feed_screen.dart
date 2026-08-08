@@ -85,11 +85,8 @@ class _FeedScreenState extends State<FeedScreen> {
     final isWide = MediaQuery.sizeOf(context).width >= _kWideBreakpoint;
 
     return Scaffold(
-      backgroundColor: AppColors.canopy,
+      backgroundColor: AppColors.sand,
       appBar: AppBar(
-        backgroundColor: AppColors.canopy,
-        foregroundColor: AppColors.sand,
-        elevation: 0,
         title: const Text('Feed'),
         actions: [
           IconButton(
@@ -110,10 +107,9 @@ class _FeedScreenState extends State<FeedScreen> {
           onRefresh: _loadPosts,
           child: _loading
               ? const Center(
-                  child: CircularProgressIndicator(color: AppColors.sand))
+                  child: CircularProgressIndicator(color: AppColors.ochre))
               : _error != null
                   ? EmptyState(
-                      light: true,
                       icon: _errorIsNetwork
                           ? Icons.wifi_off_rounded
                           : Icons.error_outline_rounded,
@@ -128,7 +124,6 @@ class _FeedScreenState extends State<FeedScreen> {
                           children: const [
                             SizedBox(height: 120),
                             EmptyState(
-                              light: true,
                               icon: Icons.dynamic_feed_rounded,
                               title: 'No posts yet',
                               message:

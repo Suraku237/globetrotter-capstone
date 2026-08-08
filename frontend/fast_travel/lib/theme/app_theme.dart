@@ -1,26 +1,26 @@
-// GlobeTrotter design tokens.
-// Palette grounded in Cameroon's geography: rainforest canopy, savanna sand,
-// Waza sun, highland clay, Atlantic coast teal.
+// GlobeTrotter design tokens — modern travel-tech: warm off-white canvas,
+// a single confident coral accent, deep indigo for immersive dark surfaces
+// (the video feed), soft elevation, and fully-rounded components.
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class AppColors {
-  static const canopy = Color(0xFF14291F); // deep rainforest — dark base
-  static const canopyLight = Color(0xFF1E3A2C);
-  static const sand = Color(0xFFF4EDD9); // savanna — light surfaces
-  static const sandDim = Color(0xFFE8DFC4);
-  static const ochre = Color(0xFFE2A33D); // Waza sun — primary CTA
-  static const clay = Color(0xFFB5482E); // highland terracotta — secondary
-  static const teal = Color(0xFF2C7A73); // Atlantic coast — tertiary
-  static const ink = Color(0xFF1B1A17); // dark text
-  static const inkSoft = Color(0xFF4A473F);
+  static const canopy =
+      Color(0xFF171932); // deep indigo — dark surfaces (nav rail, video feed)
+  static const canopyLight = Color(0xFF272B52);
+  static const sand = Color(0xFFFAF9F6); // warm off-white — light surfaces
+  static const sandDim = Color(0xFFF0EEE8);
+  static const ochre = Color(0xFFFF6A4D); // coral — primary CTA
+  static const clay = Color(0xFFE14C3C); // rose-red — secondary / likes
+  static const teal = Color(0xFF14B8A6); // teal — tertiary accent
+  static const ink = Color(0xFF16181D); // near-black charcoal text
+  static const inkSoft = Color(0xFF6B7280);
 
-  // Region gradient — forest (Far North excluded from green end; order is
-  // purely visual, not geographic) used for the region ribbon signature.
+  // Region gradient used for the region ribbon signature.
   static const regionGradient = [
     teal,
     canopyLight,
-    Color(0xFF4E7A3B),
+    Color(0xFF6D5BD0),
     ochre,
     clay,
   ];
@@ -28,28 +28,28 @@ class AppColors {
 
 class AppText {
   static TextTheme textTheme(Brightness brightness) {
-    final onColor = brightness == Brightness.dark
-        ? AppColors.sand
-        : AppColors.ink;
-    final display = GoogleFonts.fraunces(
+    final onColor =
+        brightness == Brightness.dark ? AppColors.sand : AppColors.ink;
+    final display = GoogleFonts.manrope(
       color: onColor,
-      fontWeight: FontWeight.w600,
-      letterSpacing: -0.5,
+      fontWeight: FontWeight.w700,
+      letterSpacing: -0.3,
     );
     final body = GoogleFonts.inter(color: onColor);
     return TextTheme(
-      displayLarge: display.copyWith(fontSize: 40, height: 1.05),
-      displayMedium: display.copyWith(fontSize: 32, height: 1.1),
-      headlineMedium: display.copyWith(fontSize: 24, height: 1.15),
-      titleLarge: display.copyWith(fontSize: 20, fontWeight: FontWeight.w600),
+      displayLarge: display.copyWith(fontSize: 40, height: 1.08),
+      displayMedium: display.copyWith(fontSize: 32, height: 1.12),
+      headlineMedium: display.copyWith(fontSize: 24, height: 1.2),
+      titleLarge: display.copyWith(fontSize: 20, fontWeight: FontWeight.w700),
       titleMedium: body.copyWith(fontSize: 16, fontWeight: FontWeight.w600),
-      bodyLarge: body.copyWith(fontSize: 16, height: 1.4),
-      bodyMedium: body.copyWith(fontSize: 14, height: 1.4),
+      bodyLarge: body.copyWith(fontSize: 16, height: 1.45),
+      bodyMedium: body.copyWith(fontSize: 14, height: 1.45),
       labelLarge: body.copyWith(fontSize: 14, fontWeight: FontWeight.w600),
-      labelSmall: GoogleFonts.ibmPlexMono(
-        color: onColor.withValues(alpha: 0.7),
+      labelSmall: body.copyWith(
+        color: onColor.withValues(alpha: 0.65),
         fontSize: 12,
-        letterSpacing: 0.4,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0.6,
       ),
     );
   }
@@ -74,35 +74,51 @@ class AppTheme {
         backgroundColor: AppColors.sand,
         foregroundColor: AppColors.ink,
         elevation: 0,
+        scrolledUnderElevation: 0,
         titleTextStyle: AppText.textTheme(Brightness.light).headlineMedium,
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.canopy,
-          foregroundColor: AppColors.sand,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          backgroundColor: AppColors.ochre,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 16),
+          elevation: 0,
+          shadowColor: AppColors.ochre.withValues(alpha: 0.35),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(28),
+          ),
+          textStyle: GoogleFonts.inter(fontWeight: FontWeight.w600),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.ink,
+          side: BorderSide(color: AppColors.ink.withValues(alpha: 0.14)),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 15),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(28),
           ),
           textStyle: GoogleFonts.inter(fontWeight: FontWeight.w600),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: Colors.white.withValues(alpha: 0.6),
+        fillColor: AppColors.sandDim,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide.none,
         ),
         contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 14,
+          horizontal: 18,
+          vertical: 15,
         ),
       ),
       cardTheme: CardThemeData(
-        color: Colors.white.withValues(alpha: 0.65),
+        color: Colors.white,
         elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        surfaceTintColor: Colors.transparent,
+        shadowColor: AppColors.ink.withValues(alpha: 0.08),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
       ),
       navigationRailTheme: NavigationRailThemeData(
         backgroundColor: AppColors.canopy,

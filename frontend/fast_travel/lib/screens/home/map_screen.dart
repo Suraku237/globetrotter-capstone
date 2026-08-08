@@ -367,12 +367,8 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.sand,
-      appBar: AppBar(
-        title: const Text('Explore Map'),
-        backgroundColor: AppColors.sand,
-        foregroundColor: AppColors.ink,
-        elevation: 0,
-      ),
+      // No AppBar here — AdaptiveShell already renders the "Explore Map"
+      // title; a second one here would show it twice.
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(

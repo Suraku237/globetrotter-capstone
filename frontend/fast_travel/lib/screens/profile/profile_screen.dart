@@ -3,10 +3,16 @@ import 'package:image_picker/image_picker.dart';
 import '../../Services/api_service.dart';
 import '../../Services/session_state.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/logout_confirm.dart';
 
 class ProfileScreen extends StatefulWidget {
   final SessionState session;
-  const ProfileScreen({super.key, required this.session});
+  // True when shown as the Profile tab inside AdaptiveShell, which already
+  // renders a title bar — a nested AppBar here would show it twice. False
+  // (default) when pushed as its own route, e.g. from the worker home
+  // screen, where it needs its own AppBar for the back button.
+  final bool embedded;
+  const ProfileScreen({super.key, required this.session, this.embedded = false});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -87,13 +93,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final user = widget.session.currentUser;
         final avatarUrl = user?.avatarUrl;
 
-        return Scaffold(
-          backgroundColor: AppColors.sand,
-          appBar: AppBar(title: const Text('Profile')),
-          body: SafeArea(
-            child: ListView(
-              padding: const EdgeInsets.all(24),
-              children: [
+        final body = SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.all(24),
+            children: [
                 Center(
                   child: Stack(
                     children: [
@@ -171,16 +174,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 const SizedBox(height: 24),
                 OutlinedButton.icon(
-                  onPressed: () {
+                  onPressed: () async {
+                    if (!await confirmSignOut(context)) return;
                     widget.session.signOut();
-                    Navigator.of(context).popUntil((r) => r.isFirst);
+                    if (context.mounted) {
+                      Navigator.of(context).popUntil((r) => r.isFirst);
+                    }
                   },
                   icon: const Icon(Icons.logout_rounded),
                   label: const Text('Sign out'),
                 ),
-              ],
-            ),
+            ],
           ),
+        );
+
+        if (widget.embedded) return body;
+        return Scaffold(
+          backgroundColor: AppColors.sand,
+          appBar: AppBar(title: const Text('Profile')),
+          body: body,
         );
       },
     );

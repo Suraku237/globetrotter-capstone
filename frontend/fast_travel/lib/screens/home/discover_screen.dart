@@ -89,14 +89,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Discover with fast travel ',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.ink,
-                    ),
-              ),
-              const SizedBox(height: 8),
               TextField(
                 controller: _searchController,
                 decoration: InputDecoration(
@@ -175,6 +167,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'suggest_destination_fab',
         onPressed: () async {
           final submitted = await showDialog<bool>(
             context: context,

@@ -15,6 +15,7 @@ import 'Services/api_service.dart';
 import 'Services/session_state.dart';
 import 'theme/app_theme.dart';
 import 'widgets/adaptive_shell.dart';
+import 'widgets/logout_confirm.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -106,7 +107,9 @@ class _WorkerHomeScreen extends StatelessWidget {
           IconButton(
             tooltip: 'Sign out',
             icon: Icon(Icons.logout_rounded, color: AppColors.inkSoft),
-            onPressed: session.signOut,
+            onPressed: () async {
+              if (await confirmSignOut(context)) session.signOut();
+            },
           ),
         ],
       ),
@@ -165,7 +168,8 @@ class _HomeShellState extends State<_HomeShell> {
     'Discover Yaoundé',
     'Feed',
     'My Trips',
-    'Explore Map'
+    'Explore Map',
+    'Profile',
   ];
 
   Widget get _body {
@@ -176,6 +180,8 @@ class _HomeShellState extends State<_HomeShell> {
         return const ItinerariesScreen();
       case 3:
         return ExploreMapScreen(); // ✅ Correctly matched class name
+      case 4:
+        return ProfileScreen(session: widget.session, embedded: true);
       default:
         return const DiscoverScreen();
     }
@@ -187,6 +193,8 @@ class _HomeShellState extends State<_HomeShell> {
       title: _titles[_index],
       selectedIndex: _index,
       onDestinationSelected: (i) => setState(() => _index = i),
+      avatarUrl: widget.session.currentUser?.avatarUrl,
+      userName: widget.session.currentUser?.fullName,
       actions: [
         if (widget.isAdmin)
           IconButton(
@@ -200,17 +208,6 @@ class _HomeShellState extends State<_HomeShell> {
               ),
             ),
           ),
-        IconButton(
-          tooltip: 'Profile',
-          icon: const Icon(Icons.account_circle_rounded,
-              color: AppColors.inkSoft),
-          onPressed: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => ProfileScreen(session: widget.session),
-            ),
-          ),
-        ),
       ],
       child: _body,
     );

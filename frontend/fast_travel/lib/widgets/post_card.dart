@@ -111,6 +111,16 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
     _burstController.forward(from: 0);
   }
 
+  void _togglePlayPause() {
+    final controller = _videoController;
+    if (controller == null || !controller.value.isInitialized) return;
+    if (controller.value.isPlaying) {
+      controller.pause();
+    } else {
+      controller.play();
+    }
+  }
+
   Future<void> _confirmDelete() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -197,11 +207,12 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
             ),
           ),
 
-          // Double-tap to like, with a heart burst — the whole card is the
-          // tap target, matching the platform this is modeled on.
+          // Single tap pauses/resumes video; double-tap likes with a heart
+          // burst — the whole card is the tap target either way.
           Positioned.fill(
             child: GestureDetector(
               behavior: HitTestBehavior.translucent,
+              onTap: hasVideo ? _togglePlayPause : null,
               onDoubleTap: _handleDoubleTap,
             ),
           ),
@@ -216,6 +227,58 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
               ),
             ),
           ),
+
+          // Paused indicator — only visible while a video is paused, so a
+          // single tap always has a clear play-again affordance.
+          if (hasVideo &&
+              _videoController != null &&
+              _videoController!.value.isInitialized)
+            Center(
+              child: ValueListenableBuilder<VideoPlayerValue>(
+                valueListenable: _videoController!,
+                builder: (context, value, _) => AnimatedOpacity(
+                  opacity: value.isPlaying ? 0 : 1,
+                  duration: const Duration(milliseconds: 150),
+                  child: Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.35),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.play_arrow_rounded,
+                        color: Colors.white, size: 48),
+                  ),
+                ),
+              ),
+            ),
+
+          // Video progress bar — pinned to the very bottom edge, above the
+          // scrim so it stays legible against both light and dark frames.
+          if (hasVideo &&
+              _videoController != null &&
+              _videoController!.value.isInitialized)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: ValueListenableBuilder<VideoPlayerValue>(
+                valueListenable: _videoController!,
+                builder: (context, value, _) {
+                  final durationMs = value.duration.inMilliseconds;
+                  final progress = durationMs == 0
+                      ? 0.0
+                      : (value.position.inMilliseconds / durationMs)
+                          .clamp(0.0, 1.0);
+                  return LinearProgressIndicator(
+                    value: progress,
+                    minHeight: 3,
+                    backgroundColor: Colors.white24,
+                    valueColor:
+                        const AlwaysStoppedAnimation(AppColors.ochre),
+                  );
+                },
+              ),
+            ),
 
           // Caption + author — bottom-left, TikTok-style (avatar lives in
           // the action rail, matching the reference layout, not here).

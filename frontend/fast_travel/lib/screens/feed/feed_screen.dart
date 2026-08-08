@@ -179,21 +179,21 @@ class _FeedScreenState extends State<FeedScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.sand,
-      appBar: AppBar(
-        title: const Text('Feed'),
-        actions: [
-          IconButton(
-            tooltip: 'New post',
-            icon: const Icon(Icons.add_circle_outline_rounded),
-            onPressed: () async {
-              final created = await Navigator.push<bool>(
-                context,
-                MaterialPageRoute(builder: (context) => const CreatePostScreen()),
-              );
-              if (created == true) _loadPosts();
-            },
-          ),
-        ],
+      // No AppBar here — AdaptiveShell already renders the "Feed" title;
+      // a second one here would show it twice.
+      floatingActionButton: FloatingActionButton(
+        heroTag: 'feed_new_post_fab',
+        tooltip: 'New post',
+        backgroundColor: AppColors.ochre,
+        foregroundColor: Colors.white,
+        onPressed: () async {
+          final created = await Navigator.push<bool>(
+            context,
+            MaterialPageRoute(builder: (context) => const CreatePostScreen()),
+          );
+          if (created == true) _loadPosts();
+        },
+        child: const Icon(Icons.add_rounded),
       ),
       body: SafeArea(
         child: RefreshIndicator(

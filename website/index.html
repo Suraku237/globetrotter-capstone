@@ -1114,8 +1114,9 @@
       // Desktop builds don't exist yet — the "#" placeholder just won't navigate.
     }
 
-    // Points the mobile button at the APK the Flutter web app's own
-    // container serves under /downloads/ (see frontend/fast_travel/Dockerfile).
+    // Points the mobile button at the APK deploy-frontend.yml uploads
+    // to /var/www/fasttravel-app/downloads/ on every push (see
+    // .github/workflows/deploy-frontend.yml).
     document.getElementById('mobile-download-btn').href =
       window.FAST_TRAVEL_APP_URL + '/downloads/fast-travel.apk';
 

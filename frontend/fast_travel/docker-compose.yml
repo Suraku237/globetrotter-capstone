@@ -1,7 +1,0 @@
-services:
-  frontend-web:
-    build: .
-    container_name: fast_travel_frontend
-    restart: unless-stopped
-    ports:
-      - "8081:80"

@@ -4,11 +4,12 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
-from .models import CommentCreate, load_posts, save_posts
+from .models import CommentCreate, DATA_DIR, load_posts, save_posts
 from .security import get_current_user
-from .storage import upload_post_media
 
 router = APIRouter()
+
+IMAGES_DIR = DATA_DIR / "images" / "posts"
 
 
 @router.get("/posts")
@@ -18,8 +19,13 @@ def get_posts(current_user: dict = Depends(get_current_user)):
 
 
 async def _save_upload(upload: UploadFile) -> str:
+    IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+    extension = upload.filename.rsplit(".", 1)[-1].lower() if upload.filename else ""
+    filename = f"{uuid.uuid4().hex}.{extension}" if extension else uuid.uuid4().hex
     contents = await upload.read()
-    return upload_post_media(contents, upload.filename or "", upload.content_type)
+    with open(IMAGES_DIR / filename, "wb") as f:
+        f.write(contents)
+    return f"/images/posts/{filename}"
 
 
 @router.post("/posts", status_code=201)

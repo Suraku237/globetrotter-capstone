@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 import logging
+import threading
 import requests
 
 from fastapi import APIRouter, HTTPException
@@ -23,6 +24,13 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# FastAPI runs sync endpoints across a thread pool, so two Google sign-in
+# requests for the same (new) email arriving close together could both read
+# "user not found" before either one saves, creating two accounts with the
+# same email but different ids. This serializes the find-or-create so the
+# second request always sees the first one's write.
+_google_signin_lock = threading.Lock()
 
 
 def normalize_role(role: Optional[str]) -> str:
@@ -138,29 +146,30 @@ def login_with_google(payload: FirebaseTokenRequest):
     full_name = claims.get("name") or email.split("@")[0]
     firebase_uid = claims.get("uid")
 
-    users = load_users()
-    user = next((u for u in users if u["email"] == email), None)
+    with _google_signin_lock:
+        users = load_users()
+        user = next((u for u in users if u["email"] == email), None)
 
-    if user is None:
-        user = {
-            "id": str(__import__("uuid").uuid4()),
-            "email": email,
-            "full_name": full_name,
-            "role": "user",
-            "hashed_password": None,
-            "firebase_uid": firebase_uid,
-            "preferences": [],
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        }
-        users.append(user)
-        save_users(users)
-        logger.info(f"✅ Created new user: {email}")
-    elif not user.get("firebase_uid"):
-        user["firebase_uid"] = firebase_uid
-        save_users(users)
-        logger.info(f"✅ Updated existing user with firebase_uid: {email}")
-    else:
-        logger.info(f"✅ Existing user signed in: {email}")
+        if user is None:
+            user = {
+                "id": str(__import__("uuid").uuid4()),
+                "email": email,
+                "full_name": full_name,
+                "role": "user",
+                "hashed_password": None,
+                "firebase_uid": firebase_uid,
+                "preferences": [],
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+            users.append(user)
+            save_users(users)
+            logger.info(f"✅ Created new user: {email}")
+        elif not user.get("firebase_uid"):
+            user["firebase_uid"] = firebase_uid
+            save_users(users)
+            logger.info(f"✅ Updated existing user with firebase_uid: {email}")
+        else:
+            logger.info(f"✅ Existing user signed in: {email}")
 
     token = create_access_token({"sub": user["id"], "role": user.get("role", "user")})
     return TokenResponse(

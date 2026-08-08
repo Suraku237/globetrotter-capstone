@@ -32,9 +32,12 @@ class ApiService {
   // app stuck showing a stale, misleading error.
   void Function()? onUnauthorized;
 
-  // 🔥 FORCED TO USE YOUR VPS IP GATEWAY
+  // Routed through fasttravel-web.duckdns.org's own nginx (/api/ ->
+  // 127.0.0.1:8000) instead of the raw IP:port, so it's HTTPS end to end —
+  // the app itself is served over HTTPS, and browsers block a secure page
+  // from calling an insecure (http://) backend ("mixed content").
   static String get baseUrl {
-    return 'http://109.199.120.38:8000';
+    return 'https://fasttravel-web.duckdns.org/api';
   }
 
   // Media paths from the backend are either relative (served by this

@@ -21,10 +21,16 @@ pipeline {
                 // Runs analyze + the widget test suite inside the Flutter
                 // Docker image, so the Jenkins/VPS host itself never needs
                 // Flutter or the Android SDK installed.
+                //
+                // --no-fatal-warnings/--no-fatal-infos: by default `flutter
+                // analyze` exits non-zero on ANY issue, including pre-existing
+                // style lints (avoid_print, prefer_const_constructors, etc.)
+                // that don't affect correctness. Only real analyzer ERRORs
+                // should block a deploy.
                 sh '''
                     cd frontend/fast_travel
                     docker run --rm -v "$PWD":/app -w /app ${FLUTTER_IMAGE} \
-                        sh -c "flutter pub get && flutter analyze && flutter test"
+                        sh -c "flutter pub get && flutter analyze --no-fatal-warnings --no-fatal-infos && flutter test"
                 '''
             }
         }

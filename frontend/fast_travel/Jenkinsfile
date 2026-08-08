@@ -54,10 +54,17 @@ pipeline {
             steps {
                 unstash 'web-build'
                 sh '''
-                    mkdir -p ${WEB_DEPLOY_DIR}
-                    rm -rf ${WEB_DEPLOY_DIR:?}/*
+                    mkdir -p ${WEB_DEPLOY_DIR}/downloads
+                    # Clear out everything except downloads/ (the APK lives
+                    # there — this pipeline only builds the web app, so it
+                    # has no business touching that folder).
+                    find ${WEB_DEPLOY_DIR} -mindepth 1 -maxdepth 1 ! -name downloads -exec rm -rf {} +
                     cp -r frontend/fast_travel/build/web/* ${WEB_DEPLOY_DIR}/
-                    chown -R www-data:www-data ${WEB_DEPLOY_DIR}
+                    # chmod, not chown: the Jenkins user owns these files
+                    # already (it just wrote them) — granting read access to
+                    # everyone is enough for nginx (www-data) to serve them,
+                    # and unlike chown it doesn't require root.
+                    chmod -R o+rX ${WEB_DEPLOY_DIR}
                 '''
             }
         }

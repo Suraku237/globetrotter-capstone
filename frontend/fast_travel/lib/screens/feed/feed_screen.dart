@@ -3,14 +3,16 @@ import '../../Services/api_service.dart';
 import '../../Services/session_state.dart';
 import '../../models/models.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/comments_panel.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/post_card.dart';
 import 'create_post_screen.dart';
-import 'post_comments_screen.dart';
 
 // Above this width the one-post-at-a-time feed switches from edge-to-edge
 // (phones) to a centered, rounded "phone frame" — full-bleed vertical video
-// styling doesn't read well stretched across a desktop window.
+// styling doesn't read well stretched across a desktop window. Comments
+// also switch presentation at this point: a side panel next to the post on
+// wide/web layouts, a bottom sheet on narrow ones — never a separate screen.
 const double _kWideBreakpoint = 700;
 
 class FeedScreen extends StatefulWidget {
@@ -28,6 +30,7 @@ class _FeedScreenState extends State<FeedScreen> {
   String? _error;
   bool _errorIsNetwork = false;
   int _currentPage = 0;
+  String? _openCommentsPostId;
 
   @override
   void initState() {
@@ -71,9 +74,7 @@ class _FeedScreenState extends State<FeedScreen> {
   Future<void> _toggleLike(Post post) async {
     try {
       final updated = await ApiService.instance.likePost(post.id);
-      setState(() {
-        _posts = _posts.map((p) => p.id == post.id ? updated : p).toList();
-      });
+      _updatePost(updated);
     } catch (_) {
       // Non-critical — swallow and let the user retry the tap.
     }
@@ -84,6 +85,7 @@ class _FeedScreenState extends State<FeedScreen> {
       await ApiService.instance.deletePost(post.id);
       setState(() {
         _posts = _posts.where((p) => p.id != post.id).toList();
+        if (_openCommentsPostId == post.id) _openCommentsPostId = null;
       });
     } catch (_) {
       if (mounted) {
@@ -94,11 +96,86 @@ class _FeedScreenState extends State<FeedScreen> {
     }
   }
 
+  void _updatePost(Post updated) {
+    setState(() {
+      _posts = _posts.map((p) => p.id == updated.id ? updated : p).toList();
+    });
+  }
+
+  Post? get _openPost {
+    final id = _openCommentsPostId;
+    if (id == null) return null;
+    for (final p in _posts) {
+      if (p.id == id) return p;
+    }
+    return null;
+  }
+
+  void _openComments(Post post, {required bool isWide, required String currentUserId}) {
+    if (isWide) {
+      setState(() {
+        _openCommentsPostId = _openCommentsPostId == post.id ? null : post.id;
+      });
+      return;
+    }
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.sand,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.4,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (context, scrollController) => CommentsPanel(
+          post: post,
+          currentUserId: currentUserId,
+          onPostUpdated: _updatePost,
+          onClose: () => Navigator.of(sheetContext).pop(),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentUserId = widget.session.currentUser?.id ?? '';
     final isAdmin = widget.session.currentUser?.role == 'admin';
     final isWide = MediaQuery.sizeOf(context).width >= _kWideBreakpoint;
+    final openPost = isWide ? _openPost : null;
+
+    final pageView = PageView.builder(
+      controller: _pageController,
+      scrollDirection: Axis.vertical,
+      itemCount: _posts.length,
+      onPageChanged: (index) => setState(() {
+        _currentPage = index;
+        _openCommentsPostId = null;
+      }),
+      itemBuilder: (context, index) {
+        final post = _posts[index];
+        return Padding(
+          padding:
+              isWide ? const EdgeInsets.symmetric(vertical: 4) : EdgeInsets.zero,
+          child: PostCard(
+            post: post,
+            currentUserId: currentUserId,
+            borderRadius: isWide ? 24 : 0,
+            isActive: index == _currentPage,
+            onLike: () => _toggleLike(post),
+            onDelete: isAdmin ? () => _deletePost(post) : null,
+            onOpenComments: () => _openComments(
+              post,
+              isWide: isWide,
+              currentUserId: currentUserId,
+            ),
+          ),
+        );
+      },
+    );
 
     return Scaffold(
       backgroundColor: AppColors.sand,
@@ -147,56 +224,47 @@ class _FeedScreenState extends State<FeedScreen> {
                             ),
                           ],
                         )
-                      : Center(
-                          child: ConstrainedBox(
-                            constraints: BoxConstraints(
-                              maxWidth: isWide ? 430 : double.infinity,
-                            ),
-                            child: Padding(
-                              padding: isWide
-                                  ? const EdgeInsets.symmetric(vertical: 24)
-                                  : EdgeInsets.zero,
-                              child: PageView.builder(
-                                controller: _pageController,
-                                scrollDirection: Axis.vertical,
-                                itemCount: _posts.length,
-                                onPageChanged: (index) =>
-                                    setState(() => _currentPage = index),
-                                itemBuilder: (context, index) {
-                                  final post = _posts[index];
-                                  return Padding(
-                                    padding: isWide
-                                        ? const EdgeInsets.symmetric(vertical: 4)
-                                        : EdgeInsets.zero,
-                                    child: PostCard(
-                                      post: post,
-                                      currentUserId: currentUserId,
-                                      borderRadius: isWide ? 24 : 0,
-                                      isActive: index == _currentPage,
-                                      onLike: () => _toggleLike(post),
-                                      onDelete: isAdmin
-                                          ? () => _deletePost(post)
-                                          : null,
-                                      onOpenComments: () async {
-                                        await Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) => PostCommentsScreen(
-                                              posts: _posts,
-                                              initialIndex: index,
-                                              currentUserId: currentUserId,
-                                              isAdmin: isAdmin,
-                                            ),
-                                          ),
-                                        );
-                                        _loadPosts();
-                                      },
-                                    ),
-                                  );
-                                },
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxWidth: isWide ? 430 : double.infinity,
+                              ),
+                              child: Padding(
+                                padding: isWide
+                                    ? const EdgeInsets.symmetric(vertical: 24)
+                                    : EdgeInsets.zero,
+                                child: pageView,
                               ),
                             ),
-                          ),
+                            if (openPost != null) ...[
+                              const SizedBox(width: 16),
+                              SizedBox(
+                                width: 380,
+                                child: Padding(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 24),
+                                  child: Material(
+                                    color: Colors.white,
+                                    elevation: 3,
+                                    shadowColor:
+                                        AppColors.ink.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(24),
+                                    clipBehavior: Clip.antiAlias,
+                                    child: CommentsPanel(
+                                      post: openPost,
+                                      currentUserId: currentUserId,
+                                      onPostUpdated: _updatePost,
+                                      onClose: () =>
+                                          setState(() => _openCommentsPostId = null),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
         ),
       ),

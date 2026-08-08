@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import '../Services/api_service.dart';
 import '../models/models.dart';
@@ -131,6 +132,19 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
     if (confirmed == true) widget.onDelete?.call();
   }
 
+  Future<void> _share() async {
+    final post = widget.post;
+    final mediaPath = post.video ?? post.image;
+    final link = mediaPath != null
+        ? ApiService.resolveUrl(mediaPath)
+        : 'Fast Travel — a post by ${post.authorName}';
+    await Clipboard.setData(ClipboardData(text: link));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Link copied to clipboard')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final post = widget.post;
@@ -203,7 +217,8 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
             ),
           ),
 
-          // Caption + author — bottom-left, TikTok-style.
+          // Caption + author — bottom-left, TikTok-style (avatar lives in
+          // the action rail, matching the reference layout, not here).
           Positioned(
             left: 16,
             right: 88,
@@ -212,32 +227,14 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 16,
-                      backgroundColor: AppColors.sandDim,
-                      backgroundImage: post.authorAvatar != null
-                          ? NetworkImage('${ApiService.baseUrl}${post.authorAvatar}')
-                          : null,
-                      child: post.authorAvatar == null
-                          ? const Icon(Icons.person_rounded,
-                              size: 16, color: AppColors.inkSoft)
-                          : null,
-                    ),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        post.authorName,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          shadows: [Shadow(blurRadius: 6, color: Colors.black54)],
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
+                Text(
+                  post.authorName,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    shadows: [Shadow(blurRadius: 6, color: Colors.black54)],
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 8),
                 Text(
@@ -254,13 +251,19 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
             ),
           ),
 
-          // Action rail — bottom-right, like/comment stacked vertically.
+          // Action rail — bottom-right, TikTok order: avatar, like,
+          // comment, share.
           Positioned(
             right: 12,
             bottom: 20,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                _RailAvatar(
+                  avatarUrl: post.authorAvatar,
+                  name: post.authorName,
+                ),
+                const SizedBox(height: 22),
                 _RailButton(
                   icon: liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
                   color: liked ? AppColors.clay : Colors.white,
@@ -273,6 +276,12 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
                   color: Colors.white,
                   label: '${post.comments.length}',
                   onTap: widget.onOpenComments,
+                ),
+                const SizedBox(height: 20),
+                _RailButton(
+                  icon: Icons.reply_rounded,
+                  color: Colors.white,
+                  onTap: _share,
                 ),
               ],
             ),
@@ -321,13 +330,13 @@ class _FallbackBackground extends StatelessWidget {
 class _RailButton extends StatelessWidget {
   final IconData icon;
   final Color color;
-  final String label;
+  final String? label;
   final VoidCallback onTap;
 
   const _RailButton({
     required this.icon,
     required this.color,
-    required this.label,
+    this.label,
     required this.onTap,
   });
 
@@ -342,17 +351,54 @@ class _RailButton extends StatelessWidget {
           Icon(icon, color: color, size: 34, shadows: const [
             Shadow(blurRadius: 8, color: Colors.black45),
           ]),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              shadows: [Shadow(blurRadius: 6, color: Colors.black54)],
+          if (label != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              label!,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                shadows: [Shadow(blurRadius: 6, color: Colors.black54)],
+              ),
             ),
-          ),
+          ],
         ],
+      ),
+    );
+  }
+}
+
+class _RailAvatar extends StatelessWidget {
+  final String? avatarUrl;
+  final String name;
+
+  const _RailAvatar({required this.avatarUrl, required this.name});
+
+  @override
+  Widget build(BuildContext context) {
+    final initial = name.trim().isNotEmpty ? name.trim()[0].toUpperCase() : '?';
+    return Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 2),
+      ),
+      child: CircleAvatar(
+        backgroundColor: AppColors.sandDim,
+        backgroundImage:
+            avatarUrl != null ? NetworkImage(ApiService.resolveUrl(avatarUrl!)) : null,
+        child: avatarUrl == null
+            ? Text(
+                initial,
+                style: const TextStyle(
+                  color: AppColors.ink,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                ),
+              )
+            : null,
       ),
     );
   }

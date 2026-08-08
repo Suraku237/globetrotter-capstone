@@ -3,7 +3,10 @@ pipeline {
 
     environment {
         DEPLOY_DIR = '/opt/fast_travel_micro'
-        FLUTTER_IMAGE = 'ghcr.io/cirruslabs/flutter:3.24.3'
+        // pubspec.yaml's maplibre_gl constraint needs Dart >=3.7.0 — "stable"
+        // tracks current Flutter releases so this stays satisfied without a
+        // hardcoded version number going stale.
+        FLUTTER_IMAGE = 'ghcr.io/cirruslabs/flutter:stable'
     }
 
     stages {

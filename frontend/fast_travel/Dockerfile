@@ -2,7 +2,7 @@
 # Compiles both the release web bundle and a debug Android APK. Using the
 # Cirrus Labs Flutter image (bundles Flutter + Android SDK + Java) means the
 # VPS itself never needs Flutter/Android tooling installed — only Docker.
-FROM ghcr.io/cirruslabs/flutter:3.24.3 AS build
+FROM ghcr.io/cirruslabs/flutter:stable AS build
 WORKDIR /app
 
 COPY pubspec.yaml pubspec.lock ./

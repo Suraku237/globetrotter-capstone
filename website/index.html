@@ -27,6 +27,13 @@
   window.FAST_TRAVEL_API = "http://109.199.120.38:8000";
 </script>
 
+<!-- TODO: set this to the domain the Flutter web app (frontend/fast_travel/)
+     ends up deployed on — the mobile download button below fetches the APK
+     from "<that domain>/downloads/fast-travel.apk". -->
+<script>
+  window.FAST_TRAVEL_APP_URL = "https://YOUR-APP-DOMAIN-HERE";
+</script>
+
 <style>
 
   :root{
@@ -904,8 +911,8 @@
             </div>
 
             <div class="cta-row">
-              <a href="#" class="btn btn-primary" onclick="trackDownload('mobile')">
-                Get it on Mobile <span class="tag">iOS · Android</span>
+              <a href="#" id="mobile-download-btn" class="btn btn-primary" onclick="trackDownload('mobile')">
+                Get it on Mobile <span class="tag">Android</span>
               </a>
               <a href="#" class="btn btn-outline" onclick="trackDownload('desktop')">
                 Get it on Desktop <span class="tag">Win · Mac · Linux</span>
@@ -1104,10 +1111,13 @@
       if (typeof gtag === "function") {
         gtag('event', 'download_click', { platform: platform });
       }
-      // Not preventing default: the "#" placeholder href just won't navigate.
-      // Once you have real download links, remove this line's "return false"
-      // is not needed — just replace href="#" with the real URL.
+      // Desktop builds don't exist yet — the "#" placeholder just won't navigate.
     }
+
+    // Points the mobile button at the APK the Flutter web app's own
+    // container serves under /downloads/ (see frontend/fast_travel/Dockerfile).
+    document.getElementById('mobile-download-btn').href =
+      window.FAST_TRAVEL_APP_URL + '/downloads/fast-travel.apk';
 
     // ---------- gallery: shuffled each visit, Olembe Stadium always first ----------
     var GALLERY_PINNED = { src: "images/olembe-stadium.jpg", alt: "Olembe Stadium", label: "Olembe Stadium" };

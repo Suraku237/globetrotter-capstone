@@ -12,11 +12,13 @@ class PostCommentsScreen extends StatefulWidget {
   final List<Post> posts;
   final int initialIndex;
   final String currentUserId;
+  final bool isAdmin;
   const PostCommentsScreen({
     super.key,
     required this.posts,
     required this.initialIndex,
     required this.currentUserId,
+    this.isAdmin = false,
   });
 
   @override
@@ -27,11 +29,50 @@ class _PostCommentsScreenState extends State<PostCommentsScreen> {
   late final PageController _pageController =
       PageController(initialPage: widget.initialIndex);
   late int _currentIndex = widget.initialIndex;
+  bool _deleting = false;
 
   @override
   void dispose() {
     _pageController.dispose();
     super.dispose();
+  }
+
+  Future<void> _confirmDelete() async {
+    final post = widget.posts[_currentIndex];
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete this post?'),
+        content: const Text('This removes it for everyone and can\'t be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete', style: TextStyle(color: AppColors.clay)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    setState(() => _deleting = true);
+    try {
+      await ApiService.instance.deletePost(post.id);
+      // Simplest consistent option: the feed already reloads its post list
+      // when this screen is popped, so just leave rather than try to
+      // mutate the (immutable) posts list mid-PageView.
+      if (mounted) Navigator.of(context).pop();
+    } catch (_) {
+      if (mounted) {
+        setState(() => _deleting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not delete this post.')),
+        );
+      }
+    }
   }
 
   @override
@@ -40,6 +81,21 @@ class _PostCommentsScreenState extends State<PostCommentsScreen> {
       backgroundColor: AppColors.sand,
       appBar: AppBar(
         title: Text('Post ${_currentIndex + 1} of ${widget.posts.length}'),
+        actions: [
+          if (widget.isAdmin)
+            IconButton(
+              tooltip: 'Delete post',
+              icon: _deleting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.delete_outline_rounded,
+                      color: AppColors.clay),
+              onPressed: _deleting ? null : _confirmDelete,
+            ),
+        ],
       ),
       body: SafeArea(
         child: PageView.builder(

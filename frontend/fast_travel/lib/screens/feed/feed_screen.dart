@@ -79,9 +79,25 @@ class _FeedScreenState extends State<FeedScreen> {
     }
   }
 
+  Future<void> _deletePost(Post post) async {
+    try {
+      await ApiService.instance.deletePost(post.id);
+      setState(() {
+        _posts = _posts.where((p) => p.id != post.id).toList();
+      });
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not delete this post.')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentUserId = widget.session.currentUser?.id ?? '';
+    final isAdmin = widget.session.currentUser?.role == 'admin';
     final isWide = MediaQuery.sizeOf(context).width >= _kWideBreakpoint;
 
     return Scaffold(
@@ -158,6 +174,9 @@ class _FeedScreenState extends State<FeedScreen> {
                                       borderRadius: isWide ? 24 : 0,
                                       isActive: index == _currentPage,
                                       onLike: () => _toggleLike(post),
+                                      onDelete: isAdmin
+                                          ? () => _deletePost(post)
+                                          : null,
                                       onOpenComments: () async {
                                         await Navigator.push(
                                           context,
@@ -166,6 +185,7 @@ class _FeedScreenState extends State<FeedScreen> {
                                               posts: _posts,
                                               initialIndex: index,
                                               currentUserId: currentUserId,
+                                              isAdmin: isAdmin,
                                             ),
                                           ),
                                         );

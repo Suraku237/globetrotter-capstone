@@ -335,6 +335,15 @@ class ApiService {
     return Post.fromJson(data as Map<String, dynamic>);
   }
 
+  // Admin-only — backend rejects this for anyone else.
+  Future<void> deletePost(String postId) async {
+    final res = await http.delete(
+      Uri.parse('$baseUrl/posts/$postId'),
+      headers: _headers,
+    );
+    await _handle(res, okStatus: 204);
+  }
+
   // ---- Destination suggestions ----
 
   Future<Destination> submitDestination({

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from PIL import Image
 
 from .models import CommentCreate, DATA_DIR, load_posts, save_posts
-from .security import get_current_user
+from .security import get_current_user, require_admin
 
 router = APIRouter()
 
@@ -128,3 +128,12 @@ def add_comment(
     post["comments"].append(comment)
     save_posts(posts)
     return post
+
+
+@router.delete("/posts/{post_id}", status_code=204)
+def delete_post(post_id: str, current_user: dict = Depends(require_admin)):
+    posts = load_posts()
+    remaining = [p for p in posts if p["id"] != post_id]
+    if len(remaining) == len(posts):
+        raise HTTPException(status_code=404, detail="Post not found")
+    save_posts(remaining)

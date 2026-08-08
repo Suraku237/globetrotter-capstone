@@ -37,3 +37,12 @@ def require_worker_or_admin(current_user: dict = Depends(get_current_user)) -> d
             detail="Only workers and admins can do this",
         )
     return current_user
+
+
+def require_admin(current_user: dict = Depends(get_current_user)) -> dict:
+    if current_user.get("role") != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can do this",
+        )
+    return current_user

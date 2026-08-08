@@ -14,6 +14,9 @@ class PostCard extends StatefulWidget {
   final String currentUserId;
   final VoidCallback onLike;
   final VoidCallback onOpenComments;
+  // Only passed for admins — presence of the callback (not a separate
+  // isAdmin flag) is what decides whether the delete control shows at all.
+  final VoidCallback? onDelete;
   final double borderRadius;
   // Whether this card is the one currently on-screen in the PageView — a
   // video only plays while its card is active, and pauses otherwise so
@@ -26,6 +29,7 @@ class PostCard extends StatefulWidget {
     required this.currentUserId,
     required this.onLike,
     required this.onOpenComments,
+    this.onDelete,
     this.borderRadius = 0,
     this.isActive = true,
   });
@@ -104,6 +108,27 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
     final liked = widget.post.likes.contains(widget.currentUserId);
     if (!liked) widget.onLike();
     _burstController.forward(from: 0);
+  }
+
+  Future<void> _confirmDelete() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete this post?'),
+        content: const Text('This removes it for everyone and can\'t be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete', style: TextStyle(color: AppColors.clay)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) widget.onDelete?.call();
   }
 
   @override
@@ -252,6 +277,24 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
               ],
             ),
           ),
+
+          if (widget.onDelete != null)
+            Positioned(
+              top: 12,
+              right: 12,
+              child: GestureDetector(
+                onTap: _confirmDelete,
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.delete_outline_rounded,
+                      color: Colors.white, size: 20),
+                ),
+              ),
+            ),
         ],
       ),
     );

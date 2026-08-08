@@ -60,89 +60,15 @@ class _GlobeTrotterAppState extends State<GlobeTrotterApp> {
           }
 
           final role = _session.currentUser?.role ?? 'user';
-          if (role == 'admin') {
-            return _AdminHomeScreen(session: _session);
-          }
           if (role == 'worker') {
             return _WorkerHomeScreen(session: _session);
           }
-          return _HomeShell(session: _session);
+          // Admins get the exact same app regular users see (Discover,
+          // Feed, My Trips, Map) plus an extra entry point for destination
+          // moderation and the ability to delete posts — not a separate,
+          // more limited dashboard.
+          return _HomeShell(session: _session, isAdmin: role == 'admin');
         },
-      ),
-    );
-  }
-}
-
-class _AdminHomeScreen extends StatelessWidget {
-  final SessionState session;
-  const _AdminHomeScreen({required this.session});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Admin platform'),
-        backgroundColor: AppColors.canopy,
-        actions: [
-          IconButton(
-            tooltip: 'Ask the assistant',
-            icon: Icon(Icons.forum_rounded, color: AppColors.inkSoft),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const AssistantScreen()),
-            ),
-          ),
-          IconButton(
-            tooltip: 'Profile',
-            icon: Icon(Icons.account_circle_rounded, color: AppColors.inkSoft),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => ProfileScreen(session: session),
-              ),
-            ),
-          ),
-          IconButton(
-            tooltip: 'Sign out',
-            icon: Icon(Icons.logout_rounded, color: AppColors.inkSoft),
-            onPressed: session.signOut,
-          ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.dashboard_customize_rounded),
-              title: const Text('Admin dashboard'),
-              subtitle:
-                  const Text('Manage users, destinations, and monitoring.'),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.groups_rounded),
-              title: const Text('User oversight'),
-              subtitle: const Text('Review signups and role access.'),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.fact_check_rounded),
-              title: const Text('Review destination submissions'),
-              subtitle: const Text('Approve or reject user-suggested destinations.'),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const PendingDestinationsScreen(),
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -225,7 +151,8 @@ class _WorkerHomeScreen extends StatelessWidget {
 
 class _HomeShell extends StatefulWidget {
   final SessionState session;
-  const _HomeShell({required this.session});
+  final bool isAdmin;
+  const _HomeShell({required this.session, this.isAdmin = false});
 
   @override
   State<_HomeShell> createState() => _HomeShellState();
@@ -261,6 +188,18 @@ class _HomeShellState extends State<_HomeShell> {
       selectedIndex: _index,
       onDestinationSelected: (i) => setState(() => _index = i),
       actions: [
+        if (widget.isAdmin)
+          IconButton(
+            tooltip: 'Review destinations',
+            icon: const Icon(Icons.fact_check_rounded,
+                color: AppColors.inkSoft),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const PendingDestinationsScreen(),
+              ),
+            ),
+          ),
         IconButton(
           tooltip: 'Profile',
           icon: const Icon(Icons.account_circle_rounded,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../screens/assistant/assistant_screen.dart';
 import '../theme/app_theme.dart';
 
 /// One shell, three interfaces. Below 600px (phones) it shows a bottom nav
@@ -44,6 +45,8 @@ class AdaptiveShell extends StatelessWidget {
       return Scaffold(
         appBar: AppBar(title: Text(title), actions: actions),
         body: SafeArea(child: child),
+        floatingActionButton: const _AskAiButton(),
+        floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
         bottomNavigationBar: NavigationBar(
           selectedIndex: selectedIndex,
           onDestinationSelected: onDestinationSelected,
@@ -110,6 +113,27 @@ class AdaptiveShell extends StatelessWidget {
           ),
         ],
       ),
+      floatingActionButton: const _AskAiButton(),
+      floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
+    );
+  }
+}
+
+// Styled and positioned the same way as the "Suggest a destination" FAB on
+// Discover, just parked on the opposite (start) side so the two never
+// collide on screens that have both.
+class _AskAiButton extends StatelessWidget {
+  const _AskAiButton();
+
+  @override
+  Widget build(BuildContext context) {
+    return FloatingActionButton.extended(
+      onPressed: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const AssistantScreen()),
+      ),
+      icon: const Icon(Icons.smart_toy_rounded),
+      label: const Text('Ask AI'),
     );
   }
 }

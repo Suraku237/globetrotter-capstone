@@ -175,12 +175,19 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const SuggestDestinationScreen(),
-          ),
-        ),
+        onPressed: () async {
+          final submitted = await showDialog<bool>(
+            context: context,
+            builder: (_) => const SuggestDestinationScreen(),
+          );
+          if (submitted == true && context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Submitted — a worker or admin will review it soon.'),
+              ),
+            );
+          }
+        },
         icon: const Icon(Icons.add_location_alt_rounded),
         label: const Text('Suggest a destination'),
       ),

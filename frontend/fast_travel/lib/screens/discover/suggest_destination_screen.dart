@@ -6,6 +6,9 @@ import '../../Services/api_service.dart';
 import '../../theme/app_theme.dart';
 import '../itineraries/select_destination_map.dart';
 
+// Shown via showDialog(...) rather than pushed as a full screen — a
+// destination suggestion is a quick, occasional action and doesn't warrant
+// its own screen, matching how "Plan a trip" works on the itineraries tab.
 class SuggestDestinationScreen extends StatefulWidget {
   const SuggestDestinationScreen({super.key});
 
@@ -69,14 +72,7 @@ class _SuggestDestinationScreenState extends State<SuggestDestinationScreen> {
         lng: _location!.longitude,
         image: _image!,
       );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Submitted — a worker or admin will review it soon.'),
-          ),
-        );
-        Navigator.pop(context);
-      }
+      if (mounted) Navigator.of(context).pop(true);
     } on ApiException catch (e) {
       setState(() => _error = e.message);
     } catch (_) {
@@ -95,73 +91,94 @@ class _SuggestDestinationScreenState extends State<SuggestDestinationScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return Dialog(
       backgroundColor: AppColors.sand,
-      appBar: AppBar(title: const Text('Suggest a destination')),
-      body: SafeArea(
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
-              if (_error != null) ...[
-                Text(_error!, style: const TextStyle(color: AppColors.clay)),
-                const SizedBox(height: 12),
-              ],
-              TextFormField(
-                controller: _nameController,
-                decoration: const InputDecoration(labelText: 'Name'),
-                validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? 'Required' : null,
-              ),
-              const SizedBox(height: 14),
-              TextFormField(
-                controller: _descriptionController,
-                decoration: const InputDecoration(labelText: 'Description'),
-                maxLines: 4,
-                validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? 'Required' : null,
-              ),
-              const SizedBox(height: 16),
-              OutlinedButton.icon(
-                onPressed: _pickLocation,
-                icon: const Icon(Icons.location_on_outlined),
-                label: Text(
-                  _location == null
-                      ? 'Pick location on map'
-                      : 'Location: ${_location!.latitude.toStringAsFixed(4)}, ${_location!.longitude.toStringAsFixed(4)}',
-                ),
-              ),
-              const SizedBox(height: 12),
-              if (_imagePreview != null)
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(14),
-                  child: Image.memory(
-                    _imagePreview!,
-                    height: 180,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 460),
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Form(
+            key: _formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Suggest a destination',
+                      style: Theme.of(context).textTheme.headlineMedium),
+                  const SizedBox(height: 20),
+                  if (_error != null) ...[
+                    Text(_error!, style: const TextStyle(color: AppColors.clay)),
+                    const SizedBox(height: 12),
+                  ],
+                  TextFormField(
+                    controller: _nameController,
+                    decoration: const InputDecoration(labelText: 'Name'),
+                    validator: (v) =>
+                        (v == null || v.trim().isEmpty) ? 'Required' : null,
                   ),
-                ),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: _pickImage,
-                icon: const Icon(Icons.image_outlined),
-                label: Text(_image == null ? 'Add a photo' : 'Change photo'),
+                  const SizedBox(height: 14),
+                  TextFormField(
+                    controller: _descriptionController,
+                    decoration: const InputDecoration(labelText: 'Description'),
+                    maxLines: 3,
+                    validator: (v) =>
+                        (v == null || v.trim().isEmpty) ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 14),
+                  OutlinedButton.icon(
+                    onPressed: _pickLocation,
+                    icon: const Icon(Icons.location_on_outlined),
+                    label: Text(
+                      _location == null
+                          ? 'Pick location on map'
+                          : 'Location: ${_location!.latitude.toStringAsFixed(4)}, ${_location!.longitude.toStringAsFixed(4)}',
+                    ),
+                  ),
+                  if (_imagePreview != null) ...[
+                    const SizedBox(height: 12),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: Image.memory(
+                        _imagePreview!,
+                        height: 140,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: _pickImage,
+                    icon: const Icon(Icons.image_outlined),
+                    label: Text(_image == null ? 'Add a photo' : 'Change photo'),
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(false),
+                        child: const Text('Cancel'),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: _submitting ? null : _submit,
+                        child: _submitting
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Text('Submit for review'),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: _submitting ? null : _submit,
-                child: _submitting
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white),
-                      )
-                    : const Text('Submit for review'),
-              ),
-            ],
+            ),
           ),
         ),
       ),

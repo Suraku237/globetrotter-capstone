@@ -1,8 +1,10 @@
+import io
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from PIL import Image
 
 from .models import CommentCreate, DATA_DIR, load_posts, save_posts
 from .security import get_current_user
@@ -10,6 +12,18 @@ from .security import get_current_user
 router = APIRouter()
 
 IMAGES_DIR = DATA_DIR / "images" / "posts"
+
+_MAX_IMAGE_WIDTH = 1600
+
+
+def _compress_image(contents: bytes) -> bytes:
+    img = Image.open(io.BytesIO(contents)).convert("RGB")
+    if img.width > _MAX_IMAGE_WIDTH:
+        ratio = _MAX_IMAGE_WIDTH / img.width
+        img = img.resize((_MAX_IMAGE_WIDTH, round(img.height * ratio)), Image.LANCZOS)
+    buffer = io.BytesIO()
+    img.save(buffer, "JPEG", quality=80, optimize=True)
+    return buffer.getvalue()
 
 
 @router.get("/posts")
@@ -20,9 +34,26 @@ def get_posts(current_user: dict = Depends(get_current_user)):
 
 async def _save_upload(upload: UploadFile) -> str:
     IMAGES_DIR.mkdir(parents=True, exist_ok=True)
-    extension = upload.filename.rsplit(".", 1)[-1].lower() if upload.filename else ""
-    filename = f"{uuid.uuid4().hex}.{extension}" if extension else uuid.uuid4().hex
     contents = await upload.read()
+    extension = (
+        upload.filename.rsplit(".", 1)[-1].lower()
+        if upload.filename and "." in upload.filename
+        else ""
+    )
+
+    # Photos come straight off a phone camera at full resolution — recompress
+    # so the feed isn't waiting on multi-MB downloads for something shown at
+    # a few hundred pixels wide. Also normalizes formats (HEIC, PNG) that
+    # browsers don't universally support into JPEG. Videos are left as-is;
+    # re-encoding video needs ffmpeg, out of scope here.
+    if (upload.content_type or "").startswith("image/"):
+        try:
+            contents = _compress_image(contents)
+            extension = "jpg"
+        except Exception:
+            pass  # not a decodable image — fall back to storing it as-is
+
+    filename = f"{uuid.uuid4().hex}.{extension}" if extension else uuid.uuid4().hex
     with open(IMAGES_DIR / filename, "wb") as f:
         f.write(contents)
     return f"/images/posts/{filename}"

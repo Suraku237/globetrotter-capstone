@@ -262,27 +262,15 @@ class _HomeShellState extends State<_HomeShell> {
       onDestinationSelected: (i) => setState(() => _index = i),
       actions: [
         IconButton(
-          tooltip: 'Ask the assistant',
-          icon: Icon(Icons.forum_rounded, color: AppColors.inkSoft),
-          onPressed: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const AssistantScreen()),
-          ),
-        ),
-        IconButton(
           tooltip: 'Profile',
-          icon: Icon(Icons.account_circle_rounded, color: AppColors.inkSoft),
+          icon: const Icon(Icons.account_circle_rounded,
+              color: AppColors.inkSoft),
           onPressed: () => Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => ProfileScreen(session: widget.session),
             ),
           ),
-        ),
-        IconButton(
-          tooltip: 'Sign out',
-          icon: Icon(Icons.logout_rounded, color: AppColors.inkSoft),
-          onPressed: widget.session.signOut,
         ),
       ],
       child: _body,

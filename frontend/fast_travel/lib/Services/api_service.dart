@@ -426,6 +426,18 @@ class ApiService {
 
   // ---- AI assistant ----
 
+  // The assistant's full persisted history for the current user, so the
+  // chat screen can show past messages when reopened — the backend
+  // already remembers them for context either way.
+  Future<List<Map<String, dynamic>>> getAssistantHistory() async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/assistant/history'),
+      headers: _headers,
+    );
+    final data = await _handle(res) as List;
+    return data.cast<Map<String, dynamic>>();
+  }
+
   // The backend now remembers each user's conversation server-side
   // (conversations.json) and uses that for context, so the client no
   // longer needs to track/send its own history.

@@ -42,6 +42,12 @@ class ChatResponse(BaseModel):
     reply: str
 
 
+class HistoryTurn(BaseModel):
+    role: str
+    text: str
+    created_at: str
+
+
 def _system_prompt() -> str:
     destinations = [
         d for d in load_destinations() if d.get("status", "approved") == "approved"
@@ -61,6 +67,15 @@ def _system_prompt() -> str:
         "aloud by text-to-speech. "
         f"Destinations currently in the app: {names}."
     )
+
+
+@router.get("/history", response_model=list[HistoryTurn])
+def history(current_user: dict = Depends(get_current_user)):
+    """The current user's full persisted conversation — lets the chat
+    screen show past messages when reopened, instead of starting blank
+    even though the assistant itself already remembers everything."""
+    conversations = load_conversations()
+    return conversations.get(current_user["id"], [])
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -87,12 +102,18 @@ async def chat(payload: ChatRequest, current_user: dict = Depends(get_current_us
         "systemInstruction": {"parts": [{"text": _system_prompt()}]},
     }
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        res = await client.post(
-            GEMINI_URL,
-            params={"key": GEMINI_API_KEY},
-            json=body,
-        )
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            res = await client.post(
+                GEMINI_URL,
+                params={"key": GEMINI_API_KEY},
+                json=body,
+            )
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="Couldn't reach the assistant right now. Try again.",
+        ) from exc
 
     if res.status_code != 200:
         raise HTTPException(

@@ -39,6 +39,26 @@ class _AssistantScreenState extends State<AssistantScreen> {
       "destinations, itineraries, or planning a trip in Cameroon.",
       false,
     ));
+    _loadHistory();
+  }
+
+  // The backend already remembers this user's past conversation for
+  // context — this just makes that visible on screen too, instead of
+  // always starting from a blank chat.
+  Future<void> _loadHistory() async {
+    try {
+      final history = await ApiService.instance.getAssistantHistory();
+      if (!mounted || history.isEmpty) return;
+      setState(() {
+        _messages.addAll(history.map((turn) => _ChatMessage(
+              turn['text'] as String,
+              turn['role'] == 'user',
+            )));
+      });
+      _scrollToBottom();
+    } catch (_) {
+      // Non-critical — the chat just starts fresh if history can't load.
+    }
   }
 
   Future<void> _initSpeech() async {

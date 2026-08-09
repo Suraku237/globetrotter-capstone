@@ -7,7 +7,7 @@ import '../../theme/app_theme.dart';
 class _ChatMessage {
   final String text;
   final bool fromUser;
-  _ChatMessage(this.text, this.fromUser);
+  const _ChatMessage(this.text, this.fromUser);
 }
 
 class AssistantScreen extends StatefulWidget {
@@ -28,36 +28,54 @@ class _AssistantScreenState extends State<AssistantScreen> {
   bool _listening = false;
   bool _sending = false;
   bool _speakReplies = true;
+  bool _loadingHistory = true;
   String _liveTranscript = '';
+
+  static const _greeting = _ChatMessage(
+    "Hi! I'm your Fast Travel assistant — ask me anything about "
+    "destinations, itineraries, or planning a trip in Cameroon.",
+    false,
+  );
 
   @override
   void initState() {
     super.initState();
     _initSpeech();
-    _messages.add(_ChatMessage(
-      "Hi! I'm your Fast Travel assistant — ask me anything about "
-      "destinations, itineraries, or planning a trip in Cameroon.",
-      false,
-    ));
     _loadHistory();
   }
 
-  // The backend already remembers this user's past conversation for
-  // context — this just makes that visible on screen too, instead of
-  // always starting from a blank chat.
+  // The backend remembers this user's conversation permanently (tied to
+  // their account, not this browser/app session) — this loads the real
+  // history before showing anything, rather than always starting blank
+  // and only silently gaining memory in the background.
   Future<void> _loadHistory() async {
     try {
       final history = await ApiService.instance.getAssistantHistory();
-      if (!mounted || history.isEmpty) return;
+      if (!mounted) return;
       setState(() {
-        _messages.addAll(history.map((turn) => _ChatMessage(
-              turn['text'] as String,
-              turn['role'] == 'user',
-            )));
+        if (history.isEmpty) {
+          _messages.add(_greeting);
+        } else {
+          _messages.addAll(history.map((turn) => _ChatMessage(
+                turn['text'] as String,
+                turn['role'] == 'user',
+              )));
+        }
+        _loadingHistory = false;
       });
       _scrollToBottom();
     } catch (_) {
-      // Non-critical — the chat just starts fresh if history can't load.
+      if (!mounted) return;
+      setState(() {
+        _messages.add(_greeting);
+        _messages.add(const _ChatMessage(
+          "Couldn't load your earlier conversation — nothing was lost, "
+          "it's still saved. Check your connection and reopen this screen "
+          "to see it again.",
+          false,
+        ));
+        _loadingHistory = false;
+      });
     }
   }
 
@@ -172,6 +190,11 @@ class _AssistantScreenState extends State<AssistantScreen> {
       body: SafeArea(
         child: Column(
           children: [
+            if (_loadingHistory)
+              const Expanded(
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else
             Expanded(
               child: ListView.builder(
                 controller: _scrollController,

@@ -195,11 +195,6 @@ class ApiService {
       throw ApiException('Unexpected response format');
     }
 
-    for (var item in rawList) {
-      item.remove('images');
-      item.remove('image_url');
-    }
-
     return rawList.map((e) => Destination.fromJson(e)).toList();
   }
 

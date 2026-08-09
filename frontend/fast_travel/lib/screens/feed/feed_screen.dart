@@ -5,6 +5,7 @@ import '../../models/models.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/comments_panel.dart';
 import '../../widgets/empty_state.dart';
+import '../../widgets/post_action_rail.dart';
 import '../../widgets/post_card.dart';
 import 'create_post_screen.dart';
 
@@ -147,6 +148,9 @@ class _FeedScreenState extends State<FeedScreen> {
     final isWide = MediaQuery.sizeOf(context).width >= _kWideBreakpoint;
     final openPost = isWide ? _openPost : null;
 
+    final currentPost =
+        isWide && _posts.isNotEmpty ? _posts[_currentPage] : null;
+
     final pageView = PageView.builder(
       controller: _pageController,
       scrollDirection: Axis.vertical,
@@ -165,6 +169,10 @@ class _FeedScreenState extends State<FeedScreen> {
             currentUserId: currentUserId,
             borderRadius: isWide ? 24 : 0,
             isActive: index == _currentPage,
+            // On wide/web layouts the rail is rendered as its own panel
+            // beside the video instead (see build() below) — the video
+            // itself no longer needs to be full-bleed there.
+            showActionRail: !isWide,
             onLike: () => _toggleLike(post),
             onDelete: isAdmin ? () => _deletePost(post) : null,
             onOpenComments: () => _openComments(
@@ -224,47 +232,80 @@ class _FeedScreenState extends State<FeedScreen> {
                             ),
                           ],
                         )
-                      : Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            ConstrainedBox(
-                              constraints: BoxConstraints(
-                                maxWidth: isWide ? 430 : double.infinity,
-                              ),
-                              child: Padding(
-                                padding: isWide
-                                    ? const EdgeInsets.symmetric(vertical: 24)
-                                    : EdgeInsets.zero,
-                                child: pageView,
-                              ),
-                            ),
-                            if (openPost != null) ...[
-                              const SizedBox(width: 16),
-                              SizedBox(
-                                width: 380,
-                                child: Padding(
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 24),
-                                  child: Material(
-                                    color: Colors.white,
-                                    elevation: 3,
-                                    shadowColor:
-                                        AppColors.ink.withValues(alpha: 0.15),
-                                    borderRadius: BorderRadius.circular(24),
-                                    clipBehavior: Clip.antiAlias,
-                                    child: CommentsPanel(
-                                      post: openPost,
-                                      currentUserId: currentUserId,
-                                      onPostUpdated: _updatePost,
-                                      onClose: () =>
-                                          setState(() => _openCommentsPostId = null),
-                                    ),
+                      : LayoutBuilder(
+                          builder: (context, constraints) {
+                            // Wide/web: size the video card off actual
+                            // available height (like TikTok's desktop video
+                            // panel) instead of a fixed narrow width that
+                            // leaves most of the window empty and leaves no
+                            // room for icons beside it.
+                            final cardHeight =
+                                (constraints.maxHeight - 48).clamp(320.0, 760.0);
+                            final cardWidth =
+                                isWide ? (cardHeight * 9 / 16).clamp(320.0, 480.0) : double.infinity;
+
+                            return Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                ConstrainedBox(
+                                  constraints: BoxConstraints(maxWidth: cardWidth),
+                                  child: Padding(
+                                    padding: isWide
+                                        ? const EdgeInsets.symmetric(vertical: 24)
+                                        : EdgeInsets.zero,
+                                    child: pageView,
                                   ),
                                 ),
-                              ),
-                            ],
-                          ],
+                                if (currentPost != null) ...[
+                                  const SizedBox(width: 12),
+                                  Padding(
+                                    padding:
+                                        const EdgeInsets.only(bottom: 20),
+                                    child: Align(
+                                      alignment: Alignment.bottomCenter,
+                                      child: PostActionRail(
+                                        post: currentPost,
+                                        currentUserId: currentUserId,
+                                        dark: false,
+                                        onLike: () => _toggleLike(currentPost),
+                                        onOpenComments: () => _openComments(
+                                          currentPost,
+                                          isWide: isWide,
+                                          currentUserId: currentUserId,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                                if (openPost != null) ...[
+                                  const SizedBox(width: 16),
+                                  SizedBox(
+                                    width: 380,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 24),
+                                      child: Material(
+                                        color: Colors.white,
+                                        elevation: 3,
+                                        shadowColor: AppColors.ink
+                                            .withValues(alpha: 0.15),
+                                        borderRadius: BorderRadius.circular(24),
+                                        clipBehavior: Clip.antiAlias,
+                                        child: CommentsPanel(
+                                          post: openPost,
+                                          currentUserId: currentUserId,
+                                          onPostUpdated: _updatePost,
+                                          onClose: () => setState(
+                                              () => _openCommentsPostId = null),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            );
+                          },
                         ),
         ),
       ),

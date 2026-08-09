@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import '../Services/api_service.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
+import 'post_action_rail.dart';
 
 /// A full-bleed, TikTok-style post: the photo/video (or a gradient for
 /// text-only posts) fills the whole card, caption + author sit bottom-left
@@ -23,6 +23,10 @@ class PostCard extends StatefulWidget {
   // video only plays while its card is active, and pauses otherwise so
   // multiple clips don't play (and play audio) at once.
   final bool isActive;
+  // False on wide/web layouts, where FeedScreen renders a PostActionRail
+  // of its own beside the (no-longer-full-bleed) video instead of
+  // overlaying it on top.
+  final bool showActionRail;
 
   const PostCard({
     super.key,
@@ -33,6 +37,7 @@ class PostCard extends StatefulWidget {
     this.onDelete,
     this.borderRadius = 0,
     this.isActive = true,
+    this.showActionRail = true,
   });
 
   @override
@@ -142,23 +147,9 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
     if (confirmed == true) widget.onDelete?.call();
   }
 
-  Future<void> _share() async {
-    final post = widget.post;
-    final mediaPath = post.video ?? post.image;
-    final link = mediaPath != null
-        ? ApiService.resolveUrl(mediaPath)
-        : 'Fast Travel — a post by ${post.authorName}';
-    await Clipboard.setData(ClipboardData(text: link));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Link copied to clipboard')),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final post = widget.post;
-    final liked = post.likes.contains(widget.currentUserId);
     final hasImage = post.image != null;
     final hasVideo = post.video != null;
 
@@ -314,41 +305,20 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
             ),
           ),
 
-          // Action rail — bottom-right, TikTok order: avatar, like,
-          // comment, share.
-          Positioned(
-            right: 12,
-            bottom: 20,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _RailAvatar(
-                  avatarUrl: post.authorAvatar,
-                  name: post.authorName,
-                ),
-                const SizedBox(height: 22),
-                _RailButton(
-                  icon: liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                  color: liked ? AppColors.clay : Colors.white,
-                  label: '${post.likes.length}',
-                  onTap: widget.onLike,
-                ),
-                const SizedBox(height: 20),
-                _RailButton(
-                  icon: Icons.mode_comment_rounded,
-                  color: Colors.white,
-                  label: '${post.comments.length}',
-                  onTap: widget.onOpenComments,
-                ),
-                const SizedBox(height: 20),
-                _RailButton(
-                  icon: Icons.reply_rounded,
-                  color: Colors.white,
-                  onTap: _share,
-                ),
-              ],
+          // Action rail — bottom-right, overlaid on the video. Hidden on
+          // wide/web layouts, where FeedScreen renders one of these beside
+          // the (no-longer-full-bleed) video instead.
+          if (widget.showActionRail)
+            Positioned(
+              right: 12,
+              bottom: 20,
+              child: PostActionRail(
+                post: post,
+                currentUserId: widget.currentUserId,
+                onLike: widget.onLike,
+                onOpenComments: widget.onOpenComments,
+              ),
             ),
-          ),
 
           if (widget.onDelete != null)
             Positioned(
@@ -390,79 +360,3 @@ class _FallbackBackground extends StatelessWidget {
   }
 }
 
-class _RailButton extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  final String? label;
-  final VoidCallback onTap;
-
-  const _RailButton({
-    required this.icon,
-    required this.color,
-    this.label,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: color, size: 34, shadows: const [
-            Shadow(blurRadius: 8, color: Colors.black45),
-          ]),
-          if (label != null) ...[
-            const SizedBox(height: 4),
-            Text(
-              label!,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                shadows: [Shadow(blurRadius: 6, color: Colors.black54)],
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _RailAvatar extends StatelessWidget {
-  final String? avatarUrl;
-  final String name;
-
-  const _RailAvatar({required this.avatarUrl, required this.name});
-
-  @override
-  Widget build(BuildContext context) {
-    final initial = name.trim().isNotEmpty ? name.trim()[0].toUpperCase() : '?';
-    return Container(
-      width: 44,
-      height: 44,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 2),
-      ),
-      child: CircleAvatar(
-        backgroundColor: AppColors.sandDim,
-        backgroundImage:
-            avatarUrl != null ? NetworkImage(ApiService.resolveUrl(avatarUrl!)) : null,
-        child: avatarUrl == null
-            ? Text(
-                initial,
-                style: const TextStyle(
-                  color: AppColors.ink,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16,
-                ),
-              )
-            : null,
-      ),
-    );
-  }
-}

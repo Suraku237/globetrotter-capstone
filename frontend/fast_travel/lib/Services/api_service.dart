@@ -426,14 +426,14 @@ class ApiService {
 
   // ---- AI assistant ----
 
-  Future<String> askAssistant({
-    required String message,
-    List<Map<String, String>> history = const [],
-  }) async {
+  // The backend now remembers each user's conversation server-side
+  // (conversations.json) and uses that for context, so the client no
+  // longer needs to track/send its own history.
+  Future<String> askAssistant({required String message}) async {
     final res = await http.post(
       Uri.parse('$baseUrl/assistant/chat'),
       headers: _headers,
-      body: jsonEncode({'message': message, 'history': history}),
+      body: jsonEncode({'message': message}),
     );
     final data = await _handle(res);
     return (data as Map<String, dynamic>)['reply'] as String;

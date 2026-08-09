@@ -41,6 +41,7 @@ USERS_FILE = DATA_DIR / "users.json"
 DESTINATIONS_FILE = DATA_DIR / "destinations.json"
 ITINERARIES_FILE = DATA_DIR / "itineraries.json"
 POSTS_FILE = DATA_DIR / "posts.json"
+CONVERSATIONS_FILE = DATA_DIR / "conversations.json"
 
 
 class ItineraryCreate(BaseModel):
@@ -112,3 +113,17 @@ def load_posts() -> list:
 
 def save_posts(posts: list) -> None:
     _save(POSTS_FILE, posts)
+
+
+def load_conversations() -> dict:
+    # Keyed by user id -> list of {"role", "text", "created_at"} turns, so
+    # the assistant can pick back up with a user across sessions/devices
+    # instead of starting from nothing every time the chat screen opens.
+    if not CONVERSATIONS_FILE.exists():
+        return {}
+    with open(CONVERSATIONS_FILE, "r") as f:
+        return json.load(f)
+
+
+def save_conversations(conversations: dict) -> None:
+    _save(CONVERSATIONS_FILE, conversations)

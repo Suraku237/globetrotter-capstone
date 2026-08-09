@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/generated/app_localizations.dart';
 import '../theme/app_theme.dart';
 
 class EmptyState extends StatelessWidget {
@@ -6,7 +7,10 @@ class EmptyState extends StatelessWidget {
   final String title;
   final String message;
   final VoidCallback? onRetry;
-  final String retryLabel;
+  // Defaults to the localized "Try again" (resolved in build(), since a
+  // constructor default can't depend on BuildContext) — pass a value here
+  // only to override that default wording.
+  final String? retryLabel;
   // Screens with a dark/near-black background (e.g. the video feed) need
   // light text here instead of the default dark-on-light styling, or the
   // whole state becomes unreadable.
@@ -18,7 +22,7 @@ class EmptyState extends StatelessWidget {
     required this.title,
     required this.message,
     this.onRetry,
-    this.retryLabel = 'Try again',
+    this.retryLabel,
     this.light = false,
   });
 
@@ -57,7 +61,7 @@ class EmptyState extends StatelessWidget {
                         side: const BorderSide(color: Colors.white70),
                       )
                     : null,
-                child: Text(retryLabel),
+                child: Text(retryLabel ?? AppLocalizations.of(context)!.tryAgain),
               ),
             ],
           ],

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../Services/api_service.dart';
 import '../../Services/session_state.dart';
+import '../../l10n/generated/app_localizations.dart';
 import '../../theme/app_theme.dart';
 import 'register_screen.dart';
 
@@ -40,7 +41,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (e) {
       debugPrint('Login failed with a non-API error: $e');
       setState(
-        () => _error = 'Could not reach the server. Is the backend running?',
+        () => _error = AppLocalizations.of(context)!.couldNotReachServer,
       );
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -58,7 +59,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } on ApiException catch (e) {
       setState(() => _error = e.message);
     } catch (e) {
-      setState(() => _error = 'Google sign-in failed. Please try again.');
+      setState(() => _error = AppLocalizations.of(context)!.googleSignInFailed);
     } finally {
       if (mounted) setState(() => _googleLoading = false);
     }
@@ -73,6 +74,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       backgroundColor: AppColors.canopy,
       body: Stack(
@@ -108,33 +110,33 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           const SizedBox(height: 16),
                           Text(
-                            'Welcome back',
+                            l10n.welcomeBack,
                             style: Theme.of(context).textTheme.displayMedium,
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Sign in to keep planning your Cameroon trips.',
+                            l10n.signInSubtitle,
                             style: Theme.of(context).textTheme.bodyMedium,
                           ),
                           const SizedBox(height: 28),
                           TextFormField(
                             controller: _email,
                             decoration:
-                                const InputDecoration(labelText: 'Email'),
+                                InputDecoration(labelText: l10n.emailLabel),
                             keyboardType: TextInputType.emailAddress,
                             validator: (v) => (v == null || !v.contains('@'))
-                                ? 'Enter a valid email'
+                                ? l10n.emailValidatorError
                                 : null,
                           ),
                           const SizedBox(height: 14),
                           TextFormField(
                             controller: _password,
-                            decoration: const InputDecoration(
-                              labelText: 'Password',
+                            decoration: InputDecoration(
+                              labelText: l10n.passwordLabel,
                             ),
                             obscureText: true,
                             validator: (v) => (v == null || v.length < 6)
-                                ? 'At least 6 characters'
+                                ? l10n.passwordValidatorError
                                 : null,
                           ),
                           if (_error != null) ...[
@@ -158,7 +160,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                         color: Colors.white,
                                       ),
                                     )
-                                  : const Text('Sign in'),
+                                  : Text(l10n.signIn),
                             ),
                           ),
                           const SizedBox(height: 18),
@@ -176,7 +178,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   horizontal: 12,
                                 ),
                                 child: Text(
-                                  'or',
+                                  l10n.or,
                                   style: Theme.of(context).textTheme.bodySmall,
                                 ),
                               ),
@@ -204,7 +206,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                     )
                                   : const Icon(Icons.g_mobiledata_rounded,
                                       size: 26),
-                              label: const Text('Continue with Google'),
+                              label: Text(l10n.continueWithGoogle),
                             ),
                           ),
                           const SizedBox(height: 12),
@@ -218,7 +220,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   ),
                                 ),
                               ),
-                              child: const Text('New here? Create an account'),
+                              child: Text(l10n.newHereCreateAccount),
                             ),
                           ),
                         ],

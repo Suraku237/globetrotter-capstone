@@ -12,7 +12,9 @@ import 'screens/itineraries/itineraries_screen.dart';
 import 'screens/home/map_screen.dart'; // ✅ This imports ExploreMapScreen
 import 'screens/profile/profile_screen.dart';
 import 'Services/api_service.dart';
+import 'Services/locale_controller.dart';
 import 'Services/session_state.dart';
+import 'l10n/generated/app_localizations.dart';
 import 'theme/app_theme.dart';
 import 'widgets/adaptive_shell.dart';
 import 'widgets/logout_confirm.dart';
@@ -34,6 +36,7 @@ class GlobeTrotterApp extends StatefulWidget {
 
 class _GlobeTrotterAppState extends State<GlobeTrotterApp> {
   final _session = SessionState();
+  final _localeController = LocaleController();
 
   @override
   void initState() {
@@ -42,42 +45,60 @@ class _GlobeTrotterAppState extends State<GlobeTrotterApp> {
     // the user back on the login screen instead of leaving screens stuck
     // showing a stale "can't reach server" error.
     ApiService.instance.onUnauthorized = _session.signOut;
+    _localeController.load();
   }
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'GlobeTrotter',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.light(),
-      home: AnimatedBuilder(
-        animation: _session,
-        builder: (context, _) {
-          if (!_session.isSignedIn) {
-            return LoginScreen(
-              session: _session,
-              onSignedIn: () => setState(() {}),
-            );
-          }
+    return AnimatedBuilder(
+      animation: _localeController,
+      builder: (context, _) {
+        return MaterialApp(
+          title: 'GlobeTrotter',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.light(),
+          locale: _localeController.locale,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: AnimatedBuilder(
+            animation: _session,
+            builder: (context, _) {
+              if (!_session.isSignedIn) {
+                return LoginScreen(
+                  session: _session,
+                  onSignedIn: () => setState(() {}),
+                );
+              }
 
-          final role = _session.currentUser?.role ?? 'user';
-          if (role == 'worker') {
-            return _WorkerHomeScreen(session: _session);
-          }
-          // Admins get the exact same app regular users see (Discover,
-          // Feed, My Trips, Map) plus an extra entry point for destination
-          // moderation and the ability to delete posts — not a separate,
-          // more limited dashboard.
-          return _HomeShell(session: _session, isAdmin: role == 'admin');
-        },
-      ),
+              final role = _session.currentUser?.role ?? 'user';
+              if (role == 'worker') {
+                return _WorkerHomeScreen(
+                  session: _session,
+                  localeController: _localeController,
+                );
+              }
+              // Admins get the exact same app regular users see (Discover,
+              // Feed, My Trips, Map) plus an extra entry point for
+              // destination moderation and the ability to delete posts —
+              // not a separate, more limited dashboard.
+              return _HomeShell(
+                session: _session,
+                isAdmin: role == 'admin',
+                localeController: _localeController,
+              );
+            },
+          ),
+        );
+      },
     );
   }
 }
 
 class _WorkerHomeScreen extends StatelessWidget {
   final SessionState session;
-  const _WorkerHomeScreen({required this.session});
+  final LocaleController localeController;
+  const _WorkerHomeScreen(
+      {required this.session, required this.localeController});
 
   @override
   Widget build(BuildContext context) {
@@ -100,7 +121,10 @@ class _WorkerHomeScreen extends StatelessWidget {
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (context) => ProfileScreen(session: session),
+                builder: (context) => ProfileScreen(
+                session: session,
+                localeController: localeController,
+              ),
               ),
             ),
           ),
@@ -155,7 +179,12 @@ class _WorkerHomeScreen extends StatelessWidget {
 class _HomeShell extends StatefulWidget {
   final SessionState session;
   final bool isAdmin;
-  const _HomeShell({required this.session, this.isAdmin = false});
+  final LocaleController localeController;
+  const _HomeShell({
+    required this.session,
+    required this.localeController,
+    this.isAdmin = false,
+  });
 
   @override
   State<_HomeShell> createState() => _HomeShellState();
@@ -170,13 +199,13 @@ class _HomeShellState extends State<_HomeShell> {
   // the app restarted.
   Key _discoverKey = UniqueKey();
 
-  static const _titles = [
-    'Discover Yaoundé',
-    'Feed',
-    'My Trips',
-    'Explore Map',
-    'Profile',
-  ];
+  List<String> _titles(AppLocalizations l10n) => [
+        l10n.titleDiscover,
+        l10n.titleFeed,
+        l10n.titleMyTrips,
+        l10n.titleExploreMap,
+        l10n.titleProfile,
+      ];
 
   Widget get _body {
     switch (_index) {
@@ -187,7 +216,11 @@ class _HomeShellState extends State<_HomeShell> {
       case 3:
         return ExploreMapScreen(); // ✅ Correctly matched class name
       case 4:
-        return ProfileScreen(session: widget.session, embedded: true);
+        return ProfileScreen(
+          session: widget.session,
+          localeController: widget.localeController,
+          embedded: true,
+        );
       default:
         return DiscoverScreen(key: _discoverKey, isAdmin: widget.isAdmin);
     }
@@ -195,8 +228,9 @@ class _HomeShellState extends State<_HomeShell> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return AdaptiveShell(
-      title: _titles[_index],
+      title: _titles(l10n)[_index],
       selectedIndex: _index,
       onDestinationSelected: (i) => setState(() => _index = i),
       avatarUrl: widget.session.currentUser?.avatarUrl,
@@ -204,7 +238,7 @@ class _HomeShellState extends State<_HomeShell> {
       actions: [
         if (widget.isAdmin)
           IconButton(
-            tooltip: 'Review destinations',
+            tooltip: l10n.reviewDestinationsTooltip,
             icon: const Icon(Icons.fact_check_rounded,
                 color: AppColors.inkSoft),
             onPressed: () async {

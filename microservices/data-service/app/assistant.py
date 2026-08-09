@@ -9,13 +9,13 @@ assistant always knows what's actually in the app rather than a stale or
 hallucinated list.
 """
 
-from typing import List, Literal
+from datetime import datetime, timezone
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from .models import GEMINI_API_KEY, load_destinations
+from .models import GEMINI_API_KEY, load_conversations, load_destinations, save_conversations
 from .security import get_current_user
 
 router = APIRouter(prefix="/assistant", tags=["assistant"])
@@ -28,15 +28,14 @@ GEMINI_URL = (
     "gemini-flash-latest:generateContent"
 )
 
-
-class ChatTurn(BaseModel):
-    role: Literal["user", "assistant"]
-    text: str
+# How many past turns get sent back to Gemini as context — bounds prompt
+# size/cost while still giving it real memory of the recent conversation.
+# The full history still accumulates in conversations.json regardless.
+MAX_HISTORY_TURNS = 20
 
 
 class ChatRequest(BaseModel):
     message: str
-    history: List[ChatTurn] = []
 
 
 class ChatResponse(BaseModel):
@@ -72,11 +71,14 @@ async def chat(payload: ChatRequest, current_user: dict = Depends(get_current_us
             detail="The AI assistant isn't configured yet (missing GEMINI_API_KEY).",
         )
 
+    conversations = load_conversations()
+    past_turns = conversations.get(current_user["id"], [])
+
     contents = []
-    for turn in payload.history:
+    for turn in past_turns[-MAX_HISTORY_TURNS:]:
         contents.append({
-            "role": "model" if turn.role == "assistant" else "user",
-            "parts": [{"text": turn.text}],
+            "role": "model" if turn["role"] == "assistant" else "user",
+            "parts": [{"text": turn["text"]}],
         })
     contents.append({"role": "user", "parts": [{"text": payload.message}]})
 
@@ -106,5 +108,12 @@ async def chat(payload: ChatRequest, current_user: dict = Depends(get_current_us
             status_code=502,
             detail="The assistant didn't return a usable answer. Try again.",
         )
+    reply = reply.strip()
 
-    return ChatResponse(reply=reply.strip())
+    now = datetime.now(timezone.utc).isoformat()
+    past_turns.append({"role": "user", "text": payload.message, "created_at": now})
+    past_turns.append({"role": "assistant", "text": reply, "created_at": now})
+    conversations[current_user["id"]] = past_turns
+    save_conversations(conversations)
+
+    return ChatResponse(reply=reply)

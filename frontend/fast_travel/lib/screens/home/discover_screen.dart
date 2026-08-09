@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/models.dart';
 import '../../Services/api_service.dart';
+import '../../l10n/generated/app_localizations.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/destination_card.dart';
 import '../../widgets/empty_state.dart';
@@ -52,7 +53,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     } on ApiException catch (e) {
       setState(() => _error = e.message);
     } catch (_) {
-      setState(() => _error = 'Could not reach the server.');
+      setState(() =>
+          _error = AppLocalizations.of(context)!.couldNotReachServerShort);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -82,6 +84,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       backgroundColor: AppColors.sand,
       body: SafeArea(
@@ -93,7 +96,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               TextField(
                 controller: _searchController,
                 decoration: InputDecoration(
-                  hintText: 'Search destinations, regions, or vibes...',
+                  hintText: l10n.searchHint,
                   prefixIcon:
                       const Icon(Icons.search_rounded, color: AppColors.clay),
                   filled: true,
@@ -118,16 +121,15 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                     : _error != null
                         ? EmptyState(
                             icon: Icons.wifi_off_rounded,
-                            title: "Can't reach the server",
+                            title: l10n.cantReachServer,
                             message: _error!,
                             onRetry: _loadDestinations,
                           )
                         : _filteredDestinations.isEmpty
-                            ? const EmptyState(
+                            ? EmptyState(
                                 icon: Icons.search_off_rounded,
-                                title: 'No results found',
-                                message:
-                                    'Try searching for something else or clear the filter.',
+                                title: l10n.noResultsFound,
+                                message: l10n.noResultsMessage,
                               )
                             : GridView.builder(
                                 padding:
@@ -179,14 +181,14 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(widget.isAdmin
-                    ? 'Destination added.'
-                    : 'Submitted — a worker or admin will review it soon.'),
+                    ? l10n.destinationAdded
+                    : l10n.submittedForReview),
               ),
             );
           }
         },
         icon: const Icon(Icons.add_location_alt_rounded),
-        label: Text(widget.isAdmin ? 'Add destination' : 'Suggest a destination'),
+        label: Text(widget.isAdmin ? l10n.addDestination : l10n.suggestDestination),
       ),
     );
   }

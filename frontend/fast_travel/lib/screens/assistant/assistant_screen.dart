@@ -90,10 +90,6 @@ class _AssistantScreenState extends State<AssistantScreen> {
   Future<void> _send(String text) async {
     if (text.trim().isEmpty || _sending) return;
 
-    final history = _messages
-        .map((m) => {'role': m.fromUser ? 'user' : 'assistant', 'text': m.text})
-        .toList();
-
     setState(() {
       _messages.add(_ChatMessage(text, true));
       _sending = true;
@@ -102,10 +98,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
     _scrollToBottom();
 
     try {
-      final reply = await ApiService.instance.askAssistant(
-        message: text,
-        history: history,
-      );
+      final reply = await ApiService.instance.askAssistant(message: text);
       setState(() => _messages.add(_ChatMessage(reply, false)));
       if (_speakReplies) {
         await _tts.speak(reply);

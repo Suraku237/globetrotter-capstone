@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
 import '../../Services/api_service.dart';
+import '../../l10n/generated/app_localizations.dart';
 import '../../theme/app_theme.dart';
 import '../itineraries/select_destination_map.dart';
 
@@ -57,12 +58,13 @@ class _SuggestDestinationScreenState extends State<SuggestDestinationScreen> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    final l10n = AppLocalizations.of(context)!;
     if (_location == null) {
-      setState(() => _error = 'Pick a location on the map first.');
+      setState(() => _error = l10n.pickLocationFirst);
       return;
     }
     if (_image == null) {
-      setState(() => _error = 'Add a photo first.');
+      setState(() => _error = l10n.addPhotoFirst);
       return;
     }
 
@@ -82,7 +84,7 @@ class _SuggestDestinationScreenState extends State<SuggestDestinationScreen> {
     } on ApiException catch (e) {
       setState(() => _error = e.message);
     } catch (_) {
-      setState(() => _error = 'Could not reach the server.');
+      setState(() => _error = l10n.couldNotReachServerShort);
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -97,6 +99,7 @@ class _SuggestDestinationScreenState extends State<SuggestDestinationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Dialog(
       backgroundColor: AppColors.sand,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -113,8 +116,8 @@ class _SuggestDestinationScreenState extends State<SuggestDestinationScreen> {
                 children: [
                   Text(
                       widget.isAdmin
-                          ? 'Add destination'
-                          : 'Suggest a destination',
+                          ? l10n.addDestination
+                          : l10n.suggestDestination,
                       style: Theme.of(context).textTheme.headlineMedium),
                   const SizedBox(height: 20),
                   if (_error != null) ...[
@@ -123,17 +126,21 @@ class _SuggestDestinationScreenState extends State<SuggestDestinationScreen> {
                   ],
                   TextFormField(
                     controller: _nameController,
-                    decoration: const InputDecoration(labelText: 'Name'),
-                    validator: (v) =>
-                        (v == null || v.trim().isEmpty) ? 'Required' : null,
+                    decoration:
+                        InputDecoration(labelText: l10n.destinationNameLabel),
+                    validator: (v) => (v == null || v.trim().isEmpty)
+                        ? l10n.requiredField
+                        : null,
                   ),
                   const SizedBox(height: 14),
                   TextFormField(
                     controller: _descriptionController,
-                    decoration: const InputDecoration(labelText: 'Description'),
+                    decoration:
+                        InputDecoration(labelText: l10n.descriptionLabel),
                     maxLines: 3,
-                    validator: (v) =>
-                        (v == null || v.trim().isEmpty) ? 'Required' : null,
+                    validator: (v) => (v == null || v.trim().isEmpty)
+                        ? l10n.requiredField
+                        : null,
                   ),
                   const SizedBox(height: 14),
                   OutlinedButton.icon(
@@ -141,8 +148,11 @@ class _SuggestDestinationScreenState extends State<SuggestDestinationScreen> {
                     icon: const Icon(Icons.location_on_outlined),
                     label: Text(
                       _location == null
-                          ? 'Pick location on map'
-                          : 'Location: ${_location!.latitude.toStringAsFixed(4)}, ${_location!.longitude.toStringAsFixed(4)}',
+                          ? l10n.pickLocationOnMap
+                          : l10n.locationSelected(
+                              _location!.latitude.toStringAsFixed(4),
+                              _location!.longitude.toStringAsFixed(4),
+                            ),
                     ),
                   ),
                   if (_imagePreview != null) ...[
@@ -161,7 +171,7 @@ class _SuggestDestinationScreenState extends State<SuggestDestinationScreen> {
                   OutlinedButton.icon(
                     onPressed: _pickImage,
                     icon: const Icon(Icons.image_outlined),
-                    label: Text(_image == null ? 'Add a photo' : 'Change photo'),
+                    label: Text(_image == null ? l10n.addPhoto : l10n.changePhoto),
                   ),
                   const SizedBox(height: 20),
                   Row(
@@ -169,7 +179,7 @@ class _SuggestDestinationScreenState extends State<SuggestDestinationScreen> {
                     children: [
                       TextButton(
                         onPressed: () => Navigator.of(context).pop(false),
-                        child: const Text('Cancel'),
+                        child: Text(l10n.cancel),
                       ),
                       const SizedBox(width: 8),
                       ElevatedButton(
@@ -182,8 +192,8 @@ class _SuggestDestinationScreenState extends State<SuggestDestinationScreen> {
                                     strokeWidth: 2, color: Colors.white),
                               )
                             : Text(widget.isAdmin
-                                ? 'Add destination'
-                                : 'Submit for review'),
+                                ? l10n.addDestination
+                                : l10n.submitForReview),
                       ),
                     ],
                   ),

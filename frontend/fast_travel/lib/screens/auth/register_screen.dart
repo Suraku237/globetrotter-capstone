@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../Services/api_service.dart';
 import '../../Services/session_state.dart';
+import '../../l10n/generated/app_localizations.dart';
 import '../../theme/app_theme.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -50,7 +51,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     } catch (e) {
       debugPrint('Registration failed with a non-API error: $e');
       setState(
-        () => _error = 'Could not reach the server. Is the backend running?',
+        () => _error = AppLocalizations.of(context)!.couldNotReachServer,
       );
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -68,7 +69,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     } on ApiException catch (e) {
       setState(() => _error = e.message);
     } catch (e) {
-      setState(() => _error = 'Google sign-in failed. Please try again.');
+      setState(() => _error = AppLocalizations.of(context)!.googleSignInFailed);
     } finally {
       if (mounted) setState(() => _googleLoading = false);
     }
@@ -84,6 +85,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       backgroundColor: AppColors.canopy,
       appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
@@ -114,46 +116,47 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Create your account',
+                            l10n.createYourAccount,
                             style: Theme.of(context).textTheme.displayMedium,
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Choose a role and explore Yaoundé-based travel plans.',
+                            l10n.registerSubtitle,
                             style: Theme.of(context).textTheme.bodyMedium,
                           ),
                           const SizedBox(height: 28),
                           TextFormField(
                             controller: _name,
-                            decoration: const InputDecoration(
-                              labelText: 'Full name',
+                            decoration: InputDecoration(
+                              labelText: l10n.fullNameLabel,
                             ),
                             validator: (v) => (v == null || v.trim().isEmpty)
-                                ? 'Required'
+                                ? l10n.requiredField
                                 : null,
                           ),
                           const SizedBox(height: 14),
                           TextFormField(
                             controller: _email,
                             decoration:
-                                const InputDecoration(labelText: 'Email'),
+                                InputDecoration(labelText: l10n.emailLabel),
                             keyboardType: TextInputType.emailAddress,
                             validator: (v) => (v == null || !v.contains('@'))
-                                ? 'Enter a valid email'
+                                ? l10n.emailValidatorError
                                 : null,
                           ),
                           const SizedBox(height: 14),
                           DropdownButtonFormField<String>(
                             initialValue: _role,
                             decoration:
-                                const InputDecoration(labelText: 'Role'),
-                            items: const [
+                                InputDecoration(labelText: l10n.roleLabel),
+                            items: [
                               DropdownMenuItem(
-                                  value: 'user', child: Text('User')),
+                                  value: 'user', child: Text(l10n.roleUser)),
                               DropdownMenuItem(
-                                  value: 'worker', child: Text('Worker')),
+                                  value: 'worker',
+                                  child: Text(l10n.roleWorker)),
                               DropdownMenuItem(
-                                  value: 'admin', child: Text('Admin')),
+                                  value: 'admin', child: Text(l10n.roleAdmin)),
                             ],
                             onChanged: (value) =>
                                 setState(() => _role = value ?? 'user'),
@@ -161,12 +164,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           const SizedBox(height: 14),
                           TextFormField(
                             controller: _password,
-                            decoration: const InputDecoration(
-                              labelText: 'Password',
+                            decoration: InputDecoration(
+                              labelText: l10n.passwordLabel,
                             ),
                             obscureText: true,
                             validator: (v) => (v == null || v.length < 6)
-                                ? 'At least 6 characters'
+                                ? l10n.passwordValidatorError
                                 : null,
                           ),
                           if (_error != null) ...[
@@ -190,7 +193,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                         color: Colors.white,
                                       ),
                                     )
-                                  : const Text('Create account'),
+                                  : Text(l10n.createAccount),
                             ),
                           ),
                           const SizedBox(height: 18),
@@ -208,7 +211,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                   horizontal: 12,
                                 ),
                                 child: Text(
-                                  'or',
+                                  l10n.or,
                                   style: Theme.of(context).textTheme.bodySmall,
                                 ),
                               ),
@@ -236,15 +239,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                     )
                                   : const Icon(Icons.g_mobiledata_rounded,
                                       size: 26),
-                              label: const Text('Continue with Google'),
+                              label: Text(l10n.continueWithGoogle),
                             ),
                           ),
                           const SizedBox(height: 12),
                           Center(
                             child: TextButton(
                               onPressed: () => Navigator.of(context).pop(),
-                              child: const Text(
-                                  'Already have an account? Sign in'),
+                              child: Text(l10n.alreadyHaveAccount),
                             ),
                           ),
                         ],

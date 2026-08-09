@@ -1,18 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../Services/api_service.dart';
+import '../../Services/locale_controller.dart';
 import '../../Services/session_state.dart';
+import '../../l10n/generated/app_localizations.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/logout_confirm.dart';
 
 class ProfileScreen extends StatefulWidget {
   final SessionState session;
+  final LocaleController localeController;
   // True when shown as the Profile tab inside AdaptiveShell, which already
   // renders a title bar — a nested AppBar here would show it twice. False
   // (default) when pushed as its own route, e.g. from the worker home
   // screen, where it needs its own AppBar for the back button.
   final bool embedded;
-  const ProfileScreen({super.key, required this.session, this.embedded = false});
+  const ProfileScreen({
+    super.key,
+    required this.session,
+    required this.localeController,
+    this.embedded = false,
+  });
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -24,25 +32,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String? _error;
 
   Future<void> _editName() async {
+    final l10n = AppLocalizations.of(context)!;
     final controller =
         TextEditingController(text: widget.session.currentUser?.fullName);
     final newName = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Edit name'),
+        title: Text(l10n.editName),
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(labelText: 'Full name'),
+          decoration: InputDecoration(labelText: l10n.fullNameLabel),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(l10n.cancel),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('Save'),
+            child: Text(l10n.save),
           ),
         ],
       ),
@@ -87,6 +96,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return AnimatedBuilder(
       animation: widget.session,
       builder: (context, _) {
@@ -145,7 +155,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 Card(
                   child: ListTile(
                     title: Text(user?.fullName ?? ''),
-                    subtitle: const Text('Display name'),
+                    subtitle: Text(l10n.displayName),
                     trailing: _savingName
                         ? const SizedBox(
                             width: 18,
@@ -162,14 +172,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 Card(
                   child: ListTile(
                     title: Text(user?.email ?? ''),
-                    subtitle: const Text('Email'),
+                    subtitle: Text(l10n.emailLabel),
                   ),
                 ),
                 const SizedBox(height: 8),
                 Card(
                   child: ListTile(
                     title: Text((user?.role ?? 'user').toUpperCase()),
-                    subtitle: const Text('Role'),
+                    subtitle: Text(l10n.roleFieldLabel),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Card(
+                  child: ListTile(
+                    title: Text(l10n.language),
+                    trailing: SegmentedButton<String>(
+                      segments: [
+                        ButtonSegment(
+                            value: 'en', label: Text(l10n.languageEnglish)),
+                        ButtonSegment(
+                            value: 'fr', label: Text(l10n.languageFrench)),
+                      ],
+                      selected: {widget.localeController.locale.languageCode},
+                      onSelectionChanged: (selected) =>
+                          widget.localeController.setLanguageCode(selected.first),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -182,7 +209,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     }
                   },
                   icon: const Icon(Icons.logout_rounded),
-                  label: const Text('Sign out'),
+                  label: Text(l10n.signOut),
                 ),
             ],
           ),
@@ -191,7 +218,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         if (widget.embedded) return body;
         return Scaffold(
           backgroundColor: AppColors.sand,
-          appBar: AppBar(title: const Text('Profile')),
+          appBar: AppBar(title: Text(l10n.titleProfile)),
           body: body,
         );
       },

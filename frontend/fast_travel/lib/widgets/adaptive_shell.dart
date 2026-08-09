@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../Services/api_service.dart';
+import '../l10n/generated/app_localizations.dart';
 import '../screens/assistant/assistant_screen.dart';
 import '../theme/app_theme.dart';
 
@@ -19,20 +20,32 @@ class AdaptiveShell extends StatelessWidget {
   final String? userName;
 
   // ✅ UPDATED: Added 4th destination: Map
-  static const _destinations = [
-    (
-      icon: Icons.explore_outlined,
-      selected: Icons.explore_rounded,
-      label: 'Discover'
-    ),
-    (
-      icon: Icons.dynamic_feed_outlined,
-      selected: Icons.dynamic_feed_rounded,
-      label: 'Feed'
-    ),
-    (icon: Icons.map_outlined, selected: Icons.map_rounded, label: 'My Trips'),
-    (icon: Icons.public_outlined, selected: Icons.public_rounded, label: 'Map'),
+  // Labels come from AppLocalizations at build time (see _destinations),
+  // not stored here — a static const can't depend on BuildContext.
+  static const _destinationIcons = [
+    (icon: Icons.explore_outlined, selected: Icons.explore_rounded),
+    (icon: Icons.dynamic_feed_outlined, selected: Icons.dynamic_feed_rounded),
+    (icon: Icons.map_outlined, selected: Icons.map_rounded),
+    (icon: Icons.public_outlined, selected: Icons.public_rounded),
   ];
+
+  List<({IconData icon, IconData selected, String label})> _destinations(
+      AppLocalizations l10n) {
+    final labels = [
+      l10n.navDiscover,
+      l10n.navFeed,
+      l10n.navMyTrips,
+      l10n.navMap,
+    ];
+    return List.generate(
+      _destinationIcons.length,
+      (i) => (
+        icon: _destinationIcons[i].icon,
+        selected: _destinationIcons[i].selected,
+        label: labels[i],
+      ),
+    );
+  }
 
   const AdaptiveShell({
     super.key,
@@ -75,6 +88,8 @@ class AdaptiveShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isWide = MediaQuery.sizeOf(context).width >= 600;
+    final l10n = AppLocalizations.of(context)!;
+    final destinations = _destinations(l10n);
 
     if (!isWide) {
       return Scaffold(
@@ -88,7 +103,7 @@ class AdaptiveShell extends StatelessWidget {
           backgroundColor: AppColors.canopy,
           indicatorColor: AppColors.ochre.withValues(alpha: 0.2),
           destinations: [
-            ..._destinations.map((d) => NavigationDestination(
+            ...destinations.map((d) => NavigationDestination(
                   icon: Icon(d.icon,
                       color: AppColors.sand.withValues(alpha: 0.7)),
                   selectedIcon: Icon(d.selected, color: AppColors.ochre),
@@ -97,7 +112,7 @@ class AdaptiveShell extends StatelessWidget {
             NavigationDestination(
               icon: _profileIcon(selected: false),
               selectedIcon: _profileIcon(selected: true),
-              label: 'Profile',
+              label: l10n.navProfile,
             ),
           ],
         ),
@@ -118,7 +133,7 @@ class AdaptiveShell extends StatelessWidget {
                   color: AppColors.ochre, size: 32),
             ),
             destinations: [
-              ..._destinations.map((d) => NavigationRailDestination(
+              ...destinations.map((d) => NavigationRailDestination(
                     icon: Icon(d.icon),
                     selectedIcon: Icon(d.selected),
                     label: Text(d.label),
@@ -126,7 +141,7 @@ class AdaptiveShell extends StatelessWidget {
               NavigationRailDestination(
                 icon: _profileIcon(selected: false),
                 selectedIcon: _profileIcon(selected: true),
-                label: const Text('Profile'),
+                label: Text(l10n.navProfile),
               ),
             ],
           ),
@@ -179,7 +194,7 @@ class _AskAiButton extends StatelessWidget {
         MaterialPageRoute(builder: (context) => const AssistantScreen()),
       ),
       icon: const Icon(Icons.smart_toy_rounded),
-      label: const Text('Ask AI'),
+      label: Text(AppLocalizations.of(context)!.askAi),
     );
   }
 }

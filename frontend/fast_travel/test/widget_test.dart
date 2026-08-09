@@ -6,6 +6,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:fast_travel/l10n/generated/app_localizations.dart';
 import 'package:fast_travel/widgets/empty_state.dart';
 
 void main() {
@@ -13,6 +14,8 @@ void main() {
       (tester) async {
     var retried = false;
     await tester.pumpWidget(MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
         body: EmptyState(
           icon: Icons.wifi_off_rounded,

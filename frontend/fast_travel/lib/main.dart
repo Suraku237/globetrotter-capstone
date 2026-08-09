@@ -163,6 +163,12 @@ class _HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<_HomeShell> {
   int _index = 0;
+  // Changing this forces DiscoverScreen to fully remount (and so reload
+  // its destinations) after the admin returns from reviewing submissions —
+  // it's otherwise a long-lived widget instance that only loads once, in
+  // initState(), so a newly-approved destination wouldn't appear until
+  // the app restarted.
+  Key _discoverKey = UniqueKey();
 
   static const _titles = [
     'Discover Yaoundé',
@@ -183,7 +189,7 @@ class _HomeShellState extends State<_HomeShell> {
       case 4:
         return ProfileScreen(session: widget.session, embedded: true);
       default:
-        return DiscoverScreen(isAdmin: widget.isAdmin);
+        return DiscoverScreen(key: _discoverKey, isAdmin: widget.isAdmin);
     }
   }
 
@@ -201,12 +207,17 @@ class _HomeShellState extends State<_HomeShell> {
             tooltip: 'Review destinations',
             icon: const Icon(Icons.fact_check_rounded,
                 color: AppColors.inkSoft),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const PendingDestinationsScreen(),
-              ),
-            ),
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const PendingDestinationsScreen(),
+                ),
+              );
+              // Whatever was approved/rejected/edited in there, force
+              // Discover to reload so it reflects the current state.
+              if (mounted) setState(() => _discoverKey = UniqueKey());
+            },
           ),
       ],
       child: _body,

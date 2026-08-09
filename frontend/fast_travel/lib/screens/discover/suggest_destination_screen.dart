@@ -10,7 +10,13 @@ import '../itineraries/select_destination_map.dart';
 // destination suggestion is a quick, occasional action and doesn't warrant
 // its own screen, matching how "Plan a trip" works on the itineraries tab.
 class SuggestDestinationScreen extends StatefulWidget {
-  const SuggestDestinationScreen({super.key});
+  // Admins add a destination directly — there's no one else who needs to
+  // review their own submission (see POST /destinations on the backend,
+  // which auto-approves for the admin role). Everyone else submits it for
+  // review. This only changes the wording shown; the form/fields/logic
+  // are otherwise identical.
+  final bool isAdmin;
+  const SuggestDestinationScreen({super.key, this.isAdmin = false});
 
   @override
   State<SuggestDestinationScreen> createState() =>
@@ -105,7 +111,10 @@ class _SuggestDestinationScreenState extends State<SuggestDestinationScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Suggest a destination',
+                  Text(
+                      widget.isAdmin
+                          ? 'Add destination'
+                          : 'Suggest a destination',
                       style: Theme.of(context).textTheme.headlineMedium),
                   const SizedBox(height: 20),
                   if (_error != null) ...[
@@ -172,7 +181,9 @@ class _SuggestDestinationScreenState extends State<SuggestDestinationScreen> {
                                 child: CircularProgressIndicator(
                                     strokeWidth: 2, color: Colors.white),
                               )
-                            : const Text('Submit for review'),
+                            : Text(widget.isAdmin
+                                ? 'Add destination'
+                                : 'Submit for review'),
                       ),
                     ],
                   ),

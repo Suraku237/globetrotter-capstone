@@ -9,7 +9,8 @@ import '../discover/suggest_destination_screen.dart';
 import 'destination_detail_screen.dart';
 
 class DiscoverScreen extends StatefulWidget {
-  const DiscoverScreen({super.key});
+  final bool isAdmin;
+  const DiscoverScreen({super.key, this.isAdmin = false});
 
   @override
   State<DiscoverScreen> createState() => _DiscoverScreenState();
@@ -171,18 +172,21 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         onPressed: () async {
           final submitted = await showDialog<bool>(
             context: context,
-            builder: (_) => const SuggestDestinationScreen(),
+            builder: (_) => SuggestDestinationScreen(isAdmin: widget.isAdmin),
           );
           if (submitted == true && context.mounted) {
+            _loadDestinations();
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Submitted — a worker or admin will review it soon.'),
+              SnackBar(
+                content: Text(widget.isAdmin
+                    ? 'Destination added.'
+                    : 'Submitted — a worker or admin will review it soon.'),
               ),
             );
           }
         },
         icon: const Icon(Icons.add_location_alt_rounded),
-        label: const Text('Suggest a destination'),
+        label: Text(widget.isAdmin ? 'Add destination' : 'Suggest a destination'),
       ),
     );
   }

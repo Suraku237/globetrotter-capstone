@@ -3,7 +3,7 @@ from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
-from .models import DATA_DIR, load_destinations, save_destinations
+from .models import DATA_DIR, DestinationUpdate, load_destinations, save_destinations
 from .security import get_current_user, require_worker_or_admin
 
 router = APIRouter()
@@ -56,6 +56,11 @@ async def suggest_destination(
         f.write(contents)
 
     destinations = load_destinations()
+    # Admins add destinations directly (the frontend shows this as "Add
+    # destination" rather than "Suggest a destination" for them) — there's
+    # no one else who needs to review an admin's own submission, so it
+    # skips the pending queue and goes straight to approved.
+    is_admin = current_user.get("role") == "admin"
     entry = {
         "id": new_id,
         "name": name,
@@ -65,10 +70,30 @@ async def suggest_destination(
         "description": description,
         "lat": lat,
         "lng": lng,
-        "status": "pending",
+        "status": "approved" if is_admin else "pending",
         "submitted_by": current_user["id"],
     }
     destinations.append(entry)
+    save_destinations(destinations)
+    return entry
+
+
+@router.patch("/destinations/{destination_id}")
+def update_destination(
+    destination_id: str,
+    payload: DestinationUpdate,
+    current_user: dict = Depends(require_worker_or_admin),
+):
+    """Lets a worker/admin fix up a submission's details (e.g. add tags,
+    correct the region) — separate from approve/reject, which only ever
+    touch the status field."""
+    destinations = load_destinations()
+    entry = next((d for d in destinations if d["id"] == destination_id), None)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Destination not found")
+
+    updates = payload.model_dump(exclude_unset=True)
+    entry.update(updates)
     save_destinations(destinations)
     return entry
 

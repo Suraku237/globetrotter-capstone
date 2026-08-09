@@ -183,7 +183,7 @@ class _HomeShellState extends State<_HomeShell> {
       case 4:
         return ProfileScreen(session: widget.session, embedded: true);
       default:
-        return const DiscoverScreen();
+        return DiscoverScreen(isAdmin: widget.isAdmin);
     }
   }
 

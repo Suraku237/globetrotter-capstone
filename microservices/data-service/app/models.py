@@ -55,6 +55,15 @@ class CommentCreate(BaseModel):
     text: str
 
 
+class DestinationUpdate(BaseModel):
+    name: Optional[str] = None
+    region: Optional[str] = None
+    description: Optional[str] = None
+    tags: Optional[list] = None
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+
+
 def _load(path: Path):
     if not path.exists():
         return []

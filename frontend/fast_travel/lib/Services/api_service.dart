@@ -378,6 +378,36 @@ class ApiService {
     return data.map((e) => Destination.fromJson(e)).toList();
   }
 
+  // Worker/admin only — lets a submission's details be fixed up (e.g. add
+  // tags, correct the region) before or after approving it. Only the
+  // fields passed are changed; everything else on the destination is left
+  // as-is.
+  Future<Destination> updateDestination(
+    String id, {
+    String? name,
+    String? region,
+    String? description,
+    List<String>? tags,
+    double? lat,
+    double? lng,
+  }) async {
+    final body = <String, dynamic>{
+      if (name != null) 'name': name,
+      if (region != null) 'region': region,
+      if (description != null) 'description': description,
+      if (tags != null) 'tags': tags,
+      if (lat != null) 'lat': lat,
+      if (lng != null) 'lng': lng,
+    };
+    final res = await http.patch(
+      Uri.parse('$baseUrl/destinations/$id'),
+      headers: _headers,
+      body: jsonEncode(body),
+    );
+    final data = await _handle(res);
+    return Destination.fromJson(data as Map<String, dynamic>);
+  }
+
   Future<void> approveDestination(String id) async {
     final res = await http.post(
       Uri.parse('$baseUrl/destinations/$id/approve'),

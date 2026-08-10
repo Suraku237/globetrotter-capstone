@@ -9,12 +9,16 @@ import '../../widgets/post_action_rail.dart';
 import '../../widgets/post_card.dart';
 import 'create_post_screen.dart';
 
-// Above this width the one-post-at-a-time feed switches from edge-to-edge
-// (phones) to a centered, rounded "phone frame" — full-bleed vertical video
-// styling doesn't read well stretched across a desktop window. Comments
-// also switch presentation at this point: a side panel next to the post on
-// wide/web layouts, a bottom sheet on narrow ones — never a separate screen.
-const double _kWideBreakpoint = 700;
+// Matches AdaptiveShell's own breakpoint (NavigationBar -> NavigationRail)
+// so the whole app switches from "phone" to "wide" layout at exactly the
+// same width, instead of the nav rail appearing while Feed is still in
+// full-bleed phone mode. Above this width the one-post-at-a-time feed
+// switches from edge-to-edge (phones) to a centered, rounded "phone
+// frame" — full-bleed vertical video styling doesn't read well stretched
+// across a tablet/desktop window. Comments also switch presentation at
+// this point: a side panel next to the post on wide/web layouts, a
+// bottom sheet on narrow ones — never a separate screen.
+const double _kWideBreakpoint = 600;
 
 class FeedScreen extends StatefulWidget {
   final SessionState session;

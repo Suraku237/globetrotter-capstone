@@ -8,7 +8,12 @@
   <link href="https://unpkg.com/maplibre-gl@^5.24.0/dist/maplibre-gl.css" rel="stylesheet">
   <style>
     body { margin: 0; padding: 0; background-color: #F3F0E1; }
-    #flutter_target { width: 100vw; height: 100vh; }
+    /* 100vh on mobile Safari includes space actually covered by its
+       address/toolbar UI, which pushes bottom-anchored content (the post
+       action rail, captions) out of the visible area. 100dvh accounts for
+       the browser chrome; 100vh stays as a fallback for browsers that
+       don't support dvh yet. */
+    #flutter_target { width: 100vw; height: 100vh; height: 100dvh; }
   </style>
   <style id="splash-screen-style">
     html {

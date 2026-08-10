@@ -35,7 +35,30 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.14.3
+  flutter_native_splash: ^2.4.4
 
 flutter:
   uses-material-design: true
   generate: true
+
+# Generated via `dart run flutter_launcher_icons` — not loaded through
+# Flutter's asset bundle, so assets/images/ doesn't need to be listed
+# above for this to work.
+flutter_launcher_icons:
+  image_path: "assets/images/logo.png"
+  android: true
+  ios: false
+  web:
+    generate: true
+    image_path: "assets/images/logo.png"
+    background_color: "#ffffff"
+    theme_color: "#FF6A4D"
+
+# Generated via `dart run flutter_native_splash:create`.
+flutter_native_splash:
+  color: "#ffffff"
+  image: assets/images/logo.png
+  android: true
+  ios: false
+  web: true

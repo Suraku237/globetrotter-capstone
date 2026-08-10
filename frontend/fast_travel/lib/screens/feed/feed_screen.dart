@@ -235,14 +235,29 @@ class _FeedScreenState extends State<FeedScreen> {
                       : LayoutBuilder(
                           builder: (context, constraints) {
                             // Wide/web: size the video card off actual
-                            // available height (like TikTok's desktop video
+                            // available space (like TikTok's desktop video
                             // panel) instead of a fixed narrow width that
-                            // leaves most of the window empty and leaves no
-                            // room for icons beside it.
+                            // leaves most of the window empty. Bounded by
+                            // whatever room is actually left over once the
+                            // rail and (if open) the comments panel take
+                            // their share, so it fills the rest without
+                            // overflowing past them.
+                            const railColumnWidth = 96.0;
+                            final commentsColumnWidth =
+                                openPost != null ? 380.0 + 16.0 : 0.0;
+                            final reserved =
+                                (currentPost != null ? railColumnWidth : 0.0) +
+                                    commentsColumnWidth;
+                            final maxWidthFromSpace =
+                                (constraints.maxWidth - reserved)
+                                    .clamp(320.0, 640.0);
+
                             final cardHeight =
-                                (constraints.maxHeight - 48).clamp(320.0, 760.0);
-                            final cardWidth =
-                                isWide ? (cardHeight * 9 / 16).clamp(320.0, 480.0) : double.infinity;
+                                (constraints.maxHeight - 48).clamp(320.0, 900.0);
+                            final cardWidth = isWide
+                                ? (cardHeight * 9 / 16)
+                                    .clamp(320.0, maxWidthFromSpace)
+                                : double.infinity;
 
                             return Row(
                               mainAxisAlignment: MainAxisAlignment.center,

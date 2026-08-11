@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import '../../Services/api_service.dart';
 import '../../Services/session_state.dart';
@@ -86,137 +88,147 @@ class _LoginScreenState extends State<LoginScreen> {
               padding: const EdgeInsets.all(24),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 420),
-                child: Card(
-                  color: AppColors.sand.withValues(alpha: 0.95),
-                  child: Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Icon(
-                            Icons.travel_explore_rounded,
-                            color: AppColors.ochre,
-                            size: 40,
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            l10n.welcomeBack,
-                            style: Theme.of(context).textTheme.displayMedium,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            l10n.signInSubtitle,
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          ),
-                          const SizedBox(height: 28),
-                          TextFormField(
-                            controller: _email,
-                            decoration:
-                                InputDecoration(labelText: l10n.emailLabel),
-                            keyboardType: TextInputType.emailAddress,
-                            validator: (v) => (v == null || !v.contains('@'))
-                                ? l10n.emailValidatorError
-                                : null,
-                          ),
-                          const SizedBox(height: 14),
-                          TextFormField(
-                            controller: _password,
-                            decoration: InputDecoration(
-                              labelText: l10n.passwordLabel,
-                            ),
-                            obscureText: true,
-                            validator: (v) => (v == null || v.length < 6)
-                                ? l10n.passwordValidatorError
-                                : null,
-                          ),
-                          if (_error != null) ...[
-                            const SizedBox(height: 14),
-                            Text(
-                              _error!,
-                              style: const TextStyle(color: AppColors.clay),
-                            ),
-                          ],
-                          const SizedBox(height: 24),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton(
-                              onPressed: _loading ? null : _submit,
-                              child: _loading
-                                  ? const SizedBox(
-                                      height: 18,
-                                      width: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white,
-                                      ),
-                                    )
-                                  : Text(l10n.signIn),
-                            ),
-                          ),
-                          const SizedBox(height: 18),
-                          Row(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(22),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                    child: Card(
+                      color: AppColors.sand.withValues(alpha: 0.35),
+                      child: Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: Form(
+                          key: _formKey,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Expanded(
-                                child: Divider(
-                                  color: AppColors.inkSoft.withValues(
-                                    alpha: 0.3,
-                                  ),
+                              const Icon(
+                                Icons.travel_explore_rounded,
+                                color: AppColors.ochre,
+                                size: 40,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                l10n.welcomeBack,
+                                style:
+                                    Theme.of(context).textTheme.displayMedium,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                l10n.signInSubtitle,
+                                style: Theme.of(context).textTheme.bodyMedium,
+                              ),
+                              const SizedBox(height: 28),
+                              TextFormField(
+                                controller: _email,
+                                decoration:
+                                    InputDecoration(labelText: l10n.emailLabel),
+                                keyboardType: TextInputType.emailAddress,
+                                validator: (v) =>
+                                    (v == null || !v.contains('@'))
+                                        ? l10n.emailValidatorError
+                                        : null,
+                              ),
+                              const SizedBox(height: 14),
+                              TextFormField(
+                                controller: _password,
+                                decoration: InputDecoration(
+                                  labelText: l10n.passwordLabel,
+                                ),
+                                obscureText: true,
+                                validator: (v) => (v == null || v.length < 6)
+                                    ? l10n.passwordValidatorError
+                                    : null,
+                              ),
+                              if (_error != null) ...[
+                                const SizedBox(height: 14),
+                                Text(
+                                  _error!,
+                                  style: const TextStyle(color: AppColors.clay),
+                                ),
+                              ],
+                              const SizedBox(height: 24),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton(
+                                  onPressed: _loading ? null : _submit,
+                                  child: _loading
+                                      ? const SizedBox(
+                                          height: 18,
+                                          width: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white,
+                                          ),
+                                        )
+                                      : Text(l10n.signIn),
                                 ),
                               ),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                ),
-                                child: Text(
-                                  l10n.or,
-                                  style: Theme.of(context).textTheme.bodySmall,
+                              const SizedBox(height: 18),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Divider(
+                                      color: AppColors.inkSoft.withValues(
+                                        alpha: 0.3,
+                                      ),
+                                    ),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                    ),
+                                    child: Text(
+                                      l10n.or,
+                                      style:
+                                          Theme.of(context).textTheme.bodySmall,
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Divider(
+                                      color: AppColors.inkSoft.withValues(
+                                        alpha: 0.3,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 18),
+                              SizedBox(
+                                width: double.infinity,
+                                child: OutlinedButton.icon(
+                                  onPressed:
+                                      _googleLoading ? null : _submitGoogle,
+                                  icon: _googleLoading
+                                      ? const SizedBox(
+                                          height: 18,
+                                          width: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : const Icon(Icons.g_mobiledata_rounded,
+                                          size: 26),
+                                  label: Text(l10n.continueWithGoogle),
                                 ),
                               ),
-                              Expanded(
-                                child: Divider(
-                                  color: AppColors.inkSoft.withValues(
-                                    alpha: 0.3,
+                              const SizedBox(height: 12),
+                              Center(
+                                child: TextButton(
+                                  onPressed: () => Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => RegisterScreen(
+                                        session: widget.session,
+                                        onSignedIn: widget.onSignedIn,
+                                      ),
+                                    ),
                                   ),
+                                  child: Text(l10n.newHereCreateAccount),
                                 ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 18),
-                          SizedBox(
-                            width: double.infinity,
-                            child: OutlinedButton.icon(
-                              onPressed: _googleLoading ? null : _submitGoogle,
-                              icon: _googleLoading
-                                  ? const SizedBox(
-                                      height: 18,
-                                      width: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Icon(Icons.g_mobiledata_rounded,
-                                      size: 26),
-                              label: Text(l10n.continueWithGoogle),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Center(
-                            child: TextButton(
-                              onPressed: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => RegisterScreen(
-                                    session: widget.session,
-                                    onSignedIn: widget.onSignedIn,
-                                  ),
-                                ),
-                              ),
-                              child: Text(l10n.newHereCreateAccount),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
                   ),

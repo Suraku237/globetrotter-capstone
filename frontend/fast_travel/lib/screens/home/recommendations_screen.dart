@@ -61,9 +61,8 @@ class _RecommendationsScreenState extends State<RecommendationsScreen> {
     }
 
     final width = MediaQuery.sizeOf(context).width;
-    final crossAxisCount = width >= 1024
-        ? 4
-        : (width >= 700 ? 3 : (width >= 500 ? 2 : 1));
+    final crossAxisCount =
+        width >= 1024 ? 4 : (width >= 700 ? 3 : (width >= 500 ? 2 : 1));
 
     return RefreshIndicator(
       onRefresh: _load,

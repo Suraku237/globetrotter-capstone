@@ -26,8 +26,10 @@ from .models import (
     RegisterRequest,
     TokenResponse,
     VerifyEmailRequest,
+    load_pending_registrations,
     load_users,
     pwd_context,
+    save_pending_registrations,
     save_users,
 )
 
@@ -65,22 +67,22 @@ def register(payload: RegisterRequest):
         raise HTTPException(status_code=400, detail="Email already registered")
 
     role = normalize_role(payload.role)
-    user_id = str(__import__("uuid").uuid4())
-    user = {
-        "id": user_id,
-        "email": payload.email,
-        "full_name": payload.full_name,
-        "role": role,
-        "hashed_password": pwd_context.hash(payload.password),
-        "preferences": [],
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
 
     if role == "admin":
-        # Doesn't self-activate — needs a human (SUPER_ADMIN_EMAIL) to click
-        # approve/reject in the notification email. Skips the regular
-        # email-verification code entirely since approval already proves
-        # someone reviewed this request.
+        # Admin signups still create the account right away — the gate here
+        # is on *login*, not on storage, since a human (SUPER_ADMIN_EMAIL)
+        # needs to review a real request, not a one-time code the requester
+        # types straight back in themselves.
+        user_id = str(__import__("uuid").uuid4())
+        user = {
+            "id": user_id,
+            "email": payload.email,
+            "full_name": payload.full_name,
+            "role": role,
+            "hashed_password": pwd_context.hash(payload.password),
+            "preferences": [],
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
         token = generate_approval_token()
         user["status"] = "pending_admin_approval"
         user["admin_approval_token"] = token
@@ -96,17 +98,30 @@ def register(payload: RegisterRequest):
             "status": "pending_admin_approval",
         }
 
+    # Regular user/worker signups: nothing is written to users.json yet.
+    # The email + hashed password sit in a separate pending store until the
+    # code is confirmed, so a mistyped or fake email never leaves a real,
+    # usable credential in the database.
+    pending = load_pending_registrations()
+    pending = [p for p in pending if p["email"] != payload.email]
     code = generate_verification_code()
-    user["email_verified"] = False
-    user["verification_code"] = code
-    user["verification_code_expires"] = (
-        datetime.now(timezone.utc) + timedelta(minutes=VERIFICATION_CODE_EXPIRE_MINUTES)
-    ).isoformat()
-    users.append(user)
-    save_users(users)
+    pending.append(
+        {
+            "email": payload.email,
+            "full_name": payload.full_name,
+            "role": role,
+            "hashed_password": pwd_context.hash(payload.password),
+            "code": code,
+            "expires": (
+                datetime.now(timezone.utc)
+                + timedelta(minutes=VERIFICATION_CODE_EXPIRE_MINUTES)
+            ).isoformat(),
+        }
+    )
+    save_pending_registrations(pending)
     send_verification_code_email(payload.email, payload.full_name, code)
     return {
-        "id": user_id,
+        "id": "",
         "email": payload.email,
         "full_name": payload.full_name,
         "role": role,
@@ -116,36 +131,59 @@ def register(payload: RegisterRequest):
 
 @router.post("/verify-email", response_model=TokenResponse)
 def verify_email(payload: VerifyEmailRequest):
-    users = load_users()
-    user = next((u for u in users if u["email"] == payload.email), None)
-    if user is None:
-        raise HTTPException(status_code=404, detail="No account with that email")
-    if user.get("email_verified"):
-        raise HTTPException(status_code=400, detail="This email is already verified")
+    pending = load_pending_registrations()
+    entry = next((p for p in pending if p["email"] == payload.email), None)
+    if entry is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No pending registration for that email. Register again to get a new code.",
+        )
 
-    expires_raw = user.get("verification_code_expires")
+    expires_raw = entry.get("expires")
     expired = not expires_raw or datetime.now(timezone.utc) > datetime.fromisoformat(expires_raw)
     if expired:
+        save_pending_registrations(
+            [p for p in pending if p["email"] != payload.email]
+        )
         raise HTTPException(
             status_code=400,
             detail="This code has expired. Request a new one by registering again.",
         )
-    if payload.code != user.get("verification_code"):
+    if payload.code != entry.get("code"):
         raise HTTPException(status_code=400, detail="Incorrect code")
 
-    user["email_verified"] = True
-    user.pop("verification_code", None)
-    user.pop("verification_code_expires", None)
-    save_users(users)
+    users = load_users()
+    if any(u["email"] == payload.email for u in users):
+        save_pending_registrations(
+            [p for p in pending if p["email"] != payload.email]
+        )
+        raise HTTPException(status_code=400, detail="Email already registered")
 
-    token = create_access_token({"sub": user["id"], "role": user.get("role", "user")})
+    # Code matches — this is the one point where a verified email actually
+    # becomes a stored account.
+    user_id = str(__import__("uuid").uuid4())
+    user = {
+        "id": user_id,
+        "email": entry["email"],
+        "full_name": entry["full_name"],
+        "role": entry["role"],
+        "hashed_password": entry["hashed_password"],
+        "preferences": [],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "email_verified": True,
+    }
+    users.append(user)
+    save_users(users)
+    save_pending_registrations([p for p in pending if p["email"] != payload.email])
+
+    token = create_access_token({"sub": user_id, "role": user["role"]})
     return TokenResponse(
         access_token=token,
-        role=user.get("role", "user"),
-        user_id=user["id"],
+        role=user["role"],
+        user_id=user_id,
         email=user["email"],
         full_name=user["full_name"],
-        avatar_url=user.get("avatar_url"),
+        avatar_url=None,
     )
 
 

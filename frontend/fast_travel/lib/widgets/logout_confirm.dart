@@ -18,7 +18,8 @@ Future<bool> confirmSignOut(BuildContext context) async {
         ),
         TextButton(
           onPressed: () => Navigator.pop(context, true),
-          child: Text(l10n.signOut, style: const TextStyle(color: AppColors.clay)),
+          child:
+              Text(l10n.signOut, style: const TextStyle(color: AppColors.clay)),
         ),
       ],
     ),

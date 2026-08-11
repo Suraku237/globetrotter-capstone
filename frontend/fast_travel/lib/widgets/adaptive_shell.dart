@@ -82,7 +82,9 @@ class AdaptiveShell extends StatelessWidget {
         ),
       );
     }
-    return Icon(selected ? Icons.account_circle_rounded : Icons.account_circle_outlined);
+    return Icon(selected
+        ? Icons.account_circle_rounded
+        : Icons.account_circle_outlined);
   }
 
   @override
@@ -100,7 +102,7 @@ class AdaptiveShell extends StatelessWidget {
         bottomNavigationBar: NavigationBar(
           selectedIndex: selectedIndex,
           onDestinationSelected: onDestinationSelected,
-          backgroundColor: AppColors.canopy,
+          backgroundColor: AppColors.canopy.withValues(alpha: 0.75),
           indicatorColor: AppColors.ochre.withValues(alpha: 0.2),
           destinations: [
             ...destinations.map((d) => NavigationDestination(
@@ -125,7 +127,7 @@ class AdaptiveShell extends StatelessWidget {
           NavigationRail(
             selectedIndex: selectedIndex,
             onDestinationSelected: onDestinationSelected,
-            backgroundColor: AppColors.canopy,
+            backgroundColor: AppColors.canopy.withValues(alpha: 0.75),
             extended: MediaQuery.sizeOf(context).width >= 1024,
             leading: const Padding(
               padding: EdgeInsets.symmetric(vertical: 24),

@@ -86,75 +86,27 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     return Scaffold(
-      backgroundColor: AppColors.sand,
+      backgroundColor: Colors.transparent,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Hero banner — a real destination photo behind the search
-              // bar, matching the "background image behind the header"
-              // reference. No title text overlaid here: AdaptiveShell
-              // already renders "Discover Yaoundé" above this screen, and
-              // duplicating it here was the exact bug fixed earlier.
-              ClipRRect(
-                borderRadius: BorderRadius.circular(24),
-                child: SizedBox(
-                  height: 200,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Image.network(
-                        ApiService.resolveUrl('/images/dest_001.jpg'),
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                            const DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [AppColors.teal, AppColors.ochre],
-                            ),
-                          ),
-                        ),
-                      ),
-                      DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            stops: const [0.4, 1.0],
-                            colors: [
-                              Colors.black.withValues(alpha: 0.05),
-                              Colors.black.withValues(alpha: 0.6),
-                            ],
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        left: 20,
-                        right: 20,
-                        bottom: 20,
-                        child: TextField(
-                          controller: _searchController,
-                          decoration: InputDecoration(
-                            hintText: l10n.searchHint,
-                            prefixIcon: const Icon(Icons.search_rounded,
-                                color: AppColors.clay),
-                            filled: true,
-                            fillColor: Colors.white,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(30),
-                              borderSide: BorderSide.none,
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 20, vertical: 14),
-                          ),
-                        ),
-                      ),
-                    ],
+              TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: l10n.searchHint,
+                  prefixIcon:
+                      const Icon(Icons.search_rounded, color: AppColors.clay),
+                  filled: true,
+                  fillColor: Colors.white.withValues(alpha: 0.85),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(30),
+                    borderSide: BorderSide.none,
                   ),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                 ),
               ),
               const SizedBox(height: 12),
@@ -236,7 +188,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           }
         },
         icon: const Icon(Icons.add_location_alt_rounded),
-        label: Text(widget.isAdmin ? l10n.addDestination : l10n.suggestDestination),
+        label: Text(
+            widget.isAdmin ? l10n.addDestination : l10n.suggestDestination),
       ),
     );
   }

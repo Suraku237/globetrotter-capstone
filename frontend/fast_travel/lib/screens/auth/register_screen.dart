@@ -6,7 +6,6 @@ import '../../Services/session_state.dart';
 import '../../l10n/generated/app_localizations.dart';
 import '../../models/models.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/auth_background.dart';
 
 class RegisterScreen extends StatefulWidget {
   final SessionState session;
@@ -114,11 +113,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     return Scaffold(
-      backgroundColor: AppColors.canopy,
+      backgroundColor: Colors.transparent,
       appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
+      // The background photo collage is now rendered once, app-wide, by
+      // MaterialApp's builder (see main.dart) — this Stack only needs to
+      // hold the actual form card.
       body: Stack(
         children: [
-          const Positioned.fill(child: AuthBackground()),
           Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(24),

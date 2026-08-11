@@ -11,7 +11,7 @@ class DestinationDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.sand,
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         title: Text(destination.name,
             style: Theme.of(context).textTheme.titleLarge),

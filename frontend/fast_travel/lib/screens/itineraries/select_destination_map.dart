@@ -49,7 +49,8 @@ class _SelectDestinationMapState extends State<SelectDestinationMap> {
       await controller.updateSymbol(_symbol!, SymbolOptions(geometry: latLng));
     }
 
-    setState(() => _selectedPoint = ll.LatLng(latLng.latitude, latLng.longitude));
+    setState(
+        () => _selectedPoint = ll.LatLng(latLng.latitude, latLng.longitude));
   }
 
   @override
@@ -61,7 +62,8 @@ class _SelectDestinationMapState extends State<SelectDestinationMap> {
           use3DMap
               ? MapLibreMap(
                   styleString: mapStyleUrl,
-                  onMapCreated: (controller) => _mapLibreController = controller,
+                  onMapCreated: (controller) =>
+                      _mapLibreController = controller,
                   onStyleLoadedCallback: _onStyleLoaded,
                   onMapClick: _onMapLibreClick,
                   initialCameraPosition: const CameraPosition(

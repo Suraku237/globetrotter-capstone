@@ -64,7 +64,8 @@ class DefaultFirebaseOptions {
     messagingSenderId: '347020498011',
     projectId: 'fast-travel-cbd10',
     storageBucket: 'fast-travel-cbd10.firebasestorage.app',
-    iosClientId: '347020498011-1m0nusiqrecrstg9i4dlfskcn8lk894g.apps.googleusercontent.com',
+    iosClientId:
+        '347020498011-1m0nusiqrecrstg9i4dlfskcn8lk894g.apps.googleusercontent.com',
     iosBundleId: 'com.example.fastTravel',
   );
 
@@ -74,7 +75,8 @@ class DefaultFirebaseOptions {
     messagingSenderId: '347020498011',
     projectId: 'fast-travel-cbd10',
     storageBucket: 'fast-travel-cbd10.firebasestorage.app',
-    iosClientId: '347020498011-1m0nusiqrecrstg9i4dlfskcn8lk894g.apps.googleusercontent.com',
+    iosClientId:
+        '347020498011-1m0nusiqrecrstg9i4dlfskcn8lk894g.apps.googleusercontent.com',
     iosBundleId: 'com.example.fastTravel',
   );
 

@@ -44,7 +44,8 @@ class PostCard extends StatefulWidget {
   State<PostCard> createState() => _PostCardState();
 }
 
-class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin {
+class _PostCardState extends State<PostCard>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _burstController;
   late final Animation<double> _burstScale;
   late final Animation<double> _burstOpacity;
@@ -61,7 +62,8 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
     _burstScale = TweenSequence([
       TweenSequenceItem(tween: Tween(begin: 0.4, end: 1.2), weight: 40),
       TweenSequenceItem(tween: Tween(begin: 1.2, end: 1.0), weight: 60),
-    ]).animate(CurvedAnimation(parent: _burstController, curve: Curves.easeOut));
+    ]).animate(
+        CurvedAnimation(parent: _burstController, curve: Curves.easeOut));
     _burstOpacity = TweenSequence([
       TweenSequenceItem(tween: Tween(begin: 0.0, end: 1.0), weight: 20),
       TweenSequenceItem(tween: ConstantTween(1.0), weight: 35),
@@ -131,7 +133,8 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete this post?'),
-        content: const Text('This removes it for everyone and can\'t be undone.'),
+        content:
+            const Text('This removes it for everyone and can\'t be undone.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -139,7 +142,8 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete', style: TextStyle(color: AppColors.clay)),
+            child:
+                const Text('Delete', style: TextStyle(color: AppColors.clay)),
           ),
         ],
       ),
@@ -176,7 +180,8 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
             Image.network(
               ApiService.resolveUrl(post.image!),
               fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) => const _FallbackBackground(),
+              errorBuilder: (context, error, stackTrace) =>
+                  const _FallbackBackground(),
             )
           else
             const _FallbackBackground(),
@@ -264,8 +269,7 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
                     value: progress,
                     minHeight: 3,
                     backgroundColor: Colors.white24,
-                    valueColor:
-                        const AlwaysStoppedAnimation(AppColors.ochre),
+                    valueColor: const AlwaysStoppedAnimation(AppColors.ochre),
                   );
                 },
               ),
@@ -359,4 +363,3 @@ class _FallbackBackground extends StatelessWidget {
     );
   }
 }
-

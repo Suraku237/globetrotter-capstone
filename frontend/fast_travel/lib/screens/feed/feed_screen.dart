@@ -116,7 +116,8 @@ class _FeedScreenState extends State<FeedScreen> {
     return null;
   }
 
-  void _openComments(Post post, {required bool isWide, required String currentUserId}) {
+  void _openComments(Post post,
+      {required bool isWide, required String currentUserId}) {
     if (isWide) {
       setState(() {
         _openCommentsPostId = _openCommentsPostId == post.id ? null : post.id;
@@ -126,7 +127,7 @@ class _FeedScreenState extends State<FeedScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.sand,
+      backgroundColor: AppColors.sand.withValues(alpha: 0.92),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -166,8 +167,9 @@ class _FeedScreenState extends State<FeedScreen> {
       itemBuilder: (context, index) {
         final post = _posts[index];
         return Padding(
-          padding:
-              isWide ? const EdgeInsets.symmetric(vertical: 4) : EdgeInsets.zero,
+          padding: isWide
+              ? const EdgeInsets.symmetric(vertical: 4)
+              : EdgeInsets.zero,
           child: PostCard(
             post: post,
             currentUserId: currentUserId,
@@ -190,7 +192,7 @@ class _FeedScreenState extends State<FeedScreen> {
     );
 
     return Scaffold(
-      backgroundColor: AppColors.sand,
+      backgroundColor: Colors.transparent,
       // No AppBar here — AdaptiveShell already renders the "Feed" title;
       // a second one here would show it twice.
       floatingActionButton: FloatingActionButton(
@@ -256,8 +258,8 @@ class _FeedScreenState extends State<FeedScreen> {
                                 (constraints.maxWidth - reserved)
                                     .clamp(320.0, 640.0);
 
-                            final cardHeight =
-                                (constraints.maxHeight - 48).clamp(320.0, 900.0);
+                            final cardHeight = (constraints.maxHeight - 48)
+                                .clamp(320.0, 900.0);
                             final cardWidth = isWide
                                 ? (cardHeight * 9 / 16)
                                     .clamp(320.0, maxWidthFromSpace)
@@ -268,10 +270,12 @@ class _FeedScreenState extends State<FeedScreen> {
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 ConstrainedBox(
-                                  constraints: BoxConstraints(maxWidth: cardWidth),
+                                  constraints:
+                                      BoxConstraints(maxWidth: cardWidth),
                                   child: Padding(
                                     padding: isWide
-                                        ? const EdgeInsets.symmetric(vertical: 24)
+                                        ? const EdgeInsets.symmetric(
+                                            vertical: 24)
                                         : EdgeInsets.zero,
                                     child: pageView,
                                   ),
@@ -279,8 +283,7 @@ class _FeedScreenState extends State<FeedScreen> {
                                 if (currentPost != null) ...[
                                   const SizedBox(width: 12),
                                   Padding(
-                                    padding:
-                                        const EdgeInsets.only(bottom: 20),
+                                    padding: const EdgeInsets.only(bottom: 20),
                                     child: Align(
                                       alignment: Alignment.bottomCenter,
                                       child: PostActionRail(

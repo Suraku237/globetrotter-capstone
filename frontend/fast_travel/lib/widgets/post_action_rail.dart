@@ -48,7 +48,8 @@ class PostActionRail extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _RailAvatar(avatarUrl: post.authorAvatar, name: post.authorName, dark: dark),
+        _RailAvatar(
+            avatarUrl: post.authorAvatar, name: post.authorName, dark: dark),
         const SizedBox(height: 22),
         _RailButton(
           icon: liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
@@ -129,7 +130,8 @@ class _RailAvatar extends StatelessWidget {
   final String name;
   final bool dark;
 
-  const _RailAvatar({required this.avatarUrl, required this.name, required this.dark});
+  const _RailAvatar(
+      {required this.avatarUrl, required this.name, required this.dark});
 
   @override
   Widget build(BuildContext context) {
@@ -146,8 +148,9 @@ class _RailAvatar extends StatelessWidget {
       ),
       child: CircleAvatar(
         backgroundColor: AppColors.sandDim,
-        backgroundImage:
-            avatarUrl != null ? NetworkImage(ApiService.resolveUrl(avatarUrl!)) : null,
+        backgroundImage: avatarUrl != null
+            ? NetworkImage(ApiService.resolveUrl(avatarUrl!))
+            : null,
         child: avatarUrl == null
             ? Text(
                 initial,

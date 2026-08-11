@@ -17,6 +17,7 @@ import 'Services/session_state.dart';
 import 'l10n/generated/app_localizations.dart';
 import 'theme/app_theme.dart';
 import 'widgets/adaptive_shell.dart';
+import 'widgets/auth_background.dart';
 import 'widgets/logout_confirm.dart';
 
 void main() async {
@@ -37,6 +38,11 @@ class GlobeTrotterApp extends StatefulWidget {
 class _GlobeTrotterAppState extends State<GlobeTrotterApp> {
   final _session = SessionState();
   final _localeController = LocaleController();
+  // True only while checking for a saved sign-in from a previous launch —
+  // see SessionState.tryRestoreSession. Kept separate from "signed out" so
+  // the login screen doesn't flash for a moment before a valid saved
+  // session loads.
+  bool _restoringSession = true;
 
   @override
   void initState() {
@@ -46,6 +52,9 @@ class _GlobeTrotterAppState extends State<GlobeTrotterApp> {
     // showing a stale "can't reach server" error.
     ApiService.instance.onUnauthorized = _session.signOut;
     _localeController.load();
+    _session.tryRestoreSession().then((_) {
+      if (mounted) setState(() => _restoringSession = false);
+    });
   }
 
   @override
@@ -60,34 +69,54 @@ class _GlobeTrotterAppState extends State<GlobeTrotterApp> {
           locale: _localeController.locale,
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          home: AnimatedBuilder(
-            animation: _session,
-            builder: (context, _) {
-              if (!_session.isSignedIn) {
-                return LoginScreen(
-                  session: _session,
-                  onSignedIn: () => setState(() {}),
-                );
-              }
+          // A single background photo collage sits behind every screen in
+          // the app, MaterialApp-wide, so screens only need to make their
+          // own surfaces (Scaffold, Card, ...) transparent to reveal it —
+          // they don't each need their own copy of the background.
+          builder: (context, child) {
+            return Stack(
+              children: [
+                const Positioned.fill(child: AuthBackground()),
+                if (child != null) child,
+              ],
+            );
+          },
+          home: _restoringSession
+              ? const Scaffold(
+                  backgroundColor: Colors.transparent,
+                  body: Center(
+                    child: CircularProgressIndicator(color: AppColors.ochre),
+                  ),
+                )
+              : AnimatedBuilder(
+                  animation: _session,
+                  builder: (context, _) {
+                    if (!_session.isSignedIn) {
+                      return LoginScreen(
+                        session: _session,
+                        onSignedIn: () => setState(() {}),
+                      );
+                    }
 
-              final role = _session.currentUser?.role ?? 'user';
-              if (role == 'worker') {
-                return _WorkerHomeScreen(
-                  session: _session,
-                  localeController: _localeController,
-                );
-              }
-              // Admins get the exact same app regular users see (Discover,
-              // Feed, My Trips, Map) plus an extra entry point for
-              // destination moderation and the ability to delete posts —
-              // not a separate, more limited dashboard.
-              return _HomeShell(
-                session: _session,
-                isAdmin: role == 'admin',
-                localeController: _localeController,
-              );
-            },
-          ),
+                    final role = _session.currentUser?.role ?? 'user';
+                    if (role == 'worker') {
+                      return _WorkerHomeScreen(
+                        session: _session,
+                        localeController: _localeController,
+                      );
+                    }
+                    // Admins get the exact same app regular users see
+                    // (Discover, Feed, My Trips, Map) plus an extra entry
+                    // point for destination moderation and the ability to
+                    // delete posts — not a separate, more limited
+                    // dashboard.
+                    return _HomeShell(
+                      session: _session,
+                      isAdmin: role == 'admin',
+                      localeController: _localeController,
+                    );
+                  },
+                ),
         );
       },
     );
@@ -105,7 +134,7 @@ class _WorkerHomeScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Worker platform'),
-        backgroundColor: AppColors.canopy,
+        backgroundColor: AppColors.canopy.withValues(alpha: 0.75),
         actions: [
           IconButton(
             tooltip: 'Ask the assistant',
@@ -122,9 +151,9 @@ class _WorkerHomeScreen extends StatelessWidget {
               context,
               MaterialPageRoute(
                 builder: (context) => ProfileScreen(
-                session: session,
-                localeController: localeController,
-              ),
+                  session: session,
+                  localeController: localeController,
+                ),
               ),
             ),
           ),
@@ -161,7 +190,8 @@ class _WorkerHomeScreen extends StatelessWidget {
             child: ListTile(
               leading: const Icon(Icons.fact_check_rounded),
               title: const Text('Review destination submissions'),
-              subtitle: const Text('Approve or reject user-suggested destinations.'),
+              subtitle:
+                  const Text('Approve or reject user-suggested destinations.'),
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -239,8 +269,8 @@ class _HomeShellState extends State<_HomeShell> {
         if (widget.isAdmin)
           IconButton(
             tooltip: l10n.reviewDestinationsTooltip,
-            icon: const Icon(Icons.fact_check_rounded,
-                color: AppColors.inkSoft),
+            icon:
+                const Icon(Icons.fact_check_rounded, color: AppColors.inkSoft),
             onPressed: () async {
               await Navigator.push(
                 context,

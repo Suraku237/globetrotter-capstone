@@ -18,6 +18,25 @@ class SessionState extends ChangeNotifier {
     scopes: ['email', 'profile', 'openid'],
   );
 
+  // Called once at app startup — restores a signed-in session from the
+  // token saved on a previous run (good for a week; see
+  // ACCESS_TOKEN_EXPIRE_MINUTES) instead of forcing sign-in on every
+  // launch. Returns false (and leaves currentUser null) if there was no
+  // saved token or it's no longer valid.
+  Future<bool> tryRestoreSession() async {
+    final token = await ApiService.instance.loadPersistedToken();
+    if (token == null) return false;
+    ApiService.instance.setToken(token);
+    try {
+      currentUser = await ApiService.instance.fetchCurrentUser();
+      notifyListeners();
+      return true;
+    } catch (_) {
+      ApiService.instance.setToken(null);
+      return false;
+    }
+  }
+
   Future<AppUser> login(String email, String password) async {
     try {
       final user = await ApiService.instance.login(
@@ -105,7 +124,8 @@ class SessionState extends ChangeNotifier {
   Future<void> updateProfile({String? fullName, XFile? avatarFile}) async {
     AppUser? updated;
     if (fullName != null && fullName.trim().isNotEmpty) {
-      updated = await ApiService.instance.updateProfile(fullName: fullName.trim());
+      updated =
+          await ApiService.instance.updateProfile(fullName: fullName.trim());
     }
     if (avatarFile != null) {
       updated = await ApiService.instance.uploadAvatar(avatarFile);

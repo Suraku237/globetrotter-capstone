@@ -68,10 +68,13 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
-      scaffoldBackgroundColor: AppColors.sand,
+      // Transparent by default so the app-wide background photo (see
+      // AppBackground, layered in behind every screen via MaterialApp's
+      // builder) shows through instead of a solid page color.
+      scaffoldBackgroundColor: Colors.transparent,
       textTheme: AppText.textTheme(Brightness.light),
       appBarTheme: AppBarTheme(
-        backgroundColor: AppColors.sand,
+        backgroundColor: Colors.transparent,
         foregroundColor: AppColors.ink,
         elevation: 0,
         scrolledUnderElevation: 0,
@@ -114,14 +117,14 @@ class AppTheme {
         ),
       ),
       cardTheme: CardThemeData(
-        color: Colors.white,
+        color: Colors.white.withValues(alpha: 0.55),
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         shadowColor: AppColors.ink.withValues(alpha: 0.08),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
       ),
       navigationRailTheme: NavigationRailThemeData(
-        backgroundColor: AppColors.canopy,
+        backgroundColor: AppColors.canopy.withValues(alpha: 0.75),
         selectedIconTheme: const IconThemeData(color: AppColors.ochre),
         unselectedIconTheme: IconThemeData(
           color: AppColors.sand.withValues(alpha: 0.6),

@@ -475,8 +475,9 @@ class _ItinerariesScreenState extends State<ItinerariesScreen> {
             icon: _errorIsNetwork
                 ? Icons.wifi_off_rounded
                 : Icons.error_outline_rounded,
-            title:
-                _errorIsNetwork ? "Can't reach the server" : 'Something went wrong',
+            title: _errorIsNetwork
+                ? "Can't reach the server"
+                : 'Something went wrong',
             message: _error!,
             onRetry: _load,
           )
@@ -504,7 +505,7 @@ class _ItinerariesScreenState extends State<ItinerariesScreen> {
                     name: 'Unknown',
                     region: '',
                     tags: const [],
-                              description: '',
+                    description: '',
                     lat: 0.0,
                     lng: 0.0,
                   ),
@@ -699,7 +700,7 @@ class _CreateItineraryDialogState extends State<_CreateItineraryDialog> {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      backgroundColor: AppColors.sand,
+      backgroundColor: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 460),

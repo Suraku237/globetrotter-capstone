@@ -29,7 +29,9 @@ if not SECRET_KEY:
         "JWT_SECRET=<output of `openssl rand -hex 32`>, or set it as an env var."
     )
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
+# A week — logging in should stick across app restarts instead of forcing
+# a fresh sign-in every day.
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7
 
 # Optional — unlike JWT_SECRET, a missing value here shouldn't take down the
 # whole service (login/most of the app works fine without email). Endpoints
@@ -50,6 +52,10 @@ PUBLIC_API_BASE_URL = os.getenv(
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 DATA_DIR.mkdir(exist_ok=True)
 USERS_FILE = DATA_DIR / "users.json"
+# Signups from users/workers that haven't confirmed their code yet — kept
+# out of users.json entirely so an unverified (possibly fake) email never
+# has real, storable credentials sitting in the database.
+PENDING_REGISTRATIONS_FILE = DATA_DIR / "pending_registrations.json"
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -151,3 +157,11 @@ def load_users() -> list:
 
 def save_users(users: list) -> None:
     _save(USERS_FILE, users)
+
+
+def load_pending_registrations() -> list:
+    return _load(PENDING_REGISTRATIONS_FILE)
+
+
+def save_pending_registrations(pending: list) -> None:
+    _save(PENDING_REGISTRATIONS_FILE, pending)

@@ -134,8 +134,8 @@ class _ItineraryMapScreenState extends State<ItineraryMapScreen> {
       final List<dynamic> geometry =
           decoded['routes'][0]['geometry']['coordinates'];
       final List<ll.LatLng> routePoints = geometry
-          .map<ll.LatLng>((c) => ll.LatLng(
-              (c[1] as num).toDouble(), (c[0] as num).toDouble()))
+          .map<ll.LatLng>((c) =>
+              ll.LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble()))
           .toList();
 
       if (use3DMap && _mapLibreController != null) {
@@ -207,7 +207,8 @@ class _ItineraryMapScreenState extends State<ItineraryMapScreen> {
   }
 
   Widget _buildMap() {
-    final center = _currentLocation ?? ll.LatLng(widget.destLat, widget.destLng);
+    final center =
+        _currentLocation ?? ll.LatLng(widget.destLat, widget.destLng);
 
     if (use3DMap) {
       return MapLibreMap(
@@ -275,7 +276,8 @@ class _ItineraryMapScreenState extends State<ItineraryMapScreen> {
             child: Align(
               alignment: Alignment.bottomCenter,
               child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: isWide ? 480 : double.infinity),
+                constraints:
+                    BoxConstraints(maxWidth: isWide ? 480 : double.infinity),
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Card(

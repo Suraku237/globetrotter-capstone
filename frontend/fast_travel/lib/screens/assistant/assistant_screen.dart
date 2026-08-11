@@ -142,10 +142,11 @@ class _AssistantScreenState extends State<AssistantScreen> {
         await _tts.speak(reply);
       }
     } on ApiException catch (e) {
-      setState(() => _messages.add(_ChatMessage("Couldn't reach the assistant: ${e.message}", false)));
+      setState(() => _messages.add(
+          _ChatMessage("Couldn't reach the assistant: ${e.message}", false)));
     } catch (_) {
-      setState(() => _messages
-          .add(_ChatMessage("Couldn't reach the assistant. Check your connection.", false)));
+      setState(() => _messages.add(_ChatMessage(
+          "Couldn't reach the assistant. Check your connection.", false)));
     } finally {
       if (mounted) setState(() => _sending = false);
       _scrollToBottom();
@@ -176,13 +177,16 @@ class _AssistantScreenState extends State<AssistantScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.sand,
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         title: const Text('Travel Assistant'),
         actions: [
           IconButton(
-            tooltip: _speakReplies ? 'Mute spoken replies' : 'Unmute spoken replies',
-            icon: Icon(_speakReplies ? Icons.volume_up_rounded : Icons.volume_off_rounded),
+            tooltip:
+                _speakReplies ? 'Mute spoken replies' : 'Unmute spoken replies',
+            icon: Icon(_speakReplies
+                ? Icons.volume_up_rounded
+                : Icons.volume_off_rounded),
             onPressed: () => setState(() => _speakReplies = !_speakReplies),
           ),
         ],
@@ -195,51 +199,53 @@ class _AssistantScreenState extends State<AssistantScreen> {
                 child: Center(child: CircularProgressIndicator()),
               )
             else
-            Expanded(
-              child: ListView.builder(
-                controller: _scrollController,
-                padding: const EdgeInsets.all(16),
-                itemCount: _messages.length + (_sending ? 1 : 0),
-                itemBuilder: (context, index) {
-                  if (index == _messages.length) {
-                    return const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 8),
-                      child: SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    );
-                  }
-                  final message = _messages[index];
-                  return Align(
-                    alignment: message.fromUser
-                        ? Alignment.centerRight
-                        : Alignment.centerLeft,
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(vertical: 6),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 12),
-                      constraints: BoxConstraints(
-                        maxWidth: MediaQuery.sizeOf(context).width * 0.75,
-                      ),
-                      decoration: BoxDecoration(
-                        color: message.fromUser
-                            ? AppColors.canopy
-                            : AppColors.sandDim,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Text(
-                        message.text,
-                        style: TextStyle(
-                          color: message.fromUser ? AppColors.sand : AppColors.ink,
+              Expanded(
+                child: ListView.builder(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.all(16),
+                  itemCount: _messages.length + (_sending ? 1 : 0),
+                  itemBuilder: (context, index) {
+                    if (index == _messages.length) {
+                      return const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8),
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      );
+                    }
+                    final message = _messages[index];
+                    return Align(
+                      alignment: message.fromUser
+                          ? Alignment.centerRight
+                          : Alignment.centerLeft,
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 12),
+                        constraints: BoxConstraints(
+                          maxWidth: MediaQuery.sizeOf(context).width * 0.75,
+                        ),
+                        decoration: BoxDecoration(
+                          color: message.fromUser
+                              ? AppColors.canopy
+                              : AppColors.sandDim,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Text(
+                          message.text,
+                          style: TextStyle(
+                            color: message.fromUser
+                                ? AppColors.sand
+                                : AppColors.ink,
+                          ),
                         ),
                       ),
-                    ),
-                  );
-                },
+                    );
+                  },
+                ),
               ),
-            ),
             if (_listening)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -273,8 +279,10 @@ class _AssistantScreenState extends State<AssistantScreen> {
                   ),
                   const SizedBox(width: 8),
                   IconButton(
-                    icon: const Icon(Icons.send_rounded, color: AppColors.ochre),
-                    onPressed: _sending ? null : () => _send(_textController.text),
+                    icon:
+                        const Icon(Icons.send_rounded, color: AppColors.ochre),
+                    onPressed:
+                        _sending ? null : () => _send(_textController.text),
                   ),
                 ],
               ),

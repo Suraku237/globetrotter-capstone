@@ -61,7 +61,8 @@ class EmptyState extends StatelessWidget {
                         side: const BorderSide(color: Colors.white70),
                       )
                     : null,
-                child: Text(retryLabel ?? AppLocalizations.of(context)!.tryAgain),
+                child:
+                    Text(retryLabel ?? AppLocalizations.of(context)!.tryAgain),
               ),
             ],
           ],

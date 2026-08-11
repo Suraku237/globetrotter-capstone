@@ -75,8 +75,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _changeAvatar() async {
-    final picked =
-        await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
+    final picked = await ImagePicker()
+        .pickImage(source: ImageSource.gallery, imageQuality: 85);
     if (picked == null) return;
 
     setState(() {
@@ -107,117 +107,117 @@ class _ProfileScreenState extends State<ProfileScreen> {
           child: ListView(
             padding: const EdgeInsets.all(24),
             children: [
-                Center(
-                  child: Stack(
-                    children: [
-                      CircleAvatar(
-                        radius: 56,
-                        backgroundColor: AppColors.sandDim,
-                        backgroundImage: avatarUrl != null
-                            ? NetworkImage('${ApiService.baseUrl}$avatarUrl')
-                            : null,
-                        child: avatarUrl == null
-                            ? const Icon(Icons.person_rounded,
-                                size: 56, color: AppColors.inkSoft)
-                            : null,
-                      ),
-                      Positioned(
-                        bottom: 0,
-                        right: 0,
-                        child: GestureDetector(
-                          onTap: _uploadingAvatar ? null : _changeAvatar,
-                          child: CircleAvatar(
-                            radius: 18,
-                            backgroundColor: AppColors.ochre,
-                            child: _uploadingAvatar
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2, color: Colors.white),
-                                  )
-                                : const Icon(Icons.camera_alt_rounded,
-                                    size: 18, color: Colors.white),
-                          ),
+              Center(
+                child: Stack(
+                  children: [
+                    CircleAvatar(
+                      radius: 56,
+                      backgroundColor: AppColors.sandDim,
+                      backgroundImage: avatarUrl != null
+                          ? NetworkImage('${ApiService.baseUrl}$avatarUrl')
+                          : null,
+                      child: avatarUrl == null
+                          ? const Icon(Icons.person_rounded,
+                              size: 56, color: AppColors.inkSoft)
+                          : null,
+                    ),
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: GestureDetector(
+                        onTap: _uploadingAvatar ? null : _changeAvatar,
+                        child: CircleAvatar(
+                          radius: 18,
+                          backgroundColor: AppColors.ochre,
+                          child: _uploadingAvatar
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2, color: Colors.white),
+                                )
+                              : const Icon(Icons.camera_alt_rounded,
+                                  size: 18, color: Colors.white),
                         ),
                       ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
-                if (_error != null)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Text(_error!,
-                        style: const TextStyle(color: AppColors.clay),
-                        textAlign: TextAlign.center),
-                  ),
-                Card(
-                  child: ListTile(
-                    title: Text(user?.fullName ?? ''),
-                    subtitle: Text(l10n.displayName),
-                    trailing: _savingName
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : IconButton(
-                            icon: const Icon(Icons.edit_rounded),
-                            onPressed: _editName,
-                          ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Card(
-                  child: ListTile(
-                    title: Text(user?.email ?? ''),
-                    subtitle: Text(l10n.emailLabel),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Card(
-                  child: ListTile(
-                    title: Text((user?.role ?? 'user').toUpperCase()),
-                    subtitle: Text(l10n.roleFieldLabel),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Card(
-                  child: ListTile(
-                    title: Text(l10n.language),
-                    trailing: SegmentedButton<String>(
-                      segments: [
-                        ButtonSegment(
-                            value: 'en', label: Text(l10n.languageEnglish)),
-                        ButtonSegment(
-                            value: 'fr', label: Text(l10n.languageFrench)),
-                      ],
-                      selected: {widget.localeController.locale.languageCode},
-                      onSelectionChanged: (selected) =>
-                          widget.localeController.setLanguageCode(selected.first),
                     ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(_error!,
+                      style: const TextStyle(color: AppColors.clay),
+                      textAlign: TextAlign.center),
+                ),
+              Card(
+                child: ListTile(
+                  title: Text(user?.fullName ?? ''),
+                  subtitle: Text(l10n.displayName),
+                  trailing: _savingName
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : IconButton(
+                          icon: const Icon(Icons.edit_rounded),
+                          onPressed: _editName,
+                        ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Card(
+                child: ListTile(
+                  title: Text(user?.email ?? ''),
+                  subtitle: Text(l10n.emailLabel),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Card(
+                child: ListTile(
+                  title: Text((user?.role ?? 'user').toUpperCase()),
+                  subtitle: Text(l10n.roleFieldLabel),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Card(
+                child: ListTile(
+                  title: Text(l10n.language),
+                  trailing: SegmentedButton<String>(
+                    segments: [
+                      ButtonSegment(
+                          value: 'en', label: Text(l10n.languageEnglish)),
+                      ButtonSegment(
+                          value: 'fr', label: Text(l10n.languageFrench)),
+                    ],
+                    selected: {widget.localeController.locale.languageCode},
+                    onSelectionChanged: (selected) =>
+                        widget.localeController.setLanguageCode(selected.first),
                   ),
                 ),
-                const SizedBox(height: 24),
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    if (!await confirmSignOut(context)) return;
-                    widget.session.signOut();
-                    if (context.mounted) {
-                      Navigator.of(context).popUntil((r) => r.isFirst);
-                    }
-                  },
-                  icon: const Icon(Icons.logout_rounded),
-                  label: Text(l10n.signOut),
-                ),
+              ),
+              const SizedBox(height: 24),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  if (!await confirmSignOut(context)) return;
+                  widget.session.signOut();
+                  if (context.mounted) {
+                    Navigator.of(context).popUntil((r) => r.isFirst);
+                  }
+                },
+                icon: const Icon(Icons.logout_rounded),
+                label: Text(l10n.signOut),
+              ),
             ],
           ),
         );
 
         if (widget.embedded) return body;
         return Scaffold(
-          backgroundColor: AppColors.sand,
+          backgroundColor: Colors.transparent,
           appBar: AppBar(title: Text(l10n.titleProfile)),
           body: body,
         );

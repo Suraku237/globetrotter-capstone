@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart'
     show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/models.dart';
 
@@ -21,9 +22,35 @@ class ApiService {
   ApiService._();
   static final ApiService instance = ApiService._();
 
+  static const _tokenPrefsKey = 'auth_token';
+
   String? _token;
-  void setToken(String? token) => _token = token;
+
+  // Persisted to disk (not just held in memory) so a signed-in user stays
+  // signed in across app restarts — the token itself is good for a week
+  // (see auth-service's ACCESS_TOKEN_EXPIRE_MINUTES), matching "remember my
+  // login for a week" rather than forcing a fresh sign-in every launch.
+  void setToken(String? token) {
+    _token = token;
+    SharedPreferences.getInstance().then((prefs) {
+      if (token != null) {
+        prefs.setString(_tokenPrefsKey, token);
+      } else {
+        prefs.remove(_tokenPrefsKey);
+      }
+    });
+  }
+
   bool get isAuthenticated => _token != null;
+
+  // Called once at app startup, before anything else touches ApiService —
+  // returns the token saved from a previous session, if any, without
+  // validating it (the caller finds out it's stale/expired the first time
+  // it's actually used, via the normal 401 handling).
+  Future<String?> loadPersistedToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_tokenPrefsKey);
+  }
 
   // Called whenever a request comes back 401 — the token has been rejected
   // by the backend (expired, or issued against a different user store than
@@ -64,10 +91,19 @@ class ApiService {
       detail = parsed['detail']?.toString() ?? res.body;
     } catch (_) {}
     if (res.statusCode == 401) {
-      _token = null;
+      setToken(null);
       onUnauthorized?.call();
     }
     throw ApiException(detail, statusCode: res.statusCode);
+  }
+
+  // Used at startup to turn a persisted token back into a signed-in user —
+  // if the token's expired or otherwise rejected, this throws (401) same as
+  // any other call, and the caller falls back to the login screen.
+  Future<AppUser> fetchCurrentUser() async {
+    final res = await http.get(Uri.parse('$baseUrl/me'), headers: _headers);
+    final data = await _handle(res);
+    return AppUser.fromJson(data as Map<String, dynamic>);
   }
 
   // Registering no longer signs you in — see RegistrationResult.status for
@@ -93,7 +129,8 @@ class ApiService {
     return RegistrationResult.fromJson(data as Map<String, dynamic>);
   }
 
-  Future<AppUser> verifyEmail({required String email, required String code}) async {
+  Future<AppUser> verifyEmail(
+      {required String email, required String code}) async {
     final res = await http.post(
       Uri.parse('$baseUrl/verify-email'),
       headers: _headers,
@@ -265,7 +302,8 @@ class ApiService {
   }
 
   Future<AppUser> uploadAvatar(XFile file) async {
-    final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/me/avatar'));
+    final request =
+        http.MultipartRequest('POST', Uri.parse('$baseUrl/me/avatar'));
     if (_token != null) request.headers['Authorization'] = 'Bearer $_token';
     final bytes = await file.readAsBytes();
     request.files
@@ -280,8 +318,7 @@ class ApiService {
   // ---- Social feed ----
 
   Future<List<Post>> getPosts() async {
-    final res =
-        await http.get(Uri.parse('$baseUrl/posts'), headers: _headers);
+    final res = await http.get(Uri.parse('$baseUrl/posts'), headers: _headers);
     final data = await _handle(res) as List;
     return data.map((e) => Post.fromJson(e)).toList();
   }

@@ -77,7 +77,7 @@ class _PendingDestinationsScreenState extends State<PendingDestinationsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.sand,
+      backgroundColor: Colors.transparent,
       appBar: AppBar(title: const Text('Review destination submissions')),
       body: SafeArea(
         child: _loading
@@ -93,7 +93,8 @@ class _PendingDestinationsScreenState extends State<PendingDestinationsScreen> {
                     ? const EmptyState(
                         icon: Icons.task_alt_rounded,
                         title: 'Nothing pending',
-                        message: 'All destination submissions have been reviewed.',
+                        message:
+                            'All destination submissions have been reviewed.',
                       )
                     : RefreshIndicator(
                         onRefresh: _load,
@@ -118,20 +119,23 @@ class _PendingDestinationsScreenState extends State<PendingDestinationsScreen> {
                                           height: 160,
                                           width: double.infinity,
                                           fit: BoxFit.cover,
-                                          errorBuilder: (context, error, stackTrace) =>
-                                              Container(
+                                          errorBuilder:
+                                              (context, error, stackTrace) =>
+                                                  Container(
                                             height: 160,
                                             color: AppColors.sandDim,
                                             alignment: Alignment.center,
                                             child: const Icon(
-                                                Icons.image_not_supported_rounded,
+                                                Icons
+                                                    .image_not_supported_rounded,
                                                 color: AppColors.inkSoft),
                                           ),
                                         ),
                                       ),
                                     const SizedBox(height: 12),
                                     Row(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Expanded(
                                           child: Text(destination.name,
@@ -150,12 +154,14 @@ class _PendingDestinationsScreenState extends State<PendingDestinationsScreen> {
                                       ],
                                     ),
                                     Text(destination.region.toUpperCase(),
-                                        style:
-                                            Theme.of(context).textTheme.labelSmall),
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .labelSmall),
                                     const SizedBox(height: 8),
                                     Text(destination.description,
-                                        style:
-                                            Theme.of(context).textTheme.bodyMedium),
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodyMedium),
                                     if (destination.tags.isNotEmpty) ...[
                                       const SizedBox(height: 8),
                                       Wrap(
@@ -224,8 +230,7 @@ class _EditDestinationDialog extends StatefulWidget {
   const _EditDestinationDialog({required this.destination});
 
   @override
-  State<_EditDestinationDialog> createState() =>
-      _EditDestinationDialogState();
+  State<_EditDestinationDialog> createState() => _EditDestinationDialogState();
 }
 
 class _EditDestinationDialogState extends State<_EditDestinationDialog> {
@@ -287,7 +292,7 @@ class _EditDestinationDialogState extends State<_EditDestinationDialog> {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      backgroundColor: AppColors.sand,
+      backgroundColor: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 460),
@@ -304,7 +309,8 @@ class _EditDestinationDialogState extends State<_EditDestinationDialog> {
                       style: Theme.of(context).textTheme.headlineMedium),
                   const SizedBox(height: 20),
                   if (_error != null) ...[
-                    Text(_error!, style: const TextStyle(color: AppColors.clay)),
+                    Text(_error!,
+                        style: const TextStyle(color: AppColors.clay)),
                     const SizedBox(height: 12),
                   ],
                   TextFormField(

@@ -46,8 +46,8 @@ class _SuggestDestinationScreenState extends State<SuggestDestinationScreen> {
   }
 
   Future<void> _pickImage() async {
-    final picked =
-        await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
+    final picked = await ImagePicker()
+        .pickImage(source: ImageSource.gallery, imageQuality: 85);
     if (picked == null) return;
     final bytes = await picked.readAsBytes();
     setState(() {
@@ -101,7 +101,7 @@ class _SuggestDestinationScreenState extends State<SuggestDestinationScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     return Dialog(
-      backgroundColor: AppColors.sand,
+      backgroundColor: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 460),
@@ -121,7 +121,8 @@ class _SuggestDestinationScreenState extends State<SuggestDestinationScreen> {
                       style: Theme.of(context).textTheme.headlineMedium),
                   const SizedBox(height: 20),
                   if (_error != null) ...[
-                    Text(_error!, style: const TextStyle(color: AppColors.clay)),
+                    Text(_error!,
+                        style: const TextStyle(color: AppColors.clay)),
                     const SizedBox(height: 12),
                   ],
                   TextFormField(
@@ -171,7 +172,8 @@ class _SuggestDestinationScreenState extends State<SuggestDestinationScreen> {
                   OutlinedButton.icon(
                     onPressed: _pickImage,
                     icon: const Icon(Icons.image_outlined),
-                    label: Text(_image == null ? l10n.addPhoto : l10n.changePhoto),
+                    label:
+                        Text(_image == null ? l10n.addPhoto : l10n.changePhoto),
                   ),
                   const SizedBox(height: 20),
                   Row(

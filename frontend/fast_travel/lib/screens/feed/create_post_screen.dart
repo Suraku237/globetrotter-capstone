@@ -29,8 +29,8 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   // Photo and video are mutually exclusive — a post carries one piece of
   // media, matching how the feed displays it.
   Future<void> _pickImage() async {
-    final picked =
-        await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
+    final picked = await ImagePicker()
+        .pickImage(source: ImageSource.gallery, imageQuality: 85);
     if (picked == null) return;
     final bytes = await picked.readAsBytes();
     await _clearVideo();
@@ -121,7 +121,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     return Scaffold(
-      backgroundColor: AppColors.sand,
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         title: const Text('New post'),
         actions: [
@@ -418,10 +418,12 @@ class _UploadDropzone extends StatelessWidget {
                 right: 12,
                 child: Row(
                   children: [
-                    _RoundIconButton(icon: Icons.sync_alt_rounded, onTap: onTap),
+                    _RoundIconButton(
+                        icon: Icons.sync_alt_rounded, onTap: onTap),
                     if (onRemove != null) ...[
                       const SizedBox(width: 8),
-                      _RoundIconButton(icon: Icons.close_rounded, onTap: onRemove!),
+                      _RoundIconButton(
+                          icon: Icons.close_rounded, onTap: onRemove!),
                     ],
                   ],
                 ),
@@ -494,7 +496,8 @@ class _InfoTip extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   subtitle,
-                  style: const TextStyle(fontSize: 12, color: AppColors.inkSoft),
+                  style:
+                      const TextStyle(fontSize: 12, color: AppColors.inkSoft),
                 ),
               ],
             ),

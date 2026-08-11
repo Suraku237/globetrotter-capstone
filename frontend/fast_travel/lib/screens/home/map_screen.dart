@@ -197,8 +197,8 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
         final List<dynamic> geometry =
             decoded['routes'][0]['geometry']['coordinates'];
         final List<ll.LatLng> routePoints = geometry
-            .map<ll.LatLng>((c) => ll.LatLng(
-                (c[1] as num).toDouble(), (c[0] as num).toDouble()))
+            .map<ll.LatLng>((c) =>
+                ll.LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble()))
             .toList();
 
         if (use3DMap && _mapLibreController != null) {
@@ -208,8 +208,9 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
           }
           _routeLine = await controller.addLine(
             LineOptions(
-              geometry:
-                  routePoints.map((p) => LatLng(p.latitude, p.longitude)).toList(),
+              geometry: routePoints
+                  .map((p) => LatLng(p.latitude, p.longitude))
+                  .toList(),
               lineColor: '#2196F3',
               lineWidth: 4.0,
             ),
@@ -218,7 +219,8 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
           setState(() {
             _polylines
               ..clear()
-              ..add(Polyline(points: routePoints, color: Colors.blue, strokeWidth: 4));
+              ..add(Polyline(
+                  points: routePoints, color: Colors.blue, strokeWidth: 4));
           });
         }
       } else {
@@ -366,7 +368,7 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
     }
 
     return Scaffold(
-      backgroundColor: AppColors.sand,
+      backgroundColor: Colors.transparent,
       // No AppBar here — AdaptiveShell already renders the "Explore Map"
       // title; a second one here would show it twice.
       body: Padding(
@@ -484,7 +486,8 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
                                     width: 60,
                                     height: 60,
                                     child: Image.network(
-                                      ApiService.resolveUrl(dest.imageUrl ?? ''),
+                                      ApiService.resolveUrl(
+                                          dest.imageUrl ?? ''),
                                       fit: BoxFit.cover,
                                       errorBuilder:
                                           (context, error, stackTrace) =>

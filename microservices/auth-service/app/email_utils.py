@@ -59,7 +59,11 @@ def _send(to_email: str, subject: str, html_body: str) -> None:
             server.starttls()
             server.login(BREVO_SMTP_LOGIN, BREVO_SMTP_PASSWORD)
             server.sendmail(BREVO_SENDER_EMAIL, [to_email], message.as_string())
-    except smtplib.SMTPException as exc:
+    except (smtplib.SMTPException, OSError) as exc:
+        # OSError covers connection-level failures (timeout, connection
+        # refused, DNS) that smtplib.SMTPException doesn't — e.g. a VPS
+        # provider blocking outbound port 587 makes the connect() call
+        # raise socket.timeout, which isn't an SMTPException subclass.
         logger.error("Failed to send email to %s: %s", to_email, exc)
         raise HTTPException(
             status_code=502,

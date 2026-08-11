@@ -4,6 +4,11 @@ services:
       context: ./auth-service
     environment:
       JWT_SECRET: ${JWT_SECRET}
+      BREVO_SMTP_LOGIN: ${BREVO_SMTP_LOGIN:-}
+      BREVO_SMTP_PASSWORD: ${BREVO_SMTP_PASSWORD:-}
+      BREVO_SENDER_EMAIL: ${BREVO_SENDER_EMAIL:-}
+      SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL:-}
+      PUBLIC_API_BASE_URL: ${PUBLIC_API_BASE_URL:-}
     volumes:
       - ./shared/data:/app/data
       - ./firebase-service-account.json:/app/firebase-service-account.json:ro

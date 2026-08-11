@@ -31,7 +31,14 @@ DATA_SERVICE_URL = os.getenv("DATA_SERVICE_URL", "http://data-service:8000")
 # Route by path prefix. Everything not matched here falls through to the
 # data service, since that's where the majority of routes (destinations,
 # itineraries, recommendations, stats, images) live.
-AUTH_PREFIXES = ("/register", "/login", "/auth", "/me")
+AUTH_PREFIXES = (
+    "/register",
+    "/login",
+    "/auth",
+    "/me",
+    "/verify-email",
+    "/admin-requests",
+)
 
 _client = httpx.AsyncClient(timeout=30.0)
 

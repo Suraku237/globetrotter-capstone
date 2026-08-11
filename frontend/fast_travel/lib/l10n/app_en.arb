@@ -39,6 +39,19 @@
   "createAccount": "Create account",
   "alreadyHaveAccount": "Already have an account? Sign in",
 
+  "verifyEmailTitle": "Verify your email",
+  "verifyEmailSubtitle": "We sent a 6-digit code to {email}. Enter it below to finish creating your account.",
+  "@verifyEmailSubtitle": {
+    "placeholders": {
+      "email": {"type": "String"}
+    }
+  },
+  "verificationCodeLabel": "Verification code",
+  "verifyButton": "Verify",
+  "adminPendingTitle": "Request sent",
+  "adminPendingMessage": "Your admin account request has been sent for approval. You'll get an email once it's reviewed.",
+  "backToSignIn": "Back to sign in",
+
   "searchHint": "Search destinations, regions, or vibes...",
   "noResultsFound": "No results found",
   "noResultsMessage": "Try searching for something else or clear the filter.",

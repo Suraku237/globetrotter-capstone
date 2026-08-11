@@ -308,6 +308,48 @@ abstract class AppLocalizations {
   /// **'Already have an account? Sign in'**
   String get alreadyHaveAccount;
 
+  /// No description provided for @verifyEmailTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Verify your email'**
+  String get verifyEmailTitle;
+
+  /// No description provided for @verifyEmailSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'We sent a 6-digit code to {email}. Enter it below to finish creating your account.'**
+  String verifyEmailSubtitle(String email);
+
+  /// No description provided for @verificationCodeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Verification code'**
+  String get verificationCodeLabel;
+
+  /// No description provided for @verifyButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Verify'**
+  String get verifyButton;
+
+  /// No description provided for @adminPendingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Request sent'**
+  String get adminPendingTitle;
+
+  /// No description provided for @adminPendingMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Your admin account request has been sent for approval. You\'ll get an email once it\'s reviewed.'**
+  String get adminPendingMessage;
+
+  /// No description provided for @backToSignIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Back to sign in'**
+  String get backToSignIn;
+
   /// No description provided for @searchHint.
   ///
   /// In en, this message translates to:

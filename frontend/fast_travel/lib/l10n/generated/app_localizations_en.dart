@@ -116,6 +116,30 @@ class AppLocalizationsEn extends AppLocalizations {
   String get alreadyHaveAccount => 'Already have an account? Sign in';
 
   @override
+  String get verifyEmailTitle => 'Verify your email';
+
+  @override
+  String verifyEmailSubtitle(String email) {
+    return 'We sent a 6-digit code to $email. Enter it below to finish creating your account.';
+  }
+
+  @override
+  String get verificationCodeLabel => 'Verification code';
+
+  @override
+  String get verifyButton => 'Verify';
+
+  @override
+  String get adminPendingTitle => 'Request sent';
+
+  @override
+  String get adminPendingMessage =>
+      'Your admin account request has been sent for approval. You\'ll get an email once it\'s reviewed.';
+
+  @override
+  String get backToSignIn => 'Back to sign in';
+
+  @override
   String get searchHint => 'Search destinations, regions, or vibes...';
 
   @override

@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import '../../Services/api_service.dart';
 import '../../Services/session_state.dart';
 import '../../l10n/generated/app_localizations.dart';
+import '../../models/models.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/auth_background.dart';
 
 class RegisterScreen extends StatefulWidget {
   final SessionState session;
@@ -23,10 +25,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _name = TextEditingController();
   final _email = TextEditingController();
   final _password = TextEditingController();
+  final _codeController = TextEditingController();
   String _role = 'user';
   bool _loading = false;
   bool _googleLoading = false;
+  bool _verifying = false;
   String? _error;
+  // Non-null once registration succeeds — switches the screen from the
+  // form to either a code-entry step or an admin-pending message,
+  // depending on .status. Registering no longer signs you in directly.
+  RegistrationResult? _pendingRegistration;
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
@@ -35,17 +43,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
       _error = null;
     });
     try {
-      await widget.session.register(
+      final result = await widget.session.register(
         _email.text.trim(),
         _password.text,
         _name.text.trim(),
         role: _role,
       );
-      final user =
-          await widget.session.login(_email.text.trim(), _password.text);
-      if (mounted && user.role.isNotEmpty) {
-        widget.onSignedIn();
-      }
+      if (mounted) setState(() => _pendingRegistration = result);
     } on ApiException catch (e) {
       setState(() => _error = e.message);
     } catch (e) {
@@ -55,6 +59,26 @@ class _RegisterScreenState extends State<RegisterScreen> {
       );
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _verifyCode() async {
+    setState(() {
+      _verifying = true;
+      _error = null;
+    });
+    try {
+      await widget.session
+          .verifyEmail(_pendingRegistration!.email, _codeController.text.trim());
+      if (mounted) widget.onSignedIn();
+    } on ApiException catch (e) {
+      setState(() => _error = e.message);
+    } catch (e) {
+      setState(
+        () => _error = AppLocalizations.of(context)!.couldNotReachServer,
+      );
+    } finally {
+      if (mounted) setState(() => _verifying = false);
     }
   }
 
@@ -80,6 +104,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _name.dispose();
     _email.dispose();
     _password.dispose();
+    _codeController.dispose();
     super.dispose();
   }
 
@@ -91,15 +116,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
       body: Stack(
         children: [
-          Positioned.fill(
-            child: Image.network(
-              'https://images.unsplash.com/photo-1527631746610-bca00a040d60?auto=format&fit=crop&w=1400&q=80',
-              fit: BoxFit.cover,
-            ),
-          ),
-          Positioned.fill(
-            child: Container(color: Colors.black.withValues(alpha: 0.38)),
-          ),
+          const Positioned.fill(child: AuthBackground()),
           Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(24),
@@ -109,7 +126,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   color: AppColors.sand.withValues(alpha: 0.95),
                   child: Padding(
                     padding: const EdgeInsets.all(32),
-                    child: Form(
+                    child: _pendingRegistration == null
+                        ? _buildForm(l10n)
+                        : _pendingRegistration!.status == 'pending_verification'
+                            ? _buildVerifyCode(l10n)
+                            : _buildAdminPending(l10n),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildForm(AppLocalizations l10n) {
+    return Form(
                       key: _formKey,
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
@@ -251,14 +284,70 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           ),
                         ],
                       ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
+                    );
+  }
+
+  Widget _buildVerifyCode(AppLocalizations l10n) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(l10n.verifyEmailTitle,
+            style: Theme.of(context).textTheme.displayMedium),
+        const SizedBox(height: 4),
+        Text(
+          l10n.verifyEmailSubtitle(_pendingRegistration!.email),
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 20),
+        if (_error != null) ...[
+          Text(_error!, style: const TextStyle(color: AppColors.clay)),
+          const SizedBox(height: 12),
         ],
-      ),
+        TextField(
+          controller: _codeController,
+          decoration: InputDecoration(labelText: l10n.verificationCodeLabel),
+          keyboardType: TextInputType.number,
+          maxLength: 6,
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: _verifying ? null : _verifyCode,
+            child: _verifying
+                ? const SizedBox(
+                    height: 18,
+                    width: 18,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white),
+                  )
+                : Text(l10n.verifyButton),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAdminPending(AppLocalizations l10n) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(l10n.adminPendingTitle,
+            style: Theme.of(context).textTheme.displayMedium),
+        const SizedBox(height: 12),
+        Text(l10n.adminPendingMessage,
+            style: Theme.of(context).textTheme.bodyMedium),
+        const SizedBox(height: 20),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(l10n.backToSignIn),
+          ),
+        ),
+      ],
     );
   }
 }

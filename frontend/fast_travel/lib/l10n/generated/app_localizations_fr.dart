@@ -118,6 +118,30 @@ class AppLocalizationsFr extends AppLocalizations {
   String get alreadyHaveAccount => 'Vous avez déjà un compte ? Connectez-vous';
 
   @override
+  String get verifyEmailTitle => 'Vérifiez votre e-mail';
+
+  @override
+  String verifyEmailSubtitle(String email) {
+    return 'Nous avons envoyé un code à 6 chiffres à $email. Saisissez-le ci-dessous pour terminer la création de votre compte.';
+  }
+
+  @override
+  String get verificationCodeLabel => 'Code de vérification';
+
+  @override
+  String get verifyButton => 'Vérifier';
+
+  @override
+  String get adminPendingTitle => 'Demande envoyée';
+
+  @override
+  String get adminPendingMessage =>
+      'Votre demande de compte administrateur a été envoyée pour approbation. Vous recevrez un e-mail une fois qu\'elle aura été examinée.';
+
+  @override
+  String get backToSignIn => 'Retour à la connexion';
+
+  @override
   String get searchHint =>
       'Rechercher des destinations, régions ou ambiances...';
 

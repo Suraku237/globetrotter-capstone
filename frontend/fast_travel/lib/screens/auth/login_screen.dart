@@ -3,6 +3,7 @@ import '../../Services/api_service.dart';
 import '../../Services/session_state.dart';
 import '../../l10n/generated/app_localizations.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/auth_background.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -79,15 +80,7 @@ class _LoginScreenState extends State<LoginScreen> {
       backgroundColor: AppColors.canopy,
       body: Stack(
         children: [
-          Positioned.fill(
-            child: Image.network(
-              'https://images.unsplash.com/photo-1527631746610-bca00a040d60?auto=format&fit=crop&w=1400&q=80',
-              fit: BoxFit.cover,
-            ),
-          ),
-          Positioned.fill(
-            child: Container(color: Colors.black.withValues(alpha: 0.38)),
-          ),
+          const Positioned.fill(child: AuthBackground()),
           Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(24),

@@ -70,13 +70,15 @@ class ApiService {
     throw ApiException(detail, statusCode: res.statusCode);
   }
 
-  Future<AppUser> register({
+  // Registering no longer signs you in — see RegistrationResult.status for
+  // what to do next (show a code-entry step, or a "pending approval"
+  // message).
+  Future<RegistrationResult> register({
     required String email,
     required String password,
     required String fullName,
     required String role,
   }) async {
-    print('📤 API: Register called for: $email');
     final res = await http.post(
       Uri.parse('$baseUrl/register'),
       headers: _headers,
@@ -87,46 +89,43 @@ class ApiService {
         'role': role,
       }),
     );
-    
-    if (res.statusCode == 200 || res.statusCode == 201) {
-      final data = jsonDecode(res.body);
-      print('✅ Registration successful');
-      
-      return AppUser(
-        id: data['id'] ?? 'user_123',  // ✅ Dynamically gets ID from backend
-        email: email,
-        fullName: fullName,
-        role: role,
-      );
-    } else {
-      throw ApiException('Registration failed: ${res.statusCode}');
-    }
+    final data = await _handle(res, okStatus: 201);
+    return RegistrationResult.fromJson(data as Map<String, dynamic>);
+  }
+
+  Future<AppUser> verifyEmail({required String email, required String code}) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/verify-email'),
+      headers: _headers,
+      body: jsonEncode({'email': email, 'code': code}),
+    );
+    final data = await _handle(res);
+    setToken(data['access_token'] as String);
+    return AppUser.fromJson({
+      'id': data['user_id'],
+      'email': data['email'],
+      'full_name': data['full_name'],
+      'role': data['role'],
+      'avatar_url': data['avatar_url'],
+    });
   }
 
   Future<AppUser> login(
       {required String email, required String password}) async {
-    print('📤 API: Login called for: $email');
     final res = await http.post(
       Uri.parse('$baseUrl/login'),
       headers: _headers,
       body: jsonEncode({'email': email, 'password': password}),
     );
-    
-    if (res.statusCode == 200) {
-      final data = jsonDecode(res.body);
-      setToken(data['access_token'] as String);
-      print('✅ Login successful');
-      
-      return AppUser.fromJson({
-        'id': data['user_id'],
-        'email': data['email'],
-        'full_name': data['full_name'],
-        'role': data['role'],
-        'avatar_url': data['avatar_url'],
-      });
-    } else {
-      throw ApiException('Login failed: ${res.statusCode}');
-    }
+    final data = await _handle(res);
+    setToken(data['access_token'] as String);
+    return AppUser.fromJson({
+      'id': data['user_id'],
+      'email': data['email'],
+      'full_name': data['full_name'],
+      'role': data['role'],
+      'avatar_url': data['avatar_url'],
+    });
   }
 
   Future<AppUser> loginWithGoogle({required String idToken}) async {

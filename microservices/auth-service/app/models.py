@@ -31,6 +31,22 @@ if not SECRET_KEY:
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
 
+# Optional — unlike JWT_SECRET, a missing value here shouldn't take down the
+# whole service (login/most of the app works fine without email). Endpoints
+# that actually need to send mail check for this themselves and return a
+# clear error if it's not configured, rather than crashing at startup.
+BREVO_SMTP_LOGIN = os.getenv("BREVO_SMTP_LOGIN")
+BREVO_SMTP_PASSWORD = os.getenv("BREVO_SMTP_PASSWORD")
+BREVO_SENDER_EMAIL = os.getenv("BREVO_SENDER_EMAIL")
+# Where "new admin wants to sign up" notifications go, and who has to click
+# the approve/reject link in them.
+SUPER_ADMIN_EMAIL = os.getenv("SUPER_ADMIN_EMAIL")
+# Used to build the approve/reject links embedded in that notification
+# email — needs to be the public URL the backend is actually reachable at.
+PUBLIC_API_BASE_URL = os.getenv(
+    "PUBLIC_API_BASE_URL", "https://fasttravel-web.duckdns.org/api"
+)
+
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 DATA_DIR.mkdir(exist_ok=True)
 USERS_FILE = DATA_DIR / "users.json"
@@ -48,6 +64,11 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+
+
+class VerifyEmailRequest(BaseModel):
+    email: EmailStr
+    code: str
 
 
 class TokenResponse(BaseModel):

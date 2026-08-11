@@ -32,25 +32,28 @@ class SessionState extends ChangeNotifier {
     }
   }
 
-  Future<AppUser> register(
+  // Doesn't sign in — see RegistrationResult.status for what happens next
+  // (a code to verify, or an admin request pending approval).
+  Future<RegistrationResult> register(
     String email,
     String password,
     String fullName, {
     required String role,
-  }) async {
-    try {
-      final user = await ApiService.instance.register(
-        email: email,
-        password: password,
-        fullName: fullName,
-        role: role,
-      );
-      currentUser = user;
-      notifyListeners();
-      return user;
-    } catch (e) {
-      rethrow;
-    }
+  }) {
+    return ApiService.instance.register(
+      email: email,
+      password: password,
+      fullName: fullName,
+      role: role,
+    );
+  }
+
+  Future<AppUser> verifyEmail(String email, String code) async {
+    final user =
+        await ApiService.instance.verifyEmail(email: email, code: code);
+    currentUser = user;
+    notifyListeners();
+    return user;
   }
 
   Future<AppUser> signInWithGoogle() async {

@@ -39,6 +39,14 @@
   "createAccount": "Créer un compte",
   "alreadyHaveAccount": "Vous avez déjà un compte ? Connectez-vous",
 
+  "verifyEmailTitle": "Vérifiez votre e-mail",
+  "verifyEmailSubtitle": "Nous avons envoyé un code à 6 chiffres à {email}. Saisissez-le ci-dessous pour terminer la création de votre compte.",
+  "verificationCodeLabel": "Code de vérification",
+  "verifyButton": "Vérifier",
+  "adminPendingTitle": "Demande envoyée",
+  "adminPendingMessage": "Votre demande de compte administrateur a été envoyée pour approbation. Vous recevrez un e-mail une fois qu'elle aura été examinée.",
+  "backToSignIn": "Retour à la connexion",
+
   "searchHint": "Rechercher des destinations, régions ou ambiances...",
   "noResultsFound": "Aucun résultat trouvé",
   "noResultsMessage": "Essayez une autre recherche ou effacez le filtre.",

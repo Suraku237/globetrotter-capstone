@@ -91,6 +91,35 @@ class AppUser {
       );
 }
 
+// What POST /register actually returns now — registering no longer signs
+// you in immediately. [status] tells the caller what to show next:
+// 'pending_verification' (enter the emailed code) or
+// 'pending_admin_approval' (wait for SUPER_ADMIN_EMAIL to approve).
+class RegistrationResult {
+  final String id;
+  final String email;
+  final String fullName;
+  final String role;
+  final String status;
+
+  RegistrationResult({
+    required this.id,
+    required this.email,
+    required this.fullName,
+    required this.role,
+    required this.status,
+  });
+
+  factory RegistrationResult.fromJson(Map<String, dynamic> json) =>
+      RegistrationResult(
+        id: (json['id'] ?? '').toString(),
+        email: (json['email'] ?? '').toString(),
+        fullName: (json['full_name'] ?? '').toString(),
+        role: (json['role'] ?? 'user').toString(),
+        status: (json['status'] ?? '').toString(),
+      );
+}
+
 class Comment {
   final String id;
   final String userId;

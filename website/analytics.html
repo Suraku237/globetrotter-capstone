@@ -5,11 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Fast Travel — Control Tower</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-<!-- Same backend URL used by index.html's tracking calls -->
+<!-- Same backend URL used by index.html's tracking calls — must be HTTPS
+     through the domain's own gateway, not the raw IP:port: this page is
+     served over HTTPS, and a plain http:// fetch from here gets blocked
+     outright by the browser as mixed content, which is why the stats
+     never loaded. -->
 <script>
-  window.FAST_TRAVEL_API = "http://109.199.120.38:8000";
+  window.FAST_TRAVEL_API = "https://fasttravel-web.duckdns.org/api";
 </script>
 
 <style>

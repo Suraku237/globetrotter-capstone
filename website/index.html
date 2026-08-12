@@ -6,13 +6,18 @@
 <title>Fast Travel — Board Your Next Trip</title>
 <script>document.documentElement.classList.add('js');</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
 <!-- ============================================================
      ANALYTICS
-     Google Analytics 4 — replace G-XXXXXXXXXX with your real
-     Measurement ID from analytics.google.com (Admin > Data Streams).
-     ============================================================ -->
+     Google Analytics 4 — commented out until a real Measurement ID
+     replaces G-XXXXXXXXXX below (get one from analytics.google.com,
+     Admin > Data Streams). Left in as a placeholder, this loads and
+     parses gtag.js on every visit for an ID that doesn't exist —
+     pure dead weight. trackDownload() below already guards its
+     gtag() call with `typeof gtag === "function"`, so nothing else
+     needs to change when this is uncommented.
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"></script>
 <script>
   window.dataLayer = window.dataLayer || [];
@@ -20,6 +25,7 @@
   gtag('js', new Date());
   gtag('config', 'G-XXXXXXXXXX');
 </script>
+     ============================================================ -->
 
 <!-- Backend URL used for the site's own visitor/user/download counters
      (separate from GA4 above — see /analytics.html) -->

@@ -3,1202 +3,1021 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Fast Travel — Board Your Next Trip</title>
-<script>document.documentElement.classList.add('js');</script>
+<title>Fast Travel — Discover Cameroon</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-
-<!-- ============================================================
-     ANALYTICS
-     Google Analytics 4 — commented out until a real Measurement ID
-     replaces G-XXXXXXXXXX below (get one from analytics.google.com,
-     Admin > Data Streams). Left in as a placeholder, this loads and
-     parses gtag.js on every visit for an ID that doesn't exist —
-     pure dead weight. trackDownload() below already guards its
-     gtag() call with `typeof gtag === "function"`, so nothing else
-     needs to change when this is uncommented.
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){ dataLayer.push(arguments); }
-  gtag('js', new Date());
-  gtag('config', 'G-XXXXXXXXXX');
-</script>
-     ============================================================ -->
-
-<!-- Backend URL used for the site's own visitor/user/download counters
-     (separate from GA4 above — see /analytics.html) -->
-<script>
-  window.FAST_TRAVEL_API = "https://fasttravel-web.duckdns.org/api";
-</script>
-
-<!-- The Flutter web app (frontend/fast_travel/) is deployed on its own
-     DuckDNS subdomain, separate from this site — the mobile download button
-     below fetches the APK from "<that domain>/downloads/fast-travel.apk". -->
-<script>
-  window.FAST_TRAVEL_APP_URL = "https://fasttravel-web.duckdns.org";
-</script>
-
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-
-  :root{
-    /* GlobeTrotter palette — matches frontend/fast_travel/lib/theme/app_theme.dart */
-    --ink:        #14291F; /* canopy — deep rainforest */
-    --ink-soft:   #1E3A2C; /* canopyLight */
-    --cream:      #F4EDD9; /* sand */
-    --gold:       #E2A33D; /* ochre — Waza sun, primary accent */
-    --rust:       #B5482E; /* clay — highland terracotta, secondary */
-    --teal:       #2C7A73; /* Atlantic coast, tertiary */
-    --slate:      #C8BFA0; /* muted sand for secondary text on dark */
-    --line:       rgba(244,237,217,0.14);
-    --line-strong:rgba(244,237,217,0.28);
-
-    --display: 'Fraunces', serif;
-    --mono:    'IBM Plex Mono', monospace;
-    --body:    'Inter', sans-serif;
-  }
-
-  *{ box-sizing:border-box; margin:0; padding:0; }
-
-  html{ scroll-behavior:smooth; }
-
-  body{
-    background:var(--ink);
-    color:var(--cream);
-    font-family:var(--body);
-    line-height:1.5;
-    overflow-x:hidden;
-    position:relative;
-  }
-
-  /* ambient glow + faint dot-grid, like a departure-board room at night */
-  body::before{
-    content:"";
-    position:fixed;
-    inset:0;
-    z-index:0;
-    pointer-events:none;
-    background:
-      radial-gradient(ellipse 900px 500px at 15% -5%, rgba(226,163,61,0.16), transparent 60%),
-      radial-gradient(ellipse 700px 500px at 100% 15%, rgba(44,122,115,0.14), transparent 60%),
-      radial-gradient(circle, rgba(244,237,217,0.05) 1px, transparent 1px);
-    background-size:auto, auto, 26px 26px;
-  }
-
-  header, .hero, .showcase, .features, .developer, .community, footer{
-    position:relative;
-    z-index:1;
-  }
-
-  /* Scroll-triggered reveals: elements sit hidden/offset until an
-     IntersectionObserver (bottom of page) adds .in-view as they scroll
-     into frame, instead of a load-time-only animation that's already
-     finished (and invisible) for anything below the fold. */
-  html.js .reveal{
-    opacity:0;
-    transform:translateY(20px);
-    transition:opacity .7s cubic-bezier(.2,.7,.2,1), transform .7s cubic-bezier(.2,.7,.2,1);
-  }
-  .reveal.in-view{ opacity:1; transform:translateY(0); }
-  .reveal-1{ transition-delay:.06s; }
-  .reveal-2{ transition-delay:.16s; }
-  .reveal-3{ transition-delay:.26s; }
-  .reveal-4{ transition-delay:.36s; }
-
-  @keyframes float{
-    0%,100%{ transform:translateY(0); }
-    50%{ transform:translateY(-10px); }
-  }
-  .pass-float{ animation:float 6s ease-in-out infinite; }
-
-  @keyframes scan{
-    from{ background-position-x:0; }
-    to{ background-position-x:34px; }
-  }
-
-  a{ color:inherit; text-decoration:none; }
-
-  img,svg{ display:block; }
-
-  .wrap{
-    max-width:1180px;
-    margin:0 auto;
-    padding:0 32px;
-  }
-
-  /* ---------- focus ---------- */
-  a:focus-visible, button:focus-visible{
-    outline:2px solid var(--gold);
-    outline-offset:3px;
-  }
-
-  @media (prefers-reduced-motion: reduce){
-    *{ animation:none !important; transition:none !important; }
-  }
-
-  /* ---------- header ---------- */
-  header{
-    position:sticky;
-    top:0;
-    z-index:50;
-    background:rgba(20,41,31,0.86);
-    backdrop-filter:blur(10px);
-    border-bottom:1px solid var(--line);
-  }
-
-  .nav{
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-    padding:20px 0;
-  }
-
-  .brand{
-    display:flex;
-    align-items:center;
-    gap:10px;
-    font-family:var(--display);
-    font-size:1.5rem;
-    letter-spacing:0.06em;
-  }
-
-  .brand .dot{
-    width:10px; height:10px;
-    border-radius:50%;
-    background:var(--gold);
-    box-shadow:0 0 0 3px rgba(226,163,61,0.22);
-  }
-
-  .navlinks{
-    display:flex;
-    gap:36px;
-    font-size:0.86rem;
-    letter-spacing:0.04em;
-    text-transform:uppercase;
-    color:var(--slate);
-  }
-
-  .navlinks a:hover{ color:var(--cream); }
-
-  .navlinks a{ position:relative; padding-bottom:4px; }
-  .navlinks a::after{
-    content:"";
-    position:absolute; left:0; right:0; bottom:0;
-    height:1px; background:var(--gold);
-    transform:scaleX(0); transform-origin:left;
-    transition:transform .25s ease;
-  }
-  .navlinks a:hover::after{ transform:scaleX(1); }
-
-  @media (max-width:720px){
-    .navlinks{ display:none; }
-  }
-
-  .nav-analytics-btn{
-    display:flex;
-    align-items:center;
-    gap:8px;
-    padding:9px 16px;
-    border-radius:999px;
-    border:1px solid var(--line-strong);
-    font-family:var(--mono);
-    font-size:0.78rem;
-    letter-spacing:0.04em;
-    text-transform:uppercase;
-    color:var(--gold);
-    transition:border-color .2s ease, background .2s ease, transform .16s ease;
-  }
-  .nav-analytics-btn:hover{
-    border-color:var(--gold);
-    background:rgba(226,163,61,0.08);
-    transform:translateY(-1px);
-  }
-  .nav-analytics-btn svg{ flex-shrink:0; }
-
-  /* ---------- hero ---------- */
-  .hero{
-    padding:88px 0 60px;
-    position:relative;
-  }
-
-  .eyebrow-row{
-    display:flex;
-    align-items:center;
-    gap:14px;
-    margin-bottom:22px;
-    font-family:var(--mono);
-    font-size:0.78rem;
-    letter-spacing:0.14em;
-    color:var(--gold);
-    text-transform:uppercase;
-  }
-  .eyebrow-row .rule{
-    flex:0 0 40px;
-    height:1px;
-    background:var(--gold);
-    opacity:0.6;
-  }
-
-  .hero-grid{
-    display:grid;
-    grid-template-columns:1.05fr 0.95fr;
-    gap:56px;
-    align-items:center;
-  }
-
-  h1{
-    font-family:var(--display);
-    font-size:clamp(2.8rem, 5.4vw, 4.6rem);
-    line-height:0.98;
-    letter-spacing:0.01em;
-    margin-bottom:22px;
-  }
-  h1 span{ color:var(--gold); }
-
-  .hero p.lede{
-    font-size:1.08rem;
-    color:var(--slate);
-    max-width:46ch;
-    margin-bottom:34px;
-  }
-
-  /* ---------- boarding pass card (signature element) ---------- */
-  .pass{
-    background:var(--cream);
-    color:var(--ink);
-    border-radius:18px;
-    position:relative;
-    box-shadow:0 30px 70px -20px rgba(0,0,0,0.55);
-    overflow:visible;
-    transform:rotate(-1.2deg);
-    transition:transform .35s ease, box-shadow .35s ease;
-  }
-  .pass:hover{
-    transform:rotate(0deg) translateY(-4px);
-    box-shadow:0 40px 90px -20px rgba(0,0,0,0.6);
-  }
-
-  .pass-top{
-    display:grid;
-    grid-template-columns:1fr 1fr;
-    padding:26px 28px 22px;
-  }
-
-  .pass-field .k{
-    font-family:var(--mono);
-    font-size:0.68rem;
-    letter-spacing:0.12em;
-    color:#4A473F;
-    text-transform:uppercase;
-    margin-bottom:6px;
-  }
-  .pass-field .v{
-    font-family:var(--display);
-    font-size:1.5rem;
-    letter-spacing:0.02em;
-  }
-  .pass-field.right{ text-align:right; }
-
-  .perf{
-    position:relative;
-    height:0;
-    border-top:2px dashed rgba(20,41,31,0.28);
-    margin:0 0;
-  }
-  .perf::before,.perf::after{
-    content:"";
-    position:absolute;
-    top:50%; transform:translateY(-50%);
-    width:26px; height:26px;
-    background:var(--ink);
-    border-radius:50%;
-  }
-  .perf::before{ left:-13px; }
-  .perf::after{ right:-13px; }
-
-  .pass-bottom{
-    padding:24px 28px 30px;
-  }
-
-  .pass-route{
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-    margin-bottom:22px;
-  }
-  .pass-route .city{
-    font-family:var(--display);
-    font-size:1.9rem;
-  }
-  .pass-route .city small{
-    display:block;
-    font-family:var(--mono);
-    font-size:0.68rem;
-    color:#4A473F;
-    letter-spacing:0.1em;
-    margin-top:4px;
-  }
-  .plane{
-    width:44px; height:20px;
-    position:relative;
-  }
-  .plane::before{
-    content:"";
-    position:absolute;
-    left:0; right:0; top:50%;
-    height:1px;
-    background:#A69A6E;
-  }
-  .plane svg{ position:relative; }
-
-  .cta-row{
-    display:flex;
-    flex-direction:column;
-    gap:10px;
-  }
-
-  .btn{
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-    gap:14px;
-    padding:14px 18px;
-    border-radius:10px;
-    font-family:var(--body);
-    font-weight:600;
-    font-size:0.95rem;
-    border:1px solid transparent;
-    cursor:pointer;
-    transition:transform .16s ease, box-shadow .16s ease;
-  }
-  .btn:hover{ transform:translateY(-2px); }
-
-  .btn-primary{
-    background:var(--ink);
-    color:var(--cream);
-  }
-  .btn-primary:hover{ box-shadow:0 12px 26px -10px rgba(20,41,31,0.55); }
-
-  .btn-outline{
-    background:transparent;
-    border-color:rgba(20,41,31,0.22);
-    color:var(--ink);
-  }
-  .btn-outline:hover{ border-color:var(--ink); }
-
-  .btn .tag{
-    font-family:var(--mono);
-    font-size:0.68rem;
-    letter-spacing:0.08em;
-    color:var(--gold);
-    text-transform:uppercase;
-  }
-  .btn-outline .tag{ color:var(--rust); }
-
-  .barcode{
-    margin-top:22px;
-    height:34px;
-    background:repeating-linear-gradient(90deg, var(--ink) 0 2px, transparent 2px 5px, var(--ink) 5px 6px, transparent 6px 11px, var(--ink) 11px 14px, transparent 14px 17px);
-    opacity:0.85;
-    animation:scan 2.4s linear infinite;
-  }
-
-  @media (max-width:900px){
-    .hero-grid{ grid-template-columns:1fr; }
-  }
-
-  /* ---------- device showcase ---------- */
-  .showcase{
-    padding:40px 0 100px;
-  }
-
-  .showcase-head{
-    text-align:center;
-    margin-bottom:56px;
-  }
-  .showcase-head h2{
-    font-family:var(--display);
-    font-size:clamp(2rem,4vw,2.9rem);
-    letter-spacing:0.01em;
-  }
-  .showcase-head p{
-    color:var(--slate);
-    max-width:52ch;
-    margin:14px auto 0;
-  }
-
-  .devices{
-    display:flex;
-    align-items:flex-end;
-    justify-content:center;
-    gap:40px;
-    flex-wrap:wrap;
-  }
-
-  /* desktop frame */
-  .desktop-frame{
-    width:min(560px, 90vw);
-    background:var(--ink-soft);
-    border:1px solid var(--line-strong);
-    border-radius:14px 14px 6px 6px;
-    box-shadow:0 40px 90px -30px rgba(0,0,0,0.6);
-  }
-  .desktop-bar{
-    display:flex;
-    align-items:center;
-    gap:8px;
-    padding:12px 16px;
-    border-bottom:1px solid var(--line);
-  }
-  .desktop-bar .dotx{ width:9px; height:9px; border-radius:50%; }
-  .desktop-bar .r{ background:#B5482E; }
-  .desktop-bar .y{ background:#E2A33D; }
-  .desktop-bar .g{ background:#4E8C6B; }
-  .desktop-bar .url{
-    margin-left:14px;
-    font-family:var(--mono);
-    font-size:0.7rem;
-    color:var(--slate);
-    background:rgba(244,237,217,0.06);
-    padding:4px 10px;
-    border-radius:6px;
-    flex:1;
-  }
-  .desktop-screen{
-    padding:20px;
-    display:grid;
-    grid-template-columns:110px 1fr;
-    gap:16px;
-    min-height:300px;
-  }
-  .d-side{
-    display:flex; flex-direction:column; gap:10px;
-  }
-  .d-pill{
-    height:10px; border-radius:5px;
-    background:rgba(244,237,217,0.1);
-  }
-  .d-pill.active{ background:var(--gold); }
-  .d-main .d-card{
-    background:rgba(244,237,217,0.06);
-    border:1px solid var(--line);
-    border-radius:10px;
-    padding:14px;
-    margin-bottom:12px;
-  }
-  .d-map{
-    height:90px;
-    border-radius:8px;
-    background:
-      linear-gradient(135deg, rgba(20,41,31,0.15), rgba(20,41,31,0.55)),
-      url('images/kribi.jpg') center/cover;
-    margin-bottom:10px;
-    position:relative;
-  }
-  .d-line{ height:8px; border-radius:4px; background:rgba(244,237,217,0.12); margin-bottom:8px; }
-  .d-line.w60{ width:60%; }
-  .d-line.w40{ width:40%; }
-
-  /* phone frame */
-  .phone-frame{
-    width:230px;
-    background:var(--ink-soft);
-    border:1px solid var(--line-strong);
-    border-radius:32px;
-    padding:10px;
-    box-shadow:0 40px 90px -30px rgba(0,0,0,0.6);
-  }
-  .phone-notch{
-    width:70px; height:16px;
-    background:var(--ink);
-    border-radius:0 0 12px 12px;
-    margin:0 auto 6px;
-  }
-  .phone-screen{
-    background:linear-gradient(160deg, #1E3A2C, #14291F 60%);
-    border-radius:22px;
-    padding:16px 14px;
-    min-height:420px;
-    display:flex;
-    flex-direction:column;
-    gap:12px;
-  }
-  .p-eyebrow{
-    font-family:var(--mono);
-    font-size:0.62rem;
-    letter-spacing:0.1em;
-    color:var(--gold);
-    text-transform:uppercase;
-  }
-  .p-title{
-    font-family:var(--display);
-    font-size:1.35rem;
-    letter-spacing:0.01em;
-  }
-  .p-map{
-    height:120px;
-    border-radius:12px;
-    background:
-      linear-gradient(135deg, rgba(20,41,31,0.1), rgba(20,41,31,0.55)),
-      url('images/mount-cameroon.jpg') center 30%/cover;
-  }
-  .p-card{
-    background:rgba(244,237,217,0.07);
-    border:1px solid var(--line);
-    border-radius:10px;
-    padding:10px 12px;
-  }
-  .p-card .t{ font-size:0.82rem; font-weight:600; margin-bottom:3px; }
-  .p-card .s{ font-size:0.72rem; color:var(--slate); }
-  .p-nav{
-    margin-top:auto;
-    display:flex;
-    justify-content:space-around;
-    padding-top:10px;
-    border-top:1px solid var(--line);
-  }
-  .p-nav .ic{
-    width:16px; height:16px;
-    border-radius:4px;
-    background:rgba(244,237,217,0.18);
-  }
-  .p-nav .ic.on{ background:var(--gold); }
-
-  /* ---------- gallery ---------- */
-  .gallery{
-    padding:20px 0 100px;
-  }
-  .gallery-head{
-    text-align:center;
-    margin-bottom:44px;
-  }
-  .gallery-head h2{
-    font-family:var(--display);
-    font-size:clamp(2rem,4vw,2.9rem);
-    letter-spacing:0.01em;
-  }
-  .gallery-head p{
-    color:var(--slate);
-    max-width:52ch;
-    margin:14px auto 0;
-  }
-
-  .gallery-grid{
-    display:grid;
-    grid-template-columns:repeat(4,1fr);
-    grid-auto-rows:160px;
-    gap:14px;
-  }
-  .gallery-grid .g-item:nth-child(1){ grid-column:span 2; grid-row:span 2; }
-  .gallery-grid .g-item:nth-child(4){ grid-column:span 2; }
-  .gallery-grid .g-item:nth-child(7){ grid-column:span 2; grid-row:span 2; }
-
-  .g-item{
-    position:relative;
-    border-radius:14px;
-    overflow:hidden;
-    cursor:default;
-  }
-  .g-item img{
-    width:100%; height:100%;
-    object-fit:cover;
-    transform:scale(1.02);
-    transition:transform .5s cubic-bezier(.2,.7,.2,1), filter .5s ease;
-    filter:saturate(0.92) brightness(0.94);
-  }
-  .g-item:hover img{
-    transform:scale(1.1);
-    filter:saturate(1.05) brightness(1);
-  }
-  .g-item::after{
-    content:"";
-    position:absolute; inset:0;
-    background:linear-gradient(0deg, rgba(20,41,31,0.75) 0%, transparent 55%);
-    pointer-events:none;
-  }
-  .g-item .g-label{
-    position:absolute;
-    left:14px; bottom:12px;
-    font-family:var(--mono);
-    font-size:0.74rem;
-    letter-spacing:0.06em;
-    text-transform:uppercase;
-    color:var(--cream);
-    opacity:0;
-    transform:translateY(8px);
-    transition:opacity .3s ease, transform .3s ease;
-  }
-  .g-item:hover .g-label{ opacity:1; transform:translateY(0); }
-
-  @media (max-width:820px){
-    .gallery-grid{ grid-template-columns:repeat(2,1fr); grid-auto-rows:140px; }
-    .gallery-grid .g-item:nth-child(1),
-    .gallery-grid .g-item:nth-child(7){ grid-column:span 2; grid-row:span 1; }
-  }
-
-  /* ---------- features ---------- */
-  .features{
-    padding:80px 0;
-    border-top:1px solid var(--line);
-  }
-
-  .feat-grid{
-    display:grid;
-    grid-template-columns:repeat(3,1fr);
-    gap:1px;
-    background:var(--line);
-    border:1px solid var(--line);
-    border-radius:14px;
-    overflow:hidden;
-  }
-
-  .feat{
-    background:var(--ink);
-    padding:32px 28px;
-    transition:background .25s ease;
-  }
-  .feat:hover{ background:var(--ink-soft); }
-
-  .feat .code{
-    font-family:var(--mono);
-    font-size:0.72rem;
-    color:var(--gold);
-    letter-spacing:0.1em;
-    margin-bottom:14px;
-    display:block;
-  }
-  .feat h3{
-    font-family:var(--display);
-    font-size:1.5rem;
-    letter-spacing:0.01em;
-    margin-bottom:10px;
-  }
-  .feat p{ color:var(--slate); font-size:0.94rem; }
-
-  @media (max-width:860px){
-    .feat-grid{ grid-template-columns:1fr; }
-  }
-
-  /* ---------- developer (passport page) ---------- */
-  .developer{
-    padding:80px 0;
-    border-top:1px solid var(--line);
-  }
-
-  .passport{
-    display:grid;
-    grid-template-columns:180px 1fr;
-    gap:36px;
-    background:var(--ink-soft);
-    border:1px solid var(--line-strong);
-    border-radius:18px;
-    padding:40px;
-    align-items:center;
-    position:relative;
-  }
-
-  .passport::before{
-    content:"BUILT BY";
-    position:absolute;
-    top:24px; right:40px;
-    font-family:var(--mono);
-    font-size:0.68rem;
-    letter-spacing:0.16em;
-    color:var(--gold);
-  }
-
-  .avatar{
-    width:140px; height:140px;
-    border-radius:14px;
-    background:linear-gradient(150deg, var(--gold), var(--rust));
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    font-family:var(--display);
-    font-size:3rem;
-    color:var(--ink);
-    letter-spacing:0.02em;
-    box-shadow:0 20px 40px -16px rgba(0,0,0,0.5);
-  }
-
-  .dev-info .k{
-    font-family:var(--mono);
-    font-size:0.68rem;
-    letter-spacing:0.12em;
-    color:var(--slate);
-    text-transform:uppercase;
-    margin-bottom:8px;
-  }
-
-  .dev-info h3{
-    font-family:var(--display);
-    font-size:2rem;
-    letter-spacing:0.01em;
-    margin-bottom:4px;
-  }
-
-  .dev-info .role{
-    font-family:var(--mono);
-    font-size:0.82rem;
-    color:var(--gold);
-    margin-bottom:16px;
-  }
-
-  .dev-info p.bio{
-    color:var(--slate);
-    max-width:56ch;
-    margin-bottom:20px;
-  }
-
-  .dev-links{
-    display:flex;
-    gap:14px;
-    flex-wrap:wrap;
-  }
-
-  .dev-link{
-    display:flex;
-    align-items:center;
-    gap:8px;
-    padding:9px 16px;
-    border-radius:999px;
-    border:1px solid var(--line-strong);
-    font-size:0.85rem;
-    font-weight:500;
-    transition:border-color .2s ease, background .2s ease;
-  }
-  .dev-link:hover{
-    border-color:var(--gold);
-    background:rgba(226,163,61,0.08);
-  }
-
-  @media (max-width:720px){
-    .passport{
-      grid-template-columns:1fr;
-      text-align:center;
-      padding:32px 24px;
-    }
-    .avatar{ margin:0 auto; }
-    .dev-links{ justify-content:center; }
-    .passport::before{ position:static; display:block; margin-bottom:18px; }
-  }
-
-  /* ---------- community ---------- */
-  .community{
-    padding:80px 0 100px;
-    border-top:1px solid var(--line);
-  }
-
-  .comm-head{
-    text-align:center;
-    margin-bottom:44px;
-  }
-  .comm-head h2{
-    font-family:var(--display);
-    font-size:clamp(2rem,4vw,2.9rem);
-  }
-  .comm-head p{ color:var(--slate); margin-top:12px; }
-
-  .comm-grid{
-    display:grid;
-    grid-template-columns:1fr 1fr;
-    gap:24px;
-  }
-
-  .comm-card{
-    background:var(--ink-soft);
-    border:1px solid var(--line-strong);
-    border-radius:16px;
-    padding:30px;
-    display:flex;
-    flex-direction:column;
-    gap:16px;
-  }
-
-  .comm-icon{
-    width:48px; height:48px;
-    border-radius:12px;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-  }
-  .comm-icon.fb{ background:#3B5A8A; }
-  .comm-icon.wa{ background:#3F8F5F; }
-
-  .comm-card h3{
-    font-family:var(--display);
-    font-size:1.4rem;
-    letter-spacing:0.01em;
-  }
-  .comm-card p{ color:var(--slate); font-size:0.92rem; flex:1; }
-
-  .comm-card .btn{ align-self:flex-start; }
-
-  @media (max-width:720px){
-    .comm-grid{ grid-template-columns:1fr; }
-  }
-
-  /* ---------- footer ---------- */
-  footer{
-    border-top:1px solid var(--line);
-    padding:36px 0;
-  }
-  .foot-row{
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-    flex-wrap:wrap;
-    gap:16px;
-  }
-  .foot-row .brand{ font-size:1.1rem; }
-  footer .fine{
-    font-family:var(--mono);
-    font-size:0.72rem;
-    color:var(--slate);
-    letter-spacing:0.04em;
-  }
-
+/* ==================== RESET & BASE ==================== */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: 'Inter', sans-serif;
+  color: #F5EDD9;
+  line-height: 1.6;
+  overflow-x: hidden;
+  background: #0A0F0E;
+}
+
+/* ==================== AFRICAN SUNSET THEME ==================== */
+:root {
+  /* Primary Colors - Deep African Night */
+  --bg-primary: #0A0F0E;
+  --bg-secondary: #1A120E;
+  --bg-tertiary: #1F1814;
+  
+  /* Card Backgrounds - Glass with Earthy Tones */
+  --bg-card: rgba(26, 18, 14, 0.55);
+  --bg-card-hover: rgba(44, 74, 58, 0.45);
+  --bg-glass-light: rgba(255, 255, 255, 0.04);
+  --bg-glass-medium: rgba(255, 255, 255, 0.07);
+  --bg-glass-heavy: rgba(255, 255, 255, 0.10);
+  
+  /* Accent Colors - African Sunset Palette */
+  --gold: #D4A845;
+  --gold-light: #F0D080;
+  --gold-dim: rgba(212, 168, 69, 0.15);
+  --terracotta: #B84A2E;
+  --terracotta-dim: rgba(184, 74, 46, 0.15);
+  --sunset: #E8753A;
+  --sunset-dim: rgba(232, 117, 58, 0.15);
+  --forest: #2C4A3A;
+  --forest-dim: rgba(44, 74, 58, 0.15);
+  --ocean: #2C7A73;
+  --ocean-dim: rgba(44, 122, 115, 0.15);
+  --savanna: #8A9A5A;
+  --savanna-dim: rgba(138, 154, 90, 0.15);
+  
+  /* Text Colors */
+  --text-primary: #F5EDD9;
+  --text-secondary: rgba(245, 237, 217, 0.75);
+  --text-muted: rgba(245, 237, 217, 0.45);
+  
+  /* Borders & Effects */
+  --border-color: rgba(245, 237, 217, 0.06);
+  --border-gold: rgba(212, 168, 69, 0.15);
+  --shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
+  --shadow-gold: 0 8px 40px rgba(212, 168, 69, 0.15);
+  --glow-gold: 0 0 30px rgba(212, 168, 69, 0.08);
+  
+  /* Gradients */
+  --gradient-sunset: linear-gradient(135deg, #D4A845, #E8753A);
+  --gradient-forest: linear-gradient(135deg, #2C4A3A, #1A3A2C);
+  --gradient-ocean: linear-gradient(135deg, #2C7A73, #1A5A55);
+  --gradient-warm: linear-gradient(135deg, #1A120E, #2C4A3A);
+  
+  /* Typography */
+  --display: 'Fraunces', serif;
+  --mono: 'IBM Plex Mono', monospace;
+  --body: 'Inter', sans-serif;
+}
+
+/* ==================== BACKGROUND SLIDESHOW ==================== */
+.hero {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+  padding: 80px 0 60px;
+  background: var(--bg-primary);
+}
+
+.slideshow {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.slide {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  opacity: 0;
+  transition: opacity 1.5s ease-in-out;
+  will-change: opacity;
+  transform: translateZ(0);
+}
+.slide.active { opacity: 1; }
+.slide::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(10, 15, 14, 0.7) 0%, rgba(26, 18, 14, 0.4) 50%, rgba(10, 15, 14, 0.7) 100%);
+}
+
+/* ==================== UTILITIES ==================== */
+.container { 
+  max-width: 1200px; 
+  margin: 0 auto; 
+  padding: 0 24px; 
+  position: relative;
+  z-index: 2;
+}
+.text-center { text-align: center; }
+.text-gold { color: var(--gold); }
+.text-terracotta { color: var(--terracotta); }
+.text-sunset { color: var(--sunset); }
+.text-muted { color: var(--text-secondary); }
+.section-padding { padding: 80px 0; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; align-items: center; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 30px; }
+.mb-16 { margin-bottom: 16px; }
+.mb-24 { margin-bottom: 24px; }
+.mb-32 { margin-bottom: 32px; }
+
+/* ==================== BUTTONS ==================== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 36px;
+  border-radius: 50px;
+  font-weight: 600;
+  font-size: 1rem;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-decoration: none;
+  font-family: var(--body);
+  backdrop-filter: blur(10px);
+}
+.btn-primary {
+  background: var(--gradient-sunset);
+  color: #0A0F0E;
+  box-shadow: 0 4px 20px rgba(212, 168, 69, 0.25);
+}
+.btn-primary:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 40px rgba(212, 168, 69, 0.35);
+}
+.btn-outline {
+  background: var(--bg-glass-light);
+  color: var(--text-primary);
+  border: 1px solid var(--border-gold);
+}
+.btn-outline:hover {
+  border-color: var(--gold);
+  background: var(--gold-dim);
+  transform: translateY(-3px);
+}
+.btn-download {
+  background: var(--bg-glass-light);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  padding: 14px 28px;
+  font-size: 0.9rem;
+  justify-content: center;
+}
+.btn-download:hover {
+  background: var(--gradient-sunset);
+  color: #0A0F0E;
+  transform: translateY(-3px);
+  border-color: var(--gold);
+}
+.btn-download .badge {
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  color: var(--gold);
+  background: var(--gold-dim);
+  padding: 2px 10px;
+  border-radius: 50px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.btn-download:hover .badge {
+  color: #0A0F0E;
+  background: rgba(10, 15, 14, 0.15);
+}
+.btn-web {
+  background: var(--gradient-sunset);
+  color: #0A0F0E;
+  padding: 14px 32px;
+  font-size: 0.95rem;
+  box-shadow: 0 4px 20px rgba(212, 168, 69, 0.25);
+}
+.btn-web:hover {
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 0 12px 40px rgba(212, 168, 69, 0.35);
+}
+.btn-community {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 32px;
+  border-radius: 50px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-decoration: none;
+  font-family: var(--body);
+}
+.btn-facebook {
+  background: #1877F2;
+  color: #fff;
+  box-shadow: 0 4px 20px rgba(24, 119, 242, 0.3);
+}
+.btn-facebook:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 40px rgba(24, 119, 242, 0.4);
+}
+.btn-whatsapp {
+  background: #25D366;
+  color: #fff;
+  box-shadow: 0 4px 20px rgba(37, 211, 102, 0.3);
+}
+.btn-whatsapp:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 40px rgba(37, 211, 102, 0.4);
+}
+.btn-analytics {
+  background: var(--bg-glass-light);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  padding: 10px 20px;
+  font-size: 0.8rem;
+}
+.btn-analytics:hover {
+  border-color: var(--gold);
+  color: var(--gold);
+  background: var(--gold-dim);
+}
+
+/* ==================== HEADER ==================== */
+header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: rgba(10, 15, 14, 0.6);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border-color);
+}
+nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 0;
+}
+.logo {
+  font-family: var(--display);
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.logo span { color: var(--gold); }
+.logo .dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--gradient-sunset);
+  margin-right: 8px;
+}
+.nav-links {
+  display: flex;
+  gap: 32px;
+  list-style: none;
+  align-items: center;
+}
+.nav-links a {
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: color 0.3s;
+}
+.nav-links a:hover { color: var(--gold); }
+.nav-links .btn { padding: 10px 24px; font-size: 0.85rem; }
+.menu-toggle {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font-size: 1.8rem;
+  cursor: pointer;
+  padding: 4px;
+}
+
+@media (max-width: 768px) {
+  .menu-toggle { display: block; }
+  .nav-links {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: rgba(10, 15, 14, 0.95);
+    backdrop-filter: blur(16px);
+    flex-direction: column;
+    padding: 24px;
+    gap: 16px;
+    border-bottom: 1px solid var(--border-color);
+  }
+  .nav-links.open { display: flex; }
+  .grid-2 { grid-template-columns: 1fr; gap: 40px; text-align: center; }
+  .grid-3 { grid-template-columns: 1fr; }
+}
+
+/* ==================== HERO CONTENT ==================== */
+.hero-content {
+  position: relative;
+  z-index: 2;
+  max-width: 600px;
+  background: var(--bg-card);
+  backdrop-filter: blur(16px);
+  padding: 48px 40px;
+  border-radius: 20px;
+  border: 1px solid var(--border-gold);
+  box-shadow: var(--shadow), var(--glow-gold);
+}
+.hero-badge {
+  display: inline-block;
+  padding: 6px 18px;
+  border: 1px solid var(--border-gold);
+  border-radius: 50px;
+  font-size: 0.75rem;
+  color: var(--gold);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  margin-bottom: 24px;
+  font-family: var(--mono);
+  text-transform: uppercase;
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+@keyframes pulse-glow {
+  0%, 100% { border-color: rgba(212, 168, 69, 0.2); box-shadow: 0 0 20px rgba(212, 168, 69, 0.05); }
+  50% { border-color: rgba(212, 168, 69, 0.5); box-shadow: 0 0 30px rgba(212, 168, 69, 0.15); }
+}
+.hero h1 {
+  font-family: var(--display);
+  font-size: clamp(2.8rem, 5vw, 4.5rem);
+  line-height: 1.05;
+  font-weight: 700;
+  margin-bottom: 20px;
+}
+.hero h1 span { 
+  background: var(--gradient-sunset);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.hero p {
+  font-size: 1.05rem;
+  color: var(--text-secondary);
+  margin-bottom: 36px;
+  max-width: 480px;
+}
+.hero-buttons { display: flex; gap: 16px; flex-wrap: wrap; }
+
+@media (max-width: 900px) {
+  .hero-content { 
+    max-width: 100%; 
+    padding: 36px 24px;
+    margin: 0;
+  }
+  .hero p { max-width: 100%; }
+  .hero-buttons { justify-content: center; }
+}
+
+/* ==================== SECTION HEADERS ==================== */
+.section-header { margin-bottom: 48px; }
+.section-header h2 {
+  font-family: var(--display);
+  font-size: clamp(2rem, 3.5vw, 3rem);
+  font-weight: 700;
+  position: relative;
+  display: inline-block;
+}
+.section-header h2::after {
+  content: '';
+  position: absolute;
+  bottom: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 60px;
+  height: 3px;
+  background: var(--gradient-sunset);
+  border-radius: 2px;
+}
+.section-header p { color: var(--text-secondary); max-width: 560px; margin: 20px auto 0; }
+
+/* ==================== FEATURES ==================== */
+.features { background: transparent; }
+.feature-card {
+  padding: 36px 28px;
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  border-radius: 16px;
+  border: 1px solid var(--border-gold);
+  transition: all 0.4s ease;
+  position: relative;
+  overflow: hidden;
+}
+.feature-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--gradient-sunset);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+.feature-card:hover::before { opacity: 1; }
+.feature-card:hover {
+  transform: translateY(-6px);
+  border-color: var(--gold);
+  background: var(--bg-card-hover);
+  box-shadow: var(--shadow), var(--glow-gold);
+}
+.feature-icon { font-size: 2.8rem; display: block; margin-bottom: 16px; }
+.feature-card h3 { font-size: 1.2rem; font-weight: 700; margin-bottom: 8px; }
+.feature-card p { color: var(--text-secondary); font-size: 0.95rem; }
+
+/* ==================== DESTINATIONS ==================== */
+.dest-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+.dest-item {
+  border-radius: 14px;
+  overflow: hidden;
+  position: relative;
+  height: 300px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: all 0.4s ease;
+}
+.dest-item:hover {
+  transform: scale(1.04);
+  border-color: var(--gold);
+  z-index: 10;
+  box-shadow: var(--shadow), var(--glow-gold);
+}
+.dest-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.5s ease;
+}
+.dest-item:hover img { transform: scale(1.1); }
+.dest-item .overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(0deg, rgba(10, 15, 14, 0.85) 0%, transparent 60%);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 24px;
+}
+.dest-item .overlay span {
+  font-weight: 700;
+  font-size: 1.2rem;
+  color: var(--text-primary);
+}
+.dest-item .overlay small {
+  font-weight: 400;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+.dest-item .overlay .tag {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  padding: 4px 14px;
+  background: rgba(10, 15, 14, 0.7);
+  backdrop-filter: blur(8px);
+  border-radius: 50px;
+  font-size: 0.7rem;
+  color: var(--gold);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border: 1px solid var(--border-gold);
+}
+.dest-item .error-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 3rem;
+  background: var(--bg-secondary);
+  color: var(--gold-dim);
+}
+@media (max-width: 992px) {
+  .dest-grid { grid-template-columns: repeat(2, 1fr); }
+  .dest-item { height: 250px; }
+}
+@media (max-width: 480px) {
+  .dest-grid { grid-template-columns: 1fr; }
+  .dest-item { height: 220px; }
+}
+
+/* ==================== DOWNLOAD SECTION ==================== */
+.download-section { background: transparent; }
+.download-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 30px;
+  max-width: 700px;
+  margin: 0 auto;
+}
+.download-card {
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-gold);
+  border-radius: 16px;
+  padding: 40px 32px;
+  text-align: center;
+  transition: all 0.4s ease;
+}
+.download-card:hover {
+  transform: translateY(-6px);
+  border-color: var(--gold);
+  background: var(--bg-card-hover);
+  box-shadow: var(--shadow), var(--glow-gold);
+}
+.download-card .icon { font-size: 3rem; display: block; margin-bottom: 12px; }
+.download-card h3 { font-size: 1.2rem; font-weight: 700; }
+.download-card p { color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 20px; }
+@media (max-width: 600px) {
+  .download-grid { grid-template-columns: 1fr; }
+}
+
+/* ==================== COMMUNITY SECTION ==================== */
+.community-section { background: transparent; }
+.community-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 30px;
+  max-width: 700px;
+  margin: 0 auto;
+}
+.community-card {
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-gold);
+  border-radius: 16px;
+  padding: 40px 32px;
+  text-align: center;
+  transition: all 0.4s ease;
+}
+.community-card:hover {
+  transform: translateY(-6px);
+  border-color: var(--gold);
+  background: var(--bg-card-hover);
+  box-shadow: var(--shadow), var(--glow-gold);
+}
+.community-card .icon { font-size: 3.5rem; display: block; margin-bottom: 12px; }
+.community-card h3 { font-size: 1.2rem; font-weight: 700; }
+.community-card p { color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 20px; }
+@media (max-width: 600px) {
+  .community-grid { grid-template-columns: 1fr; }
+}
+
+/* ==================== CTA ==================== */
+.cta-section { padding: 80px 0; text-align: center; }
+.cta-section h2 { 
+  font-family: var(--display); 
+  font-size: clamp(2rem, 3.5vw, 3rem); 
+  margin-bottom: 16px;
+}
+.cta-section h2 span {
+  background: var(--gradient-sunset);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.cta-section p { color: var(--text-secondary); max-width: 560px; margin: 0 auto 32px; }
+.cta-buttons { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+
+/* ==================== FOOTER ==================== */
+footer {
+  border-top: 1px solid var(--border-color);
+  padding: 48px 0 24px;
+  background: rgba(10, 15, 14, 0.5);
+  backdrop-filter: blur(12px);
+}
+.footer-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 40px;
+  margin-bottom: 40px;
+}
+.footer-brand p { color: var(--text-secondary); max-width: 300px; margin-top: 8px; }
+.footer-col h4 { font-size: 0.9rem; font-weight: 600; margin-bottom: 16px; color: var(--text-primary); }
+.footer-col ul { list-style: none; }
+.footer-col ul li { margin-bottom: 8px; }
+.footer-col ul a { 
+  color: var(--text-secondary); 
+  text-decoration: none; 
+  font-size: 0.9rem; 
+  transition: color 0.3s; 
+}
+.footer-col ul a:hover { color: var(--gold); }
+.footer-bottom {
+  border-top: 1px solid var(--border-color);
+  padding-top: 24px;
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+@media (max-width: 768px) {
+  .footer-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 480px) {
+  .footer-grid { grid-template-columns: 1fr; }
+}
+
+/* ==================== SLIDE INDICATORS ==================== */
+.slide-indicators {
+  position: absolute;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: flex;
+  gap: 10px;
+}
+.slide-indicator {
+  width: 40px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(245, 237, 217, 0.2);
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+.slide-indicator.active {
+  background: var(--gradient-sunset);
+  width: 60px;
+}
+.slide-indicator:hover { background: rgba(245, 237, 217, 0.4); }
+
+/* ==================== REVEAL ANIMATIONS ==================== */
+.reveal {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity 0.8s ease, transform 0.8s ease;
+}
+.reveal.active {
+  opacity: 1;
+  transform: translateY(0);
+}
+.reveal-1 { transition-delay: 0.05s; }
+.reveal-2 { transition-delay: 0.15s; }
+.reveal-3 { transition-delay: 0.25s; }
+.reveal-4 { transition-delay: 0.35s; }
 </style>
 </head>
 <body>
 
-  <header>
-    <div class="wrap nav">
-      <div class="brand"><span class="dot"></span>FAST TRAVEL</div>
-      <nav class="navlinks">
-        <a href="#showcase">The App</a>
-        <a href="#gallery">Destinations</a>
-        <a href="#features">Features</a>
-        <a href="#developer">Developer</a>
-        <a href="#community">Community</a>
-      </nav>
-      <a href="analytics.html" class="nav-analytics-btn">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M4 20V10M12 20V4M20 20v-7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
-        Analytics
-      </a>
-    </div>
-  </header>
+<!-- ==================== BACKGROUND SLIDESHOW ==================== -->
+<div class="hero" id="heroSection">
+  <div class="slideshow" id="slideshow">
+    <div class="slide active" style="background-image: url('images/olembe-stadium.jpg');"></div>
+    <div class="slide" style="background-image: url('images/mount-cameroon.jpg');"></div>
+    <div class="slide" style="background-image: url('images/kribi.jpg');"></div>
+    <div class="slide" style="background-image: url('images/waza-national-park.jpg');"></div>
+    <div class="slide" style="background-image: url('images/reunification-monument.jpg');"></div>
+    <div class="slide" style="background-image: url('images/lobe-waterfalls.jpg');"></div>
+    <div class="slide" style="background-image: url('images/rhumsiki.jpg');"></div>
+    <div class="slide" style="background-image: url('images/limbe-beach.jpg');"></div>
+    <div class="slide" style="background-image: url('images/national-museum.jpg');"></div>
+    <div class="slide" style="background-image: url('images/foumban-royal-palace.jpg');"></div>
+  </div>
+  
+  <div class="slide-indicators" id="slideIndicators"></div>
 
-  <section class="hero">
-    <div class="wrap">
-      <div class="eyebrow-row reveal"><span class="rule"></span>Boarding now</div>
-      <div class="hero-grid">
-        <div class="reveal reveal-1">
-          <h1>Your next trip,<br>fully <span>boarded.</span></h1>
-          <p class="lede">Fast Travel plans the route, books the stops, and hands you an itinerary worth keeping — on your phone in the terminal, on your desktop back home.</p>
-        </div>
+<!-- ==================== HEADER ==================== -->
+<header>
+  <div class="container">
+    <nav>
+      <div class="logo"><span class="dot"></span>FAST<span>TRAVEL</span></div>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="#features">Features</a></li>
+        <li><a href="#destinations">Destinations</a></li>
+        <li><a href="#download">Download</a></li>
+        <li><a href="#community">Community</a></li>
+        <li><a href="analytics.html" class="btn-analytics">📊 Analytics</a></li>
+        <li><a href="#cta" class="btn btn-primary" style="padding: 10px 24px; font-size: 0.85rem;">Get Started</a></li>
+      </ul>
+      <button class="menu-toggle" id="menuToggle" aria-label="Toggle menu">☰</button>
+    </nav>
+  </div>
+</header>
 
-        <div class="pass-float reveal reveal-2">
-        <div class="pass">
-          <div class="pass-top">
-            <div class="pass-field">
-              <div class="k">Passenger</div>
-              <div class="v">You</div>
-            </div>
-            <div class="pass-field right">
-              <div class="k">Class</div>
-              <div class="v">Free</div>
-            </div>
-          </div>
-
-          <div class="perf"></div>
-
-          <div class="pass-bottom">
-            <div class="pass-route">
-              <div class="city">HOME<small>Origin</small></div>
-              <div class="plane">
-                <svg width="44" height="20" viewBox="0 0 44 20" fill="none">
-                  <path d="M2 10 H34" stroke="#14291F" stroke-width="1"/>
-                  <path d="M28 4 L40 10 L28 16 L30 10 Z" fill="#14291F"/>
-                </svg>
-              </div>
-              <div class="city">EVERYWHERE<small>Destination</small></div>
-            </div>
-
-            <div class="cta-row">
-              <a href="#" id="mobile-download-btn" class="btn btn-primary" onclick="trackDownload('mobile')">
-                Get it on Mobile <span class="tag">Android</span>
-              </a>
-              <a href="#" class="btn btn-outline" onclick="trackDownload('desktop')">
-                Get it on Desktop <span class="tag">Win · Mac · Linux</span>
-              </a>
-            </div>
-
-            <div class="barcode"></div>
-          </div>
-        </div>
-        </div>
+<!-- ==================== HERO CONTENT ==================== -->
+<div class="container" style="position:relative;z-index:2;margin-top:80px;">
+  <div class="grid-2">
+    <div class="hero-content">
+      <span class="hero-badge">✦ Boarding Now</span>
+      <h1>Your next trip,<br>fully <span>boarded.</span></h1>
+      <p>Fast Travel plans the route, books the stops, and hands you an itinerary worth keeping — on your phone in the terminal, on your desktop back home.</p>
+      <div class="hero-buttons">
+        <a href="#download" class="btn btn-primary">Download for Free →</a>
+        <a href="#cta" class="btn btn-outline">Try Web App</a>
       </div>
     </div>
-  </section>
+    <div></div>
+  </div>
+</div>
+</div>
 
-  <section class="showcase" id="showcase">
-    <div class="wrap">
-      <div class="showcase-head reveal">
-        <h2>One itinerary, every screen</h2>
-        <p>Plan a trip on the desktop app over coffee, then pull up the same route on your phone the moment you land.</p>
+<!-- ==================== FEATURES ==================== -->
+<section class="features section-padding" id="features">
+  <div class="container">
+    <div class="section-header text-center">
+      <h2>Built for <span class="text-gold">travelers</span></h2>
+      <p>Everything you need to explore Cameroon and beyond — all in one app.</p>
+    </div>
+    <div class="grid-3">
+      <div class="feature-card reveal reveal-1">
+        <span class="feature-icon">🗺️</span>
+        <h3>Curated Destinations</h3>
+        <p>Hand-picked places across Cameroon — from urban landmarks to natural wonders.</p>
       </div>
-
-      <div class="devices">
-        <div class="phone-frame reveal reveal-1">
-          <div class="phone-notch"></div>
-          <div class="phone-screen">
-            <div>
-              <div class="p-eyebrow">Trip · Day 3</div>
-              <div class="p-title">Lisbon</div>
-            </div>
-            <div class="p-map"></div>
-            <div class="p-card">
-              <div class="t">Belém Tower</div>
-              <div class="s">9:00 AM · 45 min walk</div>
-            </div>
-            <div class="p-card">
-              <div class="t">Pastéis de Belém</div>
-              <div class="s">10:15 AM · Local pick</div>
-            </div>
-            <div class="p-nav">
-              <div class="ic on"></div>
-              <div class="ic"></div>
-              <div class="ic"></div>
-              <div class="ic"></div>
-            </div>
-          </div>
-        </div>
-
-        <div class="desktop-frame reveal reveal-2">
-          <div class="desktop-bar">
-            <span class="dotx r"></span><span class="dotx y"></span><span class="dotx g"></span>
-            <div class="url">fasttravel.app/trips/lisbon</div>
-          </div>
-          <div class="desktop-screen">
-            <div class="d-side">
-              <div class="d-pill active"></div>
-              <div class="d-pill"></div>
-              <div class="d-pill"></div>
-              <div class="d-pill"></div>
-              <div class="d-pill"></div>
-            </div>
-            <div class="d-main">
-              <div class="d-map"></div>
-              <div class="d-card">
-                <div class="d-line w60"></div>
-                <div class="d-line w40"></div>
-              </div>
-              <div class="d-card">
-                <div class="d-line w60"></div>
-                <div class="d-line w40"></div>
-              </div>
-            </div>
-          </div>
-        </div>
+      <div class="feature-card reveal reveal-2">
+        <span class="feature-icon">📱</span>
+        <h3>Offline Ready</h3>
+        <p>Access your itineraries and destination guides even without internet.</p>
+      </div>
+      <div class="feature-card reveal reveal-3">
+        <span class="feature-icon">🤖</span>
+        <h3>AI Travel Assistant</h3>
+        <p>Get personalized recommendations and plan your perfect trip in seconds.</p>
       </div>
     </div>
-  </section>
+  </div>
+</section>
 
-  <section class="gallery" id="gallery">
-    <div class="wrap">
-      <div class="gallery-head reveal">
-        <h2>Where you're headed</h2>
-        <p>A taste of what's waiting — coastline, waterfalls, palaces, and peaks, all inside the app.</p>
+<!-- ==================== DESTINATIONS ==================== -->
+<section class="section-padding" id="destinations">
+  <div class="container">
+    <div class="section-header text-center">
+      <h2>Explore <span class="text-gold">Cameroon</span></h2>
+      <p>Discover the most remarkable places Cameroon has to offer.</p>
+    </div>
+    <div class="dest-grid" id="destGrid">
+      <!-- Destinations rendered by JavaScript -->
+    </div>
+  </div>
+</section>
+
+<!-- ==================== DOWNLOAD SECTION ==================== -->
+<section class="download-section section-padding" id="download">
+  <div class="container">
+    <div class="section-header text-center">
+      <h2>Get the <span class="text-gold">app</span></h2>
+      <p>Available on your phone and in your browser.</p>
+    </div>
+    <div class="download-grid">
+      <div class="download-card reveal reveal-1">
+        <span class="icon">📱</span>
+        <h3>Mobile App</h3>
+        <p>Take your itineraries with you on the go. Available for Android.</p>
+        <a href="#" class="btn btn-download" onclick="trackDownload('mobile')">
+          Download for Android
+          <span class="badge">APK</span>
+        </a>
       </div>
-      <div class="gallery-grid" id="galleryGrid">
-        <noscript>
-          <div class="g-item"><img src="images/olembe-stadium.jpg" alt="Olembe Stadium"><span class="g-label">Olembe Stadium</span></div>
-          <div class="g-item"><img src="images/kribi.jpg" alt="Kribi coastline"><span class="g-label">Kribi</span></div>
-          <div class="g-item"><img src="images/mount-cameroon.jpg" alt="Mount Cameroon"><span class="g-label">Mount Cameroon</span></div>
-          <div class="g-item"><img src="images/reunification-monument.jpg" alt="Reunification Monument"><span class="g-label">Reunification Monument</span></div>
-          <div class="g-item"><img src="images/foumban-royal-palace.jpg" alt="Foumban Royal Palace"><span class="g-label">Foumban Royal Palace</span></div>
-          <div class="g-item"><img src="images/rhumsiki.jpg" alt="Rhumsiki peaks"><span class="g-label">Rhumsiki</span></div>
-          <div class="g-item"><img src="images/lobe-waterfalls.jpg" alt="Lobé Waterfalls"><span class="g-label">Lobé Waterfalls</span></div>
-          <div class="g-item"><img src="images/waza-national-park.jpg" alt="Waza National Park"><span class="g-label">Waza National Park</span></div>
-        </noscript>
+      <div class="download-card reveal reveal-2">
+        <span class="icon">🌐</span>
+        <h3>Web App</h3>
+        <p>Access Fast Travel from any browser — no download needed.</p>
+        <a href="https://fasttravel-web.duckdns.org" target="_blank" class="btn btn-web">
+          Go to Web App →
+          <span class="badge" style="background:rgba(10,15,14,0.15);color:#0A0F0E;">Live</span>
+        </a>
       </div>
     </div>
-  </section>
+  </div>
+</section>
 
-  <section class="features" id="features">
-    <div class="wrap">
-      <div class="feat-grid">
-        <div class="feat reveal reveal-1">
-          <span class="code">DEST</span>
-          <h3>Destinations worth landing on</h3>
-          <p>A curated set of places, each with what it's actually known for — no filler, no generic top-ten lists.</p>
-        </div>
-        <div class="feat reveal reveal-2">
-          <span class="code">PLAN</span>
-          <h3>Itineraries that hold together</h3>
-          <p>Build a day-by-day route and keep it in sync across every device you own.</p>
-        </div>
-        <div class="feat reveal reveal-3">
-          <span class="code">SUGG</span>
-          <h3>Recommendations that fit the trip</h3>
-          <p>Suggestions shaped by where you're going and how long you're staying — not a generic feed.</p>
-        </div>
+<!-- ==================== COMMUNITY SECTION ==================== -->
+<section class="community-section section-padding" id="community">
+  <div class="container">
+    <div class="section-header text-center">
+      <h2>Join the <span class="text-gold">community</span></h2>
+      <p>Connect with fellow travelers, share experiences, and get the latest updates.</p>
+    </div>
+    <div class="community-grid">
+      <div class="community-card reveal reveal-1">
+        <span class="icon">👥</span>
+        <h3>Facebook Group</h3>
+        <p>Join our Facebook community to share itineraries, ask questions, and connect with other travelers.</p>
+        <a href="https://www.facebook.com/share/g/19KE73KPt7/" target="_blank" class="btn btn-facebook">
+          <span>📘</span> Join Facebook Group
+        </a>
+      </div>
+      <div class="community-card reveal reveal-2">
+        <span class="icon">💬</span>
+        <h3>WhatsApp Community</h3>
+        <p>Get real-time updates, quick answers, and connect with travelers on the go.</p>
+        <a href="https://chat.whatsapp.com/FrxzSjXu47U9K5gEU1Cpbc" target="_blank" class="btn btn-whatsapp">
+          <span>💚</span> Join WhatsApp
+        </a>
       </div>
     </div>
-  </section>
+  </div>
+</section>
 
-  <section class="developer" id="developer">
-    <div class="wrap">
-      <div class="passport reveal">
-        <div class="avatar">KJ</div>
-        <div class="dev-info">
-          <div class="k">Passport · Developer</div>
-          <h3>Kwete Ngnouba Junior Rayan</h3>
-          <div class="role">Full-Stack Developer · Flutter &amp; FastAPI</div>
-          <p class="bio">Building Fast Travel end to end — Flutter on the front, FastAPI on the back, and everything in between: from the itinerary engine to the pipeline that ships it. Based in Yaoundé, currently studying Software Engineering at ICT University.</p>
-          <div class="dev-links">
-            <a href="https://github.com/Suraku237" class="dev-link" target="_blank" rel="noopener">
-              GitHub
-            </a>
-            <a href="https://www.linkedin.com/in/kwete-ngnouba-junior-rayan-643b97402/" class="dev-link" target="_blank" rel="noopener">
-              LinkedIn
-            </a>
-            <a href="mailto:kwetejunior9@gmail.com" class="dev-link">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M3 5h18a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm1.4 2 7.1 5.6a1 1 0 0 0 1 0L19.6 7H4.4Z" fill="var(--cream)"/></svg>
-              Email
-            </a>
-          </div>
-        </div>
+<!-- ==================== CTA ==================== -->
+<section class="cta-section" id="cta">
+  <div class="container">
+    <h2>Ready to <span>explore</span>?</h2>
+    <p>Join thousands of travelers discovering Cameroon with Fast Travel.</p>
+    <div class="cta-buttons">
+      <a href="#download" class="btn btn-primary">Download for Free →</a>
+      <a href="https://fasttravel-web.duckdns.org" target="_blank" class="btn btn-web">Try Web App →</a>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== FOOTER ==================== -->
+<footer>
+  <div class="container">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <div class="logo"><span class="dot"></span>FAST<span>TRAVEL</span></div>
+        <p>Discover Cameroon's most remarkable places with confidence.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Product</h4>
+        <ul>
+          <li><a href="#features">Features</a></li>
+          <li><a href="#destinations">Destinations</a></li>
+          <li><a href="#download">Download</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Community</h4>
+        <ul>
+          <li><a href="https://www.facebook.com/share/g/19KE73KPt7/" target="_blank">Facebook</a></li>
+          <li><a href="https://chat.whatsapp.com/FrxzSjXu47U9K5gEU1Cpbc" target="_blank">WhatsApp</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Support</h4>
+        <ul>
+          <li><a href="analytics.html">Analytics</a></li>
+          <li><a href="#">Help Center</a></li>
+          <li><a href="#">Privacy Policy</a></li>
+        </ul>
       </div>
     </div>
-  </section>
+    <div class="footer-bottom">
+      <span>&copy; 2026 Fast Travel. All rights reserved.</span>
+      <span>Built for travelers, by travelers ❤️</span>
+    </div>
+  </div>
+</footer>
 
-  <section class="community" id="community">
-    <div class="wrap">
-      <div class="comm-head reveal">
-        <h2>Travel with company</h2>
-        <p>Swap routes, ask questions, and hear what's new before it ships.</p>
-      </div>
+<script>
+// ==================== DESTINATIONS DATA ====================
+const destinations = [
+  { name: "Olembe Stadium", location: "Yaoundé", tag: "Landmark", image: "images/olembe-stadium.jpg" },
+  { name: "Mount Cameroon", location: "Buea", tag: "Nature", image: "images/mount-cameroon.jpg" },
+  { name: "Kribi Beach", location: "Kribi", tag: "Beach", image: "images/kribi.jpg" },
+  { name: "Waza National Park", location: "Far North", tag: "Wildlife", image: "images/waza-national-park.jpg" },
+  { name: "Reunification Monument", location: "Yaoundé", tag: "Monument", image: "images/reunification-monument.jpg" },
+  { name: "Lobé Waterfalls", location: "Kribi", tag: "Nature", image: "images/lobe-waterfalls.jpg" },
+  { name: "Foumban Royal Palace", location: "Foumban", tag: "History", image: "images/foumban-royal-palace.jpg" },
+  { name: "Rhumsiki Peaks", location: "Rhumsiki", tag: "Mountains", image: "images/rhumsiki.jpg" },
+  { name: "Limbe Beach", location: "Limbe", tag: "Beach", image: "images/limbe-beach.jpg" },
+  { name: "National Museum", location: "Yaoundé", tag: "Museum", image: "images/national-museum.jpg" },
+  { name: "Bafut Palace", location: "Bafut", tag: "History", image: "images/bafut-palace.jpg" },
+  { name: "Korup National Park", location: "Korup", tag: "Wildlife", image: "images/korup-national-park.jpg" },
+  { name: "Unity Palace", location: "Yaoundé", tag: "Landmark", image: "images/unity-palace.jpg" },
+  { name: "La Nouvelle Liberté", location: "Yaoundé", tag: "Monument", image: "images/la-nouvelle-liberte.jpg" }
+];
 
-      <div class="comm-grid">
-        <div class="comm-card reveal reveal-1">
-          <div class="comm-icon fb">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M15 8.5h2.5V5.2C17.1 5.1 15.9 5 14.6 5c-2.7 0-4.6 1.7-4.6 4.7V12H7v3.5h3v8.4h3.6v-8.4h3l.5-3.5h-3.5V9.9c0-1 .3-1.4 1.4-1.4Z" fill="#F4EDD9"/></svg>
-          </div>
-          <h3>Facebook Group</h3>
-          <p>Join travelers planning real trips with Fast Travel — share itineraries, ask locals-in-the-know, and post from the road.</p>
-          <a href="https://www.facebook.com/share/g/19KE73KPt7/" class="dev-link" target="_blank" rel="noopener">
-              facebook
-            </a>
-        </div>
+// ==================== BACKGROUND SLIDESHOW ====================
+const slides = document.querySelectorAll('.slide');
+let currentSlide = 0;
+let slideInterval;
 
-        <div class="comm-card reveal reveal-2">
-          <div class="comm-icon wa">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 3a9 9 0 0 0-7.7 13.6L3 21l4.6-1.2A9 9 0 1 0 12 3Zm0 1.7a7.3 7.3 0 1 1 0 14.6 7.2 7.2 0 0 1-3.7-1l-.3-.2-2.7.7.7-2.6-.2-.3A7.3 7.3 0 0 1 12 4.7Zm-2.7 3.1c-.2 0-.4 0-.6.3-.2.3-.7.9-.7 2s.8 2.3 1 2.5c.1.2 1.7 2.6 4 3.5 2 .8 2.4.6 2.8.6.4 0 1.3-.5 1.5-1 .2-.5.2-1 .1-1-.1-.2-.2-.3-.5-.4l-1.7-.8c-.2-.1-.4-.1-.6.1l-.6.9c-.1.2-.3.2-.5.1-.7-.3-1.5-.8-2.1-1.5-.6-.6-1-1.3-1.2-1.7-.1-.2 0-.4.1-.5l.4-.5c.1-.2.2-.3.1-.5l-.8-1.9c-.1-.3-.3-.3-.5-.3Z" fill="#F4EDD9"/></svg>
-          </div>
-          <h3>WhatsApp Community</h3>
-          <p>Faster updates and quick answers — best for last-minute questions when you're already mid-trip.</p>
-<a href="https://chat.whatsapp.com/FrxzSjXu47U9K5gEU1Cpbc" class="dev-link" target="_blank" rel="noopener">
-              whatsapp
-            </a>   
-      </div>
+function goToSlide(index) {
+  slides.forEach((slide, i) => {
+    slide.classList.toggle('active', i === index);
+  });
+  document.querySelectorAll('.slide-indicator').forEach((indicator, i) => {
+    indicator.classList.toggle('active', i === index);
+  });
+  currentSlide = index;
+}
+
+function nextSlide() {
+  const next = (currentSlide + 1) % slides.length;
+  goToSlide(next);
+}
+
+const indicatorsContainer = document.getElementById('slideIndicators');
+slides.forEach((_, index) => {
+  const indicator = document.createElement('div');
+  indicator.className = 'slide-indicator' + (index === 0 ? ' active' : '');
+  indicator.addEventListener('click', () => {
+    clearInterval(slideInterval);
+    goToSlide(index);
+    slideInterval = setInterval(nextSlide, 3000);
+  });
+  indicatorsContainer.appendChild(indicator);
+});
+
+slideInterval = setInterval(nextSlide, 3000);
+
+// ==================== RENDER DESTINATIONS ====================
+function renderDestinations() {
+  const grid = document.getElementById('destGrid');
+  if (!grid) return;
+  
+  grid.innerHTML = destinations.map((dest, index) => `
+    <div class="dest-item reveal reveal-${(index % 4) + 1}">
+      <img src="${dest.image}" alt="${dest.name}" loading="lazy" 
+           onerror="this.style.display='none';this.parentElement.querySelector('.error-placeholder').style.display='flex'">
+      <div class="error-placeholder" style="display:none;">🏛️</div>
+      <div class="overlay">
+        <span>${dest.name}</span>
+        <small>${dest.location}</small>
+        <span class="tag">${dest.tag}</span>
       </div>
     </div>
-  </section>
+  `).join('');
+  
+  document.querySelectorAll('.dest-item.reveal').forEach(el => {
+    revealObserver.observe(el);
+  });
+}
 
-  <footer>
-    <div class="wrap foot-row">
-      <div class="brand"><span class="dot"></span>FAST TRAVEL</div>
-      <div class="fine">© 2026 FAST TRAVEL · BUILT FOR TRAVELERS, BY TRAVELERS · <a href="analytics.html" style="text-decoration:underline;">Control Tower</a></div>
-    </div>
-  </footer>
+// ==================== MOBILE MENU ====================
+const menuToggle = document.getElementById('menuToggle');
+const navLinks = document.getElementById('navLinks');
 
-  <script>
-    // Count this page load as a visit (fire-and-forget, doesn't block anything)
-    fetch(window.FAST_TRAVEL_API + "/stats/visit", { method: "POST" }).catch(() => {});
-
-    // Called by the download buttons above
-    function trackDownload(platform) {
-      // Our own counter, shown on /analytics.html
-      fetch(window.FAST_TRAVEL_API + "/stats/download/" + platform, { method: "POST" }).catch(() => {});
-      // GA4 event, viewable in the real Google Analytics dashboard
-      if (typeof gtag === "function") {
-        gtag('event', 'download_click', { platform: platform });
-      }
-      // Desktop builds don't exist yet — the "#" placeholder just won't navigate.
+if (menuToggle && navLinks) {
+  menuToggle.addEventListener('click', function(e) {
+    e.stopPropagation();
+    navLinks.classList.toggle('open');
+  });
+  
+  navLinks.querySelectorAll('a').forEach(link => {
+    link.addEventListener('click', () => {
+      navLinks.classList.remove('open');
+    });
+  });
+  
+  document.addEventListener('click', function(e) {
+    if (!navLinks.contains(e.target) && !menuToggle.contains(e.target)) {
+      navLinks.classList.remove('open');
     }
+  });
+}
 
-    // Points the mobile button at the APK deploy-frontend.yml uploads
-    // to /var/www/fasttravel-app/downloads/ on every push (see
-    // .github/workflows/deploy-frontend.yml).
-    document.getElementById('mobile-download-btn').href =
-      window.FAST_TRAVEL_APP_URL + '/downloads/fast-travel.apk';
-
-    // ---------- gallery: shuffled each visit, Olembe Stadium always first ----------
-    var GALLERY_PINNED = { src: "images/olembe-stadium.jpg", alt: "Olembe Stadium", label: "Olembe Stadium" };
-    var GALLERY_POOL = [
-      { src: "images/kribi.jpg", alt: "Kribi coastline", label: "Kribi" },
-      { src: "images/mount-cameroon.jpg", alt: "Mount Cameroon", label: "Mount Cameroon" },
-      { src: "images/reunification-monument.jpg", alt: "Reunification Monument", label: "Reunification Monument" },
-      { src: "images/foumban-royal-palace.jpg", alt: "Foumban Royal Palace", label: "Foumban Royal Palace" },
-      { src: "images/rhumsiki.jpg", alt: "Rhumsiki peaks", label: "Rhumsiki" },
-      { src: "images/lobe-waterfalls.jpg", alt: "Lobé Waterfalls", label: "Lobé Waterfalls" },
-      { src: "images/waza-national-park.jpg", alt: "Waza National Park", label: "Waza National Park" },
-      { src: "images/limbe-beach.jpg", alt: "Limbe Beach", label: "Limbe Beach" },
-      { src: "images/national-museum.jpg", alt: "National Museum of Cameroon", label: "National Museum" },
-      { src: "images/bafut-palace.jpg", alt: "Bafut Palace", label: "Bafut Palace" },
-      { src: "images/korup-national-park.jpg", alt: "Korup National Park", label: "Korup National Park" },
-      { src: "images/ekom-nkam-waterfalls.jpg", alt: "Ekom-Nkam Waterfalls", label: "Ekom-Nkam Waterfalls" },
-      { src: "images/unity-palace.jpg", alt: "Unity Palace", label: "Unity Palace" },
-      { src: "images/la-nouvelle-liberte.jpg", alt: "La Nouvelle Liberté", label: "La Nouvelle Liberté" },
-      { src: "images/limbe-wildlife-centre.jpg", alt: "Limbe Wildlife Centre", label: "Limbe Wildlife Centre" },
-    ];
-
-    function shuffled(arr) {
-      var a = arr.slice();
-      for (var i = a.length - 1; i > 0; i--) {
-        var j = Math.floor(Math.random() * (i + 1));
-        var tmp = a[i]; a[i] = a[j]; a[j] = tmp;
-      }
-      return a;
+// ==================== SMOOTH SCROLL ====================
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+  anchor.addEventListener('click', function(e) {
+    const href = this.getAttribute('href');
+    if (href === '#') return;
+    const target = document.querySelector(href);
+    if (target) {
+      e.preventDefault();
+      const headerOffset = 80;
+      const elementPosition = target.getBoundingClientRect().top;
+      const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
+      window.scrollTo({ top: offsetPosition, behavior: 'smooth' });
     }
+  });
+});
 
-    function renderGallery() {
-      var grid = document.getElementById("galleryGrid");
-      if (!grid) return;
-      var picks = [GALLERY_PINNED].concat(shuffled(GALLERY_POOL).slice(0, 7));
-      grid.innerHTML = "";
-      picks.forEach(function (item, i) {
-        var el = document.createElement("div");
-        el.className = "g-item reveal reveal-" + ((i % 4) + 1);
-        el.innerHTML =
-          '<img src="' + item.src + '" alt="' + item.alt + '" loading="lazy">' +
-          '<span class="g-label">' + item.label + "</span>";
-        grid.appendChild(el);
-      });
+// ==================== DOWNLOAD TRACKING ====================
+function trackDownload(platform) {
+  alert('📱 Android app download will start shortly!');
+  console.log(`Download tracked: ${platform}`);
+}
+
+// ==================== REVEAL ANIMATIONS ====================
+const revealObserver = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('active');
     }
+  });
+}, { threshold: 0.1, rootMargin: '0px 0px -50px 0px' });
 
-    // ---------- scroll-triggered reveals ----------
-    var revealObserver = "IntersectionObserver" in window
-      ? new IntersectionObserver(
-          function (entries) {
-            entries.forEach(function (entry) {
-              if (entry.isIntersecting) {
-                entry.target.classList.add("in-view");
-                revealObserver.unobserve(entry.target);
-              }
-            });
-          },
-          { threshold: 0.15, rootMargin: "0px 0px -40px 0px" }
-        )
-      : null;
+document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
 
-    function observeReveals(elements) {
-      elements.forEach(function (el) {
-        if (revealObserver) {
-          revealObserver.observe(el);
-        } else {
-          // No IntersectionObserver support — just show everything.
-          el.classList.add("in-view");
-        }
-      });
-    }
-
-    renderGallery();
-    observeReveals(document.querySelectorAll(".reveal"));
-  </script>
-
+// ==================== INIT ====================
+renderDestinations();
+</script>
 </body>
 </html>

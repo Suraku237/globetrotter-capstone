@@ -1,51 +1,79 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../Services/api_service.dart';
 import '../theme/app_theme.dart';
 
-/// Full-bleed 2x2 collage of real destination photos behind the
-/// login/register forms — replaces the previous single stock photo with
-/// actual app content, shown as four images rather than one.
-class AuthBackground extends StatelessWidget {
+/// Full-bleed background photo behind every screen (see MaterialApp's
+/// `builder` in main.dart) — a single cover-fit image that always fills
+/// whatever size the window/screen currently is (BoxFit.cover inside
+/// Positioned.fill reflows on any resize, same as any other image), and
+/// crossfades to the next photo in the pool every 5 seconds.
+class AuthBackground extends StatefulWidget {
   const AuthBackground({super.key});
 
+  @override
+  State<AuthBackground> createState() => _AuthBackgroundState();
+}
+
+class _AuthBackgroundState extends State<AuthBackground> {
   static const _images = [
-    '/images/dest_001.jpg', // Olembe Stadium
-    '/images/dest_013.jpg', // Mount Cameroon
-    '/images/dest_022.jpg', // Lobé Waterfalls
-    '/images/dest_029.jpg', // Bafut Palace
+    '/images/dest_001.jpg',
+    '/images/dest_013.jpg',
+    '/images/dest_022.jpg',
+    '/images/dest_029.jpg',
+    '/images/dest_009.jpg',
+    '/images/dest_017.jpg',
+    '/images/dest_025.jpg',
+    '/images/dest_033.jpg',
   ];
 
-  Widget _photo(String path) => Image.network(
-        ApiService.resolveUrl(path),
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) =>
-            const ColoredBox(color: AppColors.canopy),
-      );
+  int _index = 0;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    // Precache the next image ahead of time so each 5s crossfade shows an
+    // already-loaded photo instead of popping in mid-fade on a slow
+    // connection.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _precache(_next()));
+    _timer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!mounted) return;
+      setState(() => _index = _next());
+      _precache(_next());
+    });
+  }
+
+  int _next() => (_index + 1) % _images.length;
+
+  void _precache(int index) {
+    if (!mounted) return;
+    precacheImage(NetworkImage(ApiService.resolveUrl(_images[index])), context);
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Stack(
       children: [
         Positioned.fill(
-          child: Column(
-            children: [
-              Expanded(
-                child: Row(
-                  children: [
-                    Expanded(child: _photo(_images[0])),
-                    Expanded(child: _photo(_images[1])),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: Row(
-                  children: [
-                    Expanded(child: _photo(_images[2])),
-                    Expanded(child: _photo(_images[3])),
-                  ],
-                ),
-              ),
-            ],
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 900),
+            child: Image.network(
+              ApiService.resolveUrl(_images[_index]),
+              key: ValueKey(_index),
+              fit: BoxFit.cover,
+              width: double.infinity,
+              height: double.infinity,
+              errorBuilder: (context, error, stackTrace) =>
+                  const ColoredBox(color: AppColors.canopy),
+            ),
           ),
         ),
         Positioned.fill(

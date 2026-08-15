@@ -175,7 +175,7 @@ class _PostCardState extends State<PostCard>
                       child: VideoPlayer(_videoController!),
                     ),
                   )
-                : const _FallbackBackground()
+                : const _FallbackBackground(buffering: true)
           else if (hasImage)
             Image.network(
               ApiService.resolveUrl(post.image!),
@@ -348,18 +348,36 @@ class _PostCardState extends State<PostCard>
 }
 
 class _FallbackBackground extends StatelessWidget {
-  const _FallbackBackground();
+  // Shown while a video's controller hasn't finished initializing yet —
+  // adds a visible spinner so this reads as "buffering" rather than a
+  // stalled/broken card. Not set for text-only or photo posts, which have
+  // nothing to wait on.
+  final bool buffering;
+
+  const _FallbackBackground({this.buffering = false});
 
   @override
   Widget build(BuildContext context) {
-    return const DecoratedBox(
-      decoration: BoxDecoration(
+    return DecoratedBox(
+      decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [AppColors.teal, AppColors.ochre],
         ),
       ),
+      child: buffering
+          ? const Center(
+              child: SizedBox(
+                width: 34,
+                height: 34,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: Colors.white,
+                ),
+              ),
+            )
+          : null,
     );
   }
 }

@@ -160,6 +160,13 @@ class _FeedScreenState extends State<FeedScreen> {
       controller: _pageController,
       scrollDirection: Axis.vertical,
       itemCount: _posts.length,
+      // Builds the adjacent (not just current) page too, so its PostCard
+      // mounts and starts buffering its video in the background while
+      // you're still watching the current one, instead of a cold start on
+      // every swipe. The controller only actually plays once its post
+      // becomes active (see PostCard.isActive), so this doesn't autoplay
+      // anything early.
+      allowImplicitScrolling: true,
       onPageChanged: (index) => setState(() {
         _currentPage = index;
         _openCommentsPostId = null;

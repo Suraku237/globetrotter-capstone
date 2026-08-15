@@ -7,6 +7,12 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<script>
+  window.FAST_TRAVEL_API = "https://fasttravel-web.duckdns.org/api";
+  window.FAST_TRAVEL_APP_URL = "https://fasttravel-web.duckdns.org";
+</script>
+
 <style>
 /* ==================== RESET & BASE ==================== */
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -21,52 +27,25 @@ body {
 
 /* ==================== AFRICAN SUNSET THEME ==================== */
 :root {
-  /* Primary Colors - Deep African Night */
   --bg-primary: #0A0F0E;
   --bg-secondary: #1A120E;
-  --bg-tertiary: #1F1814;
-  
-  /* Card Backgrounds - Glass with Earthy Tones */
   --bg-card: rgba(26, 18, 14, 0.55);
   --bg-card-hover: rgba(44, 74, 58, 0.45);
   --bg-glass-light: rgba(255, 255, 255, 0.04);
-  --bg-glass-medium: rgba(255, 255, 255, 0.07);
-  --bg-glass-heavy: rgba(255, 255, 255, 0.10);
-  
-  /* Accent Colors - African Sunset Palette */
   --gold: #D4A845;
   --gold-light: #F0D080;
   --gold-dim: rgba(212, 168, 69, 0.15);
   --terracotta: #B84A2E;
-  --terracotta-dim: rgba(184, 74, 46, 0.15);
   --sunset: #E8753A;
-  --sunset-dim: rgba(232, 117, 58, 0.15);
   --forest: #2C4A3A;
-  --forest-dim: rgba(44, 74, 58, 0.15);
-  --ocean: #2C7A73;
-  --ocean-dim: rgba(44, 122, 115, 0.15);
-  --savanna: #8A9A5A;
-  --savanna-dim: rgba(138, 154, 90, 0.15);
-  
-  /* Text Colors */
   --text-primary: #F5EDD9;
   --text-secondary: rgba(245, 237, 217, 0.75);
   --text-muted: rgba(245, 237, 217, 0.45);
-  
-  /* Borders & Effects */
   --border-color: rgba(245, 237, 217, 0.06);
   --border-gold: rgba(212, 168, 69, 0.15);
   --shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
-  --shadow-gold: 0 8px 40px rgba(212, 168, 69, 0.15);
   --glow-gold: 0 0 30px rgba(212, 168, 69, 0.08);
-  
-  /* Gradients */
   --gradient-sunset: linear-gradient(135deg, #D4A845, #E8753A);
-  --gradient-forest: linear-gradient(135deg, #2C4A3A, #1A3A2C);
-  --gradient-ocean: linear-gradient(135deg, #2C7A73, #1A5A55);
-  --gradient-warm: linear-gradient(135deg, #1A120E, #2C4A3A);
-  
-  /* Typography */
   --display: 'Fraunces', serif;
   --mono: 'IBM Plex Mono', monospace;
   --body: 'Inter', sans-serif;
@@ -117,15 +96,10 @@ body {
 }
 .text-center { text-align: center; }
 .text-gold { color: var(--gold); }
-.text-terracotta { color: var(--terracotta); }
-.text-sunset { color: var(--sunset); }
 .text-muted { color: var(--text-secondary); }
 .section-padding { padding: 80px 0; }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; align-items: center; }
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 30px; }
-.mb-16 { margin-bottom: 16px; }
-.mb-24 { margin-bottom: 24px; }
-.mb-32 { margin-bottom: 32px; }
 
 /* ==================== BUTTONS ==================== */
 .btn {
@@ -201,20 +175,6 @@ body {
   transform: translateY(-3px) scale(1.02);
   box-shadow: 0 12px 40px rgba(212, 168, 69, 0.35);
 }
-.btn-community {
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 32px;
-  border-radius: 50px;
-  font-weight: 600;
-  font-size: 0.95rem;
-  border: none;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  text-decoration: none;
-  font-family: var(--body);
-}
 .btn-facebook {
   background: #1877F2;
   color: #fff;
@@ -239,6 +199,9 @@ body {
   border: 1px solid var(--border-color);
   padding: 10px 20px;
   font-size: 0.8rem;
+  text-decoration: none;
+  border-radius: 50px;
+  transition: all 0.3s ease;
 }
 .btn-analytics:hover {
   border-color: var(--gold);
@@ -502,16 +465,6 @@ nav {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   border: 1px solid var(--border-gold);
-}
-.dest-item .error-placeholder {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 3rem;
-  background: var(--bg-secondary);
-  color: var(--gold-dim);
 }
 @media (max-width: 992px) {
   .dest-grid { grid-template-columns: repeat(2, 1fr); }
@@ -945,7 +898,7 @@ function renderDestinations() {
   grid.innerHTML = destinations.map((dest, index) => `
     <div class="dest-item reveal reveal-${(index % 4) + 1}">
       <img src="${dest.image}" alt="${dest.name}" loading="lazy" 
-           onerror="this.style.display='none';this.parentElement.querySelector('.error-placeholder').style.display='flex'">
+           onerror="this.parentElement.querySelector('.error-placeholder').style.display='flex';this.style.display='none'">
       <div class="error-placeholder" style="display:none;">🏛️</div>
       <div class="overlay">
         <span>${dest.name}</span>

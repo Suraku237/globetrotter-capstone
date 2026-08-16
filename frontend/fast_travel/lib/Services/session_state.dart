@@ -82,7 +82,10 @@ class SessionState extends ChangeNotifier {
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
 
       if (googleUser == null) {
-        throw ApiException('Sign-in cancelled');
+        // The user closed the account picker without choosing anything —
+        // not a failure, so it's flagged as cancelled rather than left to
+        // look like one of the real "something went wrong" cases below.
+        throw ApiException('Sign-in cancelled', cancelled: true);
       }
 
       print('2. User: ${googleUser.email}');

@@ -92,7 +92,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
       await widget.session.signInWithGoogle();
       if (mounted) widget.onSignedIn();
     } on ApiException catch (e) {
-      setState(() => _error = e.message);
+      // Closing the account picker isn't a failure — leave _error alone
+      // instead of showing "Sign-in cancelled" as if something broke.
+      if (!e.cancelled) setState(() => _error = e.message);
     } catch (e) {
       setState(() => _error = AppLocalizations.of(context)!.googleSignInFailed);
     } finally {

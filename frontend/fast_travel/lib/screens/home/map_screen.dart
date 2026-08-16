@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -9,6 +10,40 @@ import '../../theme/app_theme.dart';
 import '../../models/models.dart';
 import '../../Services/api_service.dart';
 import '../../widgets/map_platform.dart';
+
+// A search result on the map screen — either one of the app's own curated
+// destinations, or a real-world place found via OpenStreetMap's Nominatim
+// search (isExternal: true) that isn't in destinations.json at all. Both
+// render the same way in the results list and both can have a route drawn
+// to them.
+class _MapSearchResult {
+  final String id;
+  final String name;
+  final String description;
+  final double lat;
+  final double lng;
+  final String? imageUrl;
+  final bool isExternal;
+
+  _MapSearchResult({
+    required this.id,
+    required this.name,
+    required this.description,
+    required this.lat,
+    required this.lng,
+    this.imageUrl,
+    this.isExternal = false,
+  });
+
+  factory _MapSearchResult.fromDestination(Destination d) => _MapSearchResult(
+        id: d.id,
+        name: d.name,
+        description: d.description,
+        lat: d.lat,
+        lng: d.lng,
+        imageUrl: d.imageUrl,
+      );
+}
 
 class ExploreMapScreen extends StatefulWidget {
   const ExploreMapScreen({super.key});
@@ -24,6 +59,13 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
   MapLibreMapController? _mapLibreController;
   Line? _routeLine;
   Circle? _locationCircle;
+  Circle? _searchResultCircle;
+
+  // Wherever the search bar last sent the map — replaces the old
+  // destinations list/buttons panel: submitting a search jumps the map
+  // straight to the best match and drops a single marker there instead of
+  // showing a separate list of "show path" buttons.
+  ll.LatLng? _searchMarkerLocation;
 
   ll.LatLng? _currentLocation;
   bool _loadingLocation = false;
@@ -32,11 +74,11 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
   bool _isWaitingForPermission = false;
 
   List<Destination> _allDestinations = [];
-  List<Destination> _searchResults = [];
+  List<_MapSearchResult> _searchResults = [];
+  bool _searchingExternal = false;
+  Timer? _searchDebounce;
 
   final List<Polyline> _polylines = [];
-
-  String? _activeGoDestinationId;
 
   @override
   void initState() {
@@ -48,6 +90,7 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
   @override
   void dispose() {
     _searchController.dispose();
+    _searchDebounce?.cancel();
     super.dispose();
   }
 
@@ -56,7 +99,7 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
       final data = await ApiService.instance.getDestinations();
       setState(() {
         _allDestinations = data;
-        _searchResults = data;
+        _searchResults = data.map(_MapSearchResult.fromDestination).toList();
         _loadingDestinations = false;
       });
     } catch (e) {
@@ -65,21 +108,164 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
   }
 
   void _onSearchChanged() {
-    final query = _searchController.text.trim().toLowerCase();
-    if (query.isEmpty) {
+    final query = _searchController.text.trim();
+    final lowerQuery = query.toLowerCase();
+    _searchDebounce?.cancel();
+
+    if (lowerQuery.isEmpty) {
       setState(() {
-        _searchResults = _allDestinations;
+        _searchResults =
+            _allDestinations.map(_MapSearchResult.fromDestination).toList();
+        _searchingExternal = false;
       });
-    } else {
-      setState(() {
-        _searchResults = _allDestinations.where((dest) {
-          final nameMatch = dest.name.toLowerCase().contains(query);
-          final regionMatch = dest.region.toLowerCase().contains(query);
+      return;
+    }
+
+    final localMatches = _allDestinations
+        .where((dest) {
+          final nameMatch = dest.name.toLowerCase().contains(lowerQuery);
+          final regionMatch = dest.region.toLowerCase().contains(lowerQuery);
           final tagsMatch =
-              dest.tags.any((tag) => tag.toLowerCase().contains(query));
+              dest.tags.any((tag) => tag.toLowerCase().contains(lowerQuery));
           return nameMatch || regionMatch || tagsMatch;
-        }).toList();
+        })
+        .map(_MapSearchResult.fromDestination)
+        .toList();
+
+    setState(() {
+      _searchResults = localMatches;
+      _searchingExternal = true;
+    });
+
+    // Debounced — Nominatim's public instance asks for roughly one request
+    // per second at most, and there's no point firing one on every
+    // keystroke while the user is still typing.
+    _searchDebounce = Timer(
+      const Duration(milliseconds: 500),
+      () => _searchExternalPlaces(query, localMatches),
+    );
+  }
+
+  // Anything typed here that isn't one of the app's curated destinations
+  // still gets looked up as a real, worldwide place via OpenStreetMap's
+  // free Nominatim geocoder (same "no paid API key" approach already used
+  // for routing via OSRM below).
+  Future<void> _searchExternalPlaces(
+      String query, List<_MapSearchResult> localMatches) async {
+    try {
+      // viewbox + bounded=0 is a *preference*, not a filter: Nominatim
+      // ranks matches inside Cameroon's bounding box first (so "Douala"
+      // resolves to the Cameroonian city, not some unrelated namesake
+      // elsewhere) while still returning results from anywhere in the
+      // world when nothing relevant is found inside it.
+      final uri = Uri.https('nominatim.openstreetmap.org', '/search', {
+        'q': query,
+        'format': 'json',
+        'limit': '6',
+        'viewbox': '8.3,13.1,16.2,1.6', // Cameroon: west,north,east,south
+        'bounded': '0',
       });
+      final response = await http.get(
+        uri,
+        headers: const {
+          'User-Agent': 'FastTravelApp/1.0 (kwetejunior9@gmail.com)',
+        },
+      );
+      if (!mounted || response.statusCode != 200) return;
+      // The query may have changed (or been cleared) while this request
+      // was in flight — a stale response arriving late shouldn't clobber
+      // whatever's actually being searched for now.
+      if (_searchController.text.trim() != query) return;
+
+      final List<dynamic> raw = jsonDecode(response.body);
+      final localNames = localMatches.map((r) => r.name.toLowerCase()).toSet();
+      final external = raw
+          .map((r) => _MapSearchResult(
+                id: 'osm_${r['place_id']}',
+                name: (r['display_name'] as String).split(',').first,
+                description: r['display_name'] as String,
+                lat: double.parse(r['lat'] as String),
+                lng: double.parse(r['lon'] as String),
+                isExternal: true,
+              ))
+          .where((e) => !localNames.contains(e.name.toLowerCase()))
+          .toList();
+
+      setState(() {
+        _searchResults = [...localMatches, ...external];
+        _searchingExternal = false;
+      });
+    } catch (_) {
+      // Silent — the local matches already found are still shown either
+      // way; this is just the "also search everywhere else" layer on top.
+      if (mounted) setState(() => _searchingExternal = false);
+    }
+  }
+
+  void _onSearchSubmitted(String value) {
+    if (_searchResults.isEmpty) return;
+    _goToSearchResult(_searchResults.first);
+  }
+
+  // Replaces what used to be a tap on one of the destination-list "show
+  // path" buttons: jumps the map to the result, drops a marker there, and
+  // draws the route immediately if location's already on — otherwise
+  // offers to turn it on instead of failing silently.
+  void _goToSearchResult(_MapSearchResult result) {
+    final target = ll.LatLng(result.lat, result.lng);
+    setState(() => _searchMarkerLocation = target);
+
+    if (use3DMap) {
+      _mapLibreController?.animateCamera(
+        CameraUpdate.newLatLngZoom(LatLng(result.lat, result.lng), 15.0),
+      );
+      _syncSearchMarker();
+    } else {
+      _mapController.move(target, 15.0);
+    }
+
+    final isLocationReady = _currentLocation != null &&
+        _currentLocation!.latitude != 0.0 &&
+        _currentLocation!.longitude != 0.0 &&
+        _currentLocation!.latitude > 1.0 &&
+        _currentLocation!.longitude > 1.0;
+
+    if (!mounted) return;
+    if (isLocationReady) {
+      _drawRoute(result.lat, result.lng);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Showing route to ${result.name}')),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Showing ${result.name}'),
+          action: SnackBarAction(
+              label: 'Directions', onPressed: _requestUserLocation),
+        ),
+      );
+    }
+  }
+
+  // Same idea as _syncLocationMarker below, just for wherever the search
+  // last jumped to instead of the user's own GPS position.
+  Future<void> _syncSearchMarker() async {
+    final controller = _mapLibreController;
+    final loc = _searchMarkerLocation;
+    if (controller == null || loc == null) return;
+
+    final options = CircleOptions(
+      geometry: LatLng(loc.latitude, loc.longitude),
+      circleRadius: 9.0,
+      circleColor: '#E2A33D',
+      circleStrokeColor: '#FFFFFF',
+      circleStrokeWidth: 3.0,
+    );
+
+    if (_searchResultCircle != null) {
+      await controller.updateCircle(_searchResultCircle!, options);
+    } else {
+      _searchResultCircle = await controller.addCircle(options);
     }
   }
 
@@ -355,6 +541,19 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
               ),
             ],
           ),
+        if (_searchMarkerLocation != null)
+          MarkerLayer(
+            markers: [
+              Marker(
+                point: _searchMarkerLocation!,
+                width: 44,
+                height: 44,
+                alignment: Alignment.topCenter,
+                child: const Icon(Icons.location_on,
+                    color: AppColors.ochre, size: 44),
+              ),
+            ],
+          ),
       ],
     );
   }
@@ -367,197 +566,103 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
       );
     }
 
+    // Full-bleed map — no side panel or destinations list splitting the
+    // screen with it anymore. Search now jumps the map straight to a
+    // result (see _goToSearchResult) and drops a single marker there
+    // instead of listing every match as its own "show path" button.
     return Scaffold(
       backgroundColor: Colors.transparent,
       // No AppBar here — AdaptiveShell already renders the "Explore Map"
       // title; a second one here would show it twice.
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Search destinations...',
-                prefixIcon: const Icon(Icons.search_rounded),
-                filled: true,
-                fillColor: AppColors.sandDim,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(30),
-                  borderSide: BorderSide.none,
-                ),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-              ),
-            ),
-            const SizedBox(height: 12),
-            if (!_isLocationEnabled && !_loadingLocation)
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed:
-                      _isWaitingForPermission ? null : _requestUserLocation,
-                  icon: _isWaitingForPermission
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.my_location),
-                  label: Text(_isWaitingForPermission
-                      ? 'Fetching Location...'
-                      : '📍 Enable My Location'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.ochre,
-                    foregroundColor: AppColors.ink,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
-              ),
-            const SizedBox(height: 12),
-            Expanded(
-              flex: 5,
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.clay.withOpacity(0.2)),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: _buildMap(),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              flex: 1,
-              child: _searchResults.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.search_off_rounded,
-                              size: 48, color: AppColors.clay),
-                          const SizedBox(height: 8),
-                          Text(
-                            'No destinations found',
-                            style:
-                                TextStyle(color: AppColors.clay, fontSize: 16),
-                          ),
-                        ],
-                      ),
-                    )
-                  : ListView.separated(
-                      itemCount: _searchResults.length,
-                      separatorBuilder: (context, index) =>
-                          const SizedBox(height: 8),
-                      itemBuilder: (context, index) {
-                        final dest = _searchResults[index];
-                        final bool isGoActive =
-                            _activeGoDestinationId == dest.id;
-
-                        final bool isButtonEnabled = _currentLocation != null &&
-                            _currentLocation!.latitude != 0.0 &&
-                            _currentLocation!.longitude != 0.0 &&
-                            _currentLocation!.latitude > 1.0 &&
-                            _currentLocation!.longitude > 1.0;
-
-                        return Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.05),
-                                blurRadius: 4,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: Row(
-                              children: [
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: SizedBox(
-                                    width: 60,
-                                    height: 60,
-                                    child: Image.network(
-                                      ApiService.resolveUrl(
-                                          dest.imageUrl ?? ''),
-                                      fit: BoxFit.cover,
-                                      errorBuilder:
-                                          (context, error, stackTrace) =>
-                                              Container(
-                                        color: AppColors.canopy,
-                                        alignment: Alignment.center,
-                                        child: const Icon(Icons.image,
-                                            color: Colors.white),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        dest.name,
-                                        style: const TextStyle(
-                                            fontWeight: FontWeight.bold),
-                                      ),
-                                      Text(
-                                        dest.description,
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                            fontSize: 12,
-                                            color: AppColors.inkSoft),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                SizedBox(
-                                  height: 36,
-                                  child: ElevatedButton.icon(
-                                    onPressed: isButtonEnabled
-                                        ? () {
-                                            setState(() {
-                                              _activeGoDestinationId = dest.id;
-                                            });
-                                            _drawRoute(dest.lat, dest.lng);
-                                          }
-                                        : null,
-                                    icon: const Icon(Icons.directions_car,
-                                        size: 16),
-                                    label: const Text('show path',
-                                        style: TextStyle(fontSize: 12)),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: isGoActive
-                                          ? Colors.blue
-                                          : Colors.green,
-                                      foregroundColor: Colors.white,
-                                      elevation: 0,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(20),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
+      body: Stack(
+        children: [
+          Positioned.fill(child: _buildMap()),
+          Positioned(
+            top: 0,
+            left: 16,
+            right: 16,
+            child: SafeArea(
+              bottom: false,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: 12),
+                  Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(30),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.18),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
+                    child: TextField(
+                      controller: _searchController,
+                      onSubmitted: _onSearchSubmitted,
+                      textInputAction: TextInputAction.search,
+                      decoration: InputDecoration(
+                        hintText: 'Search any destination or place...',
+                        prefixIcon: const Icon(Icons.search_rounded),
+                        // Small spinner while the "also search everywhere
+                        // else" OpenStreetMap lookup is still in flight.
+                        suffixIcon: _searchingExternal
+                            ? const Padding(
+                                padding: EdgeInsets.all(14),
+                                child: SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
+                                ),
+                              )
+                            : null,
+                        filled: true,
+                        fillColor: AppColors.sand,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(30),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 14),
+                      ),
+                    ),
+                  ),
+                  if (!_isLocationEnabled && !_loadingLocation) ...[
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _isWaitingForPermission
+                            ? null
+                            : _requestUserLocation,
+                        icon: _isWaitingForPermission
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.my_location),
+                        label: Text(_isWaitingForPermission
+                            ? 'Fetching Location...'
+                            : '📍 Enable My Location'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.ochre,
+                          foregroundColor: AppColors.ink,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          elevation: 4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

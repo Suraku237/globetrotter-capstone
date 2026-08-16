@@ -261,15 +261,40 @@ class _PostCardState extends State<PostCard>
                 valueListenable: _videoController!,
                 builder: (context, value, _) {
                   final durationMs = value.duration.inMilliseconds;
-                  final progress = durationMs == 0
+                  final playedFraction = durationMs == 0
                       ? 0.0
                       : (value.position.inMilliseconds / durationMs)
                           .clamp(0.0, 1.0);
-                  return LinearProgressIndicator(
-                    value: progress,
-                    minHeight: 3,
-                    backgroundColor: Colors.white24,
-                    valueColor: const AlwaysStoppedAnimation(AppColors.ochre),
+                  // How far ahead of playback the video has actually
+                  // downloaded — the same "lighter bar ahead of the
+                  // playhead" YouTube/Facebook show, so loading is visible
+                  // while it's happening instead of just a spinner up
+                  // front and nothing after.
+                  final bufferedMs = value.buffered.isEmpty
+                      ? 0
+                      : value.buffered
+                          .map((range) => range.end.inMilliseconds)
+                          .reduce((a, b) => a > b ? a : b);
+                  final bufferedFraction = durationMs == 0
+                      ? 0.0
+                      : (bufferedMs / durationMs).clamp(0.0, 1.0);
+                  return SizedBox(
+                    height: 3,
+                    child: Stack(
+                      children: [
+                        const ColoredBox(color: Colors.white24),
+                        FractionallySizedBox(
+                          alignment: Alignment.centerLeft,
+                          widthFactor: bufferedFraction,
+                          child: const ColoredBox(color: Colors.white54),
+                        ),
+                        FractionallySizedBox(
+                          alignment: Alignment.centerLeft,
+                          widthFactor: playedFraction,
+                          child: const ColoredBox(color: AppColors.ochre),
+                        ),
+                      ],
+                    ),
                   );
                 },
               ),

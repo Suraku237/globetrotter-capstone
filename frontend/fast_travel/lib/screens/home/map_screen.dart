@@ -147,23 +147,17 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
   }
 
   // Anything typed here that isn't one of the app's curated destinations
-  // still gets looked up as a real, worldwide place via OpenStreetMap's
-  // free Nominatim geocoder (same "no paid API key" approach already used
-  // for routing via OSRM below).
+  // still gets looked up as a real place via OpenStreetMap's free
+  // Nominatim geocoder (same "no paid API key" approach already used for
+  // routing via OSRM below) — restricted to Cameroon only.
   Future<void> _searchExternalPlaces(
       String query, List<_MapSearchResult> localMatches) async {
     try {
-      // viewbox + bounded=0 is a *preference*, not a filter: Nominatim
-      // ranks matches inside Cameroon's bounding box first (so "Douala"
-      // resolves to the Cameroonian city, not some unrelated namesake
-      // elsewhere) while still returning results from anywhere in the
-      // world when nothing relevant is found inside it.
       final uri = Uri.https('nominatim.openstreetmap.org', '/search', {
         'q': query,
         'format': 'json',
         'limit': '6',
-        'viewbox': '8.3,13.1,16.2,1.6', // Cameroon: west,north,east,south
-        'bounded': '0',
+        'countrycodes': 'cm', // hard filter — Cameroon results only
       });
       final response = await http.get(
         uri,

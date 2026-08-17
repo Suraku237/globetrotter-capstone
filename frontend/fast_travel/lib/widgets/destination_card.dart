@@ -3,6 +3,7 @@ import '../Services/api_service.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
 import '../screens/home/destination_detail_screen.dart';
+import 'star_rating.dart';
 
 /// Tag -> icon, so cards read at a glance without needing photography
 IconData _iconForTag(String tag) {
@@ -104,6 +105,9 @@ class DestinationCard extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
+
+              const SizedBox(height: 6),
+              StarRating(rating: destination.rating, size: 13),
 
               const SizedBox(height: 8),
 

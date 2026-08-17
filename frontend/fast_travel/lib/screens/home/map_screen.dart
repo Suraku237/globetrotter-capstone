@@ -67,6 +67,12 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
   // showing a separate list of "show path" buttons.
   ll.LatLng? _searchMarkerLocation;
 
+  // Set when a search is submitted before the user's own location is
+  // known yet — _requestUserLocation draws the route to this the moment
+  // the location fix actually comes in, so searching for a destination
+  // always ends in a drawn path without a separate manual step.
+  _MapSearchResult? _pendingRouteTarget;
+
   ll.LatLng? _currentLocation;
   bool _loadingLocation = false;
   bool _loadingDestinations = true;
@@ -227,17 +233,14 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
     if (!mounted) return;
     if (isLocationReady) {
       _drawRoute(result.lat, result.lng);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Showing route to ${result.name}')),
-      );
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Showing ${result.name}'),
-          action: SnackBarAction(
-              label: 'Directions', onPressed: _requestUserLocation),
-        ),
-      );
+      // Don't have a location fix yet — get one now instead of waiting on
+      // a manual tap, and draw the route the moment it comes in (see the
+      // _pendingRouteTarget check in _requestUserLocation). The marker
+      // dropped above plus the route line appearing once it's drawn is
+      // feedback enough — no need for a status snackbar on top of it.
+      _pendingRouteTarget = result;
+      if (!_isWaitingForPermission) _requestUserLocation();
     }
   }
 
@@ -316,7 +319,15 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
           _isWaitingForPermission = false;
         });
 
-        if (use3DMap) {
+        // A search was waiting on a location fix to draw its route — do
+        // that now instead of recentering on the user's own position,
+        // which would undo the destination-focused view search just set.
+        final pendingTarget = _pendingRouteTarget;
+        if (pendingTarget != null) {
+          _pendingRouteTarget = null;
+          if (use3DMap) await _syncLocationMarker();
+          _drawRoute(pendingTarget.lat, pendingTarget.lng);
+        } else if (use3DMap) {
           await _mapLibreController?.animateCamera(
             CameraUpdate.newLatLngZoom(
               LatLng(_currentLocation!.latitude, _currentLocation!.longitude),
@@ -329,6 +340,7 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
         }
       }
     } catch (e) {
+      _pendingRouteTarget = null;
       setState(() {
         _currentLocation = const ll.LatLng(3.8480, 11.5021);
         _isLocationEnabled = false;
@@ -623,39 +635,34 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
                       ),
                     ),
                   ),
-                  if (!_isLocationEnabled && !_loadingLocation) ...[
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: _isWaitingForPermission
-                            ? null
-                            : _requestUserLocation,
-                        icon: _isWaitingForPermission
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2))
-                            : const Icon(Icons.my_location),
-                        label: Text(_isWaitingForPermission
-                            ? 'Fetching Location...'
-                            : '📍 Enable My Location'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.ochre,
-                          foregroundColor: AppColors.ink,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12)),
-                          elevation: 4,
-                        ),
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),
           ),
+          if (!_isLocationEnabled && !_loadingLocation)
+            Positioned(
+              left: 16,
+              bottom: 16,
+              child: SafeArea(
+                top: false,
+                child: FloatingActionButton.small(
+                  heroTag: 'enable_location_fab',
+                  tooltip: 'Enable my location',
+                  backgroundColor: AppColors.ochre,
+                  foregroundColor: AppColors.ink,
+                  onPressed:
+                      _isWaitingForPermission ? null : _requestUserLocation,
+                  child: _isWaitingForPermission
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: AppColors.ink),
+                        )
+                      : const Icon(Icons.my_location),
+                ),
+              ),
+            ),
         ],
       ),
     );

@@ -305,131 +305,137 @@ class _UploadDropzone extends StatelessWidget {
     final label = tab == _MediaTab.photo ? 'photo' : 'video';
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
-      child: Container(
-        height: 280,
-        width: double.infinity,
-        decoration: BoxDecoration(
-          color: AppColors.sandDim,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppColors.ink.withValues(alpha: 0.08)),
-        ),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (imagePreview != null)
-              Image.memory(imagePreview!, fit: BoxFit.cover)
-            else if (videoController != null &&
-                videoController!.value.isInitialized)
-              FittedBox(
-                fit: BoxFit.cover,
-                child: SizedBox(
-                  width: videoController!.value.size.width,
-                  height: videoController!.value.size.height,
-                  child: VideoPlayer(videoController!),
-                ),
-              )
-            else
-              InkWell(
-                onTap: onTap,
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      SizedBox(
-                        width: 64,
-                        height: 64,
-                        child: Stack(
-                          clipBehavior: Clip.none,
-                          children: [
-                            Container(
-                              width: 64,
-                              height: 64,
-                              decoration: BoxDecoration(
-                                color: AppColors.canopy.withValues(alpha: 0.08),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                tab == _MediaTab.photo
-                                    ? Icons.image_outlined
-                                    : Icons.play_arrow_rounded,
-                                size: 32,
-                                color: AppColors.canopy,
-                              ),
-                            ),
-                            Positioned(
-                              right: -2,
-                              bottom: -2,
-                              child: Container(
-                                padding: const EdgeInsets.all(5),
+      // Scales with however wide the screen/window actually is instead of
+      // a fixed pixel height that stayed the same tiny box on a large
+      // screen and could crowd out the caption field on a short one.
+      child: AspectRatio(
+        aspectRatio: 16 / 10,
+        child: Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: AppColors.sandDim,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.ink.withValues(alpha: 0.08)),
+          ),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (imagePreview != null)
+                Image.memory(imagePreview!, fit: BoxFit.cover)
+              else if (videoController != null &&
+                  videoController!.value.isInitialized)
+                FittedBox(
+                  fit: BoxFit.cover,
+                  child: SizedBox(
+                    width: videoController!.value.size.width,
+                    height: videoController!.value.size.height,
+                    child: VideoPlayer(videoController!),
+                  ),
+                )
+              else
+                InkWell(
+                  onTap: onTap,
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 64,
+                          height: 64,
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              Container(
+                                width: 64,
+                                height: 64,
                                 decoration: BoxDecoration(
-                                  color: AppColors.ochre,
+                                  color:
+                                      AppColors.canopy.withValues(alpha: 0.08),
                                   shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: AppColors.sandDim,
-                                    width: 2,
+                                ),
+                                child: Icon(
+                                  tab == _MediaTab.photo
+                                      ? Icons.image_outlined
+                                      : Icons.play_arrow_rounded,
+                                  size: 32,
+                                  color: AppColors.canopy,
+                                ),
+                              ),
+                              Positioned(
+                                right: -2,
+                                bottom: -2,
+                                child: Container(
+                                  padding: const EdgeInsets.all(5),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.ochre,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: AppColors.sandDim,
+                                      width: 2,
+                                    ),
+                                  ),
+                                  child: const Icon(
+                                    Icons.arrow_upward_rounded,
+                                    size: 14,
+                                    color: AppColors.ink,
                                   ),
                                 ),
-                                child: const Icon(
-                                  Icons.arrow_upward_rounded,
-                                  size: 14,
-                                  color: AppColors.ink,
-                                ),
                               ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Select $label to upload',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.ink,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        kIsWeb
-                            ? 'Or drag and drop it here'
-                            : 'Or choose from your gallery',
-                        style: TextStyle(color: AppColors.inkSoft),
-                      ),
-                      const SizedBox(height: 20),
-                      ElevatedButton.icon(
-                        onPressed: onTap,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.ochre,
-                          foregroundColor: AppColors.ink,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30),
+                            ],
                           ),
                         ),
-                        icon: const Icon(Icons.add_rounded),
-                        label: Text('Select $label'),
-                      ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Select $label to upload',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.ink,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          kIsWeb
+                              ? 'Or drag and drop it here'
+                              : 'Or choose from your gallery',
+                          style: TextStyle(color: AppColors.inkSoft),
+                        ),
+                        const SizedBox(height: 20),
+                        ElevatedButton.icon(
+                          onPressed: onTap,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.ochre,
+                            foregroundColor: AppColors.ink,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(30),
+                            ),
+                          ),
+                          icon: const Icon(Icons.add_rounded),
+                          label: Text('Select $label'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              if (_hasPreview) ...[
+                Positioned(
+                  top: 12,
+                  right: 12,
+                  child: Row(
+                    children: [
+                      _RoundIconButton(
+                          icon: Icons.sync_alt_rounded, onTap: onTap),
+                      if (onRemove != null) ...[
+                        const SizedBox(width: 8),
+                        _RoundIconButton(
+                            icon: Icons.close_rounded, onTap: onRemove!),
+                      ],
                     ],
                   ),
                 ),
-              ),
-            if (_hasPreview) ...[
-              Positioned(
-                top: 12,
-                right: 12,
-                child: Row(
-                  children: [
-                    _RoundIconButton(
-                        icon: Icons.sync_alt_rounded, onTap: onTap),
-                    if (onRemove != null) ...[
-                      const SizedBox(width: 8),
-                      _RoundIconButton(
-                          icon: Icons.close_rounded, onTap: onRemove!),
-                    ],
-                  ],
-                ),
-              ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

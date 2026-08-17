@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../Services/api_service.dart';
 import '../../models/models.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/star_rating.dart';
+import '../itineraries/itineraries_screen.dart';
 
 class DestinationDetailScreen extends StatelessWidget {
   final Destination destination;
@@ -62,6 +64,8 @@ class DestinationDetailScreen extends StatelessWidget {
                       letterSpacing: 1.2,
                     ),
               ),
+              const SizedBox(height: 8),
+              StarRating(rating: destination.rating, size: 18),
 
               const SizedBox(height: 20),
 
@@ -116,9 +120,18 @@ class DestinationDetailScreen extends StatelessWidget {
                   Expanded(
                     child: ElevatedButton(
                       onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                              content: Text("Opening trip planner...")),
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => Scaffold(
+                              backgroundColor: Colors.transparent,
+                              appBar: AppBar(title: const Text('Plan a Trip')),
+                              body: SafeArea(
+                                child: ItinerariesScreen(
+                                    presetDestination: destination),
+                              ),
+                            ),
+                          ),
                         );
                       },
                       style: ElevatedButton.styleFrom(

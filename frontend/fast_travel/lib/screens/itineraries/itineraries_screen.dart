@@ -6,7 +6,12 @@ import '../../widgets/empty_state.dart';
 import 'itinerary_map_screen.dart';
 
 class ItinerariesScreen extends StatefulWidget {
-  const ItinerariesScreen({super.key});
+  // When set (e.g. from the "Plan Trip" button on a destination's detail
+  // page), the create-itinerary dialog opens automatically with this
+  // destination already selected instead of landing on a blank list.
+  final Destination? presetDestination;
+
+  const ItinerariesScreen({super.key, this.presetDestination});
 
   @override
   State<ItinerariesScreen> createState() => _ItinerariesScreenState();
@@ -23,6 +28,11 @@ class _ItinerariesScreenState extends State<ItinerariesScreen> {
   void initState() {
     super.initState();
     _load();
+    if (widget.presetDestination != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _openCreateDialog(preset: widget.presetDestination);
+      });
+    }
   }
 
   Future<void> _load() async {
@@ -455,11 +465,21 @@ class _ItinerariesScreenState extends State<ItinerariesScreen> {
     ];
   }
 
-  Future<void> _openCreateDialog() async {
+  Future<void> _openCreateDialog({Destination? preset}) async {
+    // Make sure the preset destination is actually in the dropdown's
+    // options even if it isn't one of the currently-loaded/fallback ones
+    // (e.g. a brand-new suggestion) — otherwise preselecting its id would
+    // silently do nothing.
+    var options = _getSafeDestinations();
+    if (preset != null && options.every((d) => d.id != preset.id)) {
+      options = [preset, ...options];
+    }
     final created = await showDialog<bool>(
       context: context,
-      builder: (_) =>
-          _CreateItineraryDialog(destinations: _getSafeDestinations()),
+      builder: (_) => _CreateItineraryDialog(
+        destinations: options,
+        preselectedDestinationId: preset?.id,
+      ),
     );
     if (created == true) _load();
   }
@@ -618,7 +638,11 @@ class _ItinerariesScreenState extends State<ItinerariesScreen> {
 
 class _CreateItineraryDialog extends StatefulWidget {
   final List<Destination> destinations;
-  const _CreateItineraryDialog({required this.destinations});
+  final String? preselectedDestinationId;
+  const _CreateItineraryDialog({
+    required this.destinations,
+    this.preselectedDestinationId,
+  });
 
   @override
   State<_CreateItineraryDialog> createState() => _CreateItineraryDialogState();
@@ -634,6 +658,12 @@ class _CreateItineraryDialogState extends State<_CreateItineraryDialog> {
   DateTime? _end;
   bool _loading = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _destinationId = widget.preselectedDestinationId;
+  }
 
   String _fmt(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../Services/api_service.dart';
 import '../../Services/locale_controller.dart';
 import '../../Services/session_state.dart';
@@ -72,6 +73,143 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } finally {
       if (mounted) setState(() => _savingName = false);
     }
+  }
+
+  Future<void> _openUrl(String url) async {
+    try {
+      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    } catch (_) {
+      // Silent — nothing meaningful to recover into if the platform can't
+      // open it (e.g. no mail client configured).
+    }
+  }
+
+  Future<void> _showAboutDeveloper() async {
+    await showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('About the developer'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const CircleAvatar(
+                radius: 28,
+                backgroundColor: AppColors.ochre,
+                child: Text(
+                  'KJ',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.ink,
+                    fontSize: 18,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Kwete Ngnouba Junior Rayan',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+              ),
+              const Text(
+                'Full-Stack Developer · Flutter & FastAPI',
+                style: TextStyle(color: AppColors.inkSoft, fontSize: 13),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Building Fast Travel end to end — Flutter on the front, '
+                'FastAPI on the back, and everything in between: from the '
+                'itinerary engine to the pipeline that ships it. Based in '
+                'Yaoundé, currently studying Software Engineering at ICT '
+                'University.',
+              ),
+              const SizedBox(height: 12),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.code_rounded),
+                title: const Text('GitHub'),
+                onTap: () => _openUrl('https://github.com/Suraku237'),
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.work_outline_rounded),
+                title: const Text('LinkedIn'),
+                onTap: () => _openUrl(
+                    'https://www.linkedin.com/in/kwete-ngnouba-junior-rayan-643b97402/'),
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.email_outlined),
+                title: const Text('Email'),
+                onTap: () => _openUrl('mailto:kwetejunior9@gmail.com'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showRateUs() async {
+    int selected = 0;
+    final submitted = await showDialog<int>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Rate Fast Travel'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('How has your experience been?'),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(5, (i) {
+                  final filled = i < selected;
+                  return IconButton(
+                    onPressed: () => setDialogState(() => selected = i + 1),
+                    icon: Icon(
+                      filled ? Icons.star_rounded : Icons.star_border_rounded,
+                      color: AppColors.ochre,
+                      size: 32,
+                    ),
+                  );
+                }),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: selected == 0
+                  ? null
+                  : () => Navigator.pop(dialogContext, selected),
+              child: const Text('Submit'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (submitted == null || !mounted) return;
+    _openUrl(
+      'mailto:kwetejunior9@gmail.com?subject=${Uri.encodeComponent('Fast Travel rating: $submitted star${submitted == 1 ? '' : 's'}')}',
+    );
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Thanks for your feedback!')),
+    );
   }
 
   Future<void> _changeAvatar() async {
@@ -197,6 +335,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     onSelectionChanged: (selected) =>
                         widget.localeController.setLanguageCode(selected.first),
                   ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.info_outline_rounded),
+                  title: const Text('About the developer'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: _showAboutDeveloper,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.star_outline_rounded),
+                  title: const Text('Rate us'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: _showRateUs,
                 ),
               ),
               const SizedBox(height: 24),

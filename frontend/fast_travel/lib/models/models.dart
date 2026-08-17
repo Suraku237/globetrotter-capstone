@@ -23,6 +23,12 @@ class Destination {
     this.imageUrl,
   });
 
+  // There's no backend rating system yet — this derives a stable "good to
+  // great" rating (3.5–5.0, in steps of 0.1) from the destination's own id,
+  // so every screen that shows a destination shows the same star rating
+  // for it instead of a random one changing on every rebuild.
+  double get rating => 3.5 + (id.hashCode.abs() % 16) / 10.0;
+
   factory Destination.fromJson(Map<String, dynamic> json) {
     return Destination(
       id: json['id'] as String,

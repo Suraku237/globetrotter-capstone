@@ -160,13 +160,12 @@ class _FeedScreenState extends State<FeedScreen> {
       controller: _pageController,
       scrollDirection: Axis.vertical,
       itemCount: _posts.length,
-      // Builds the adjacent (not just current) page too, so its PostCard
-      // mounts and starts buffering its video in the background while
-      // you're still watching the current one, instead of a cold start on
-      // every swipe. The controller only actually plays once its post
-      // becomes active (see PostCard.isActive), so this doesn't autoplay
-      // anything early.
-      allowImplicitScrolling: true,
+      // NOTE: allowImplicitScrolling: true was tried here to preload the
+      // next video's controller ahead of a swipe, but a vertical PageView
+      // with that flag inside this screen's constrained-width wide-layout
+      // (ConstrainedBox + Row below) crashes the renderer — "RenderViewport
+      // ... w<=Infinity" / "Cannot hit test a render box with no size".
+      // Not worth it: a crash is worse than a cold-start buffer on swipe.
       onPageChanged: (index) => setState(() {
         _currentPage = index;
         _openCommentsPostId = null;

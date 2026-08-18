@@ -58,6 +58,7 @@ class PostActionRail extends StatelessWidget {
           shadows: shadows,
           label: '${post.likes.length}',
           onTap: onLike,
+          backdrop: dark,
         ),
         const SizedBox(height: 20),
         _RailButton(
@@ -67,6 +68,7 @@ class PostActionRail extends StatelessWidget {
           shadows: shadows,
           label: '${post.comments.length}',
           onTap: onOpenComments,
+          backdrop: dark,
         ),
         const SizedBox(height: 20),
         _RailButton(
@@ -75,6 +77,7 @@ class PostActionRail extends StatelessWidget {
           labelColor: labelColor,
           shadows: shadows,
           onTap: () => sharePost(context, post),
+          backdrop: dark,
         ),
       ],
     );
@@ -88,6 +91,12 @@ class _RailButton extends StatelessWidget {
   final List<Shadow>? shadows;
   final String? label;
   final VoidCallback onTap;
+  // True for the dark, video-overlay variant — a bare icon straight on top
+  // of a video (which could be anything from a bright sky to another dark
+  // icon) is hard to read consistently, so it gets a solid dark backing
+  // circle instead of just a text shadow. The light, side-panel variant
+  // already sits on a solid card background and doesn't need one.
+  final bool backdrop;
 
   const _RailButton({
     required this.icon,
@@ -96,6 +105,7 @@ class _RailButton extends StatelessWidget {
     this.shadows,
     this.label,
     required this.onTap,
+    this.backdrop = false,
   });
 
   @override
@@ -106,7 +116,16 @@ class _RailButton extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: color, size: 34, shadows: shadows),
+          backdrop
+              ? Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.black.withValues(alpha: 0.32),
+                  ),
+                  child: Icon(icon, color: color, size: 26),
+                )
+              : Icon(icon, color: color, size: 34, shadows: shadows),
           if (label != null) ...[
             const SizedBox(height: 4),
             Text(

@@ -124,26 +124,36 @@ class _FeedScreenState extends State<FeedScreen> {
       });
       return;
     }
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.sand.withValues(alpha: 0.92),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (sheetContext) => DraggableScrollableSheet(
-        initialChildSize: 0.7,
-        minChildSize: 0.4,
-        maxChildSize: 0.95,
-        expand: false,
-        builder: (context, scrollController) => CommentsPanel(
-          post: post,
-          currentUserId: currentUserId,
-          onPostUpdated: _updatePost,
-          onClose: () => Navigator.of(sheetContext).pop(),
+    // Narrow screens: a full-screen page rather than a partial-height
+    // bottom sheet — comments get the whole screen to work with instead
+    // of being squeezed into the bottom 70% of it.
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (routeContext) => Scaffold(
+          backgroundColor: AppColors.sand,
+          appBar: AppBar(
+            backgroundColor: AppColors.sand,
+            title: const Text('Comments'),
+          ),
+          body: CommentsPanel(
+            post: post,
+            currentUserId: currentUserId,
+            onPostUpdated: _updatePost,
+            onClose: () => Navigator.of(routeContext).pop(),
+          ),
         ),
       ),
     );
+  }
+
+  Future<void> _createPost() async {
+    final created = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (context) => const CreatePostScreen()),
+    );
+    if (created == true) _loadPosts();
   }
 
   @override
@@ -200,141 +210,160 @@ class _FeedScreenState extends State<FeedScreen> {
     return Scaffold(
       backgroundColor: Colors.transparent,
       // No AppBar here — AdaptiveShell already renders the "Feed" title;
-      // a second one here would show it twice.
-      floatingActionButton: FloatingActionButton(
-        heroTag: 'feed_new_post_fab',
-        tooltip: 'New post',
-        backgroundColor: AppColors.ochre,
-        foregroundColor: Colors.white,
-        onPressed: () async {
-          final created = await Navigator.push<bool>(
-            context,
-            MaterialPageRoute(builder: (context) => const CreatePostScreen()),
-          );
-          if (created == true) _loadPosts();
-        },
-        child: const Icon(Icons.add_rounded),
-      ),
+      // a second one here would show it twice. The "new post" button lives
+      // as a small overlay at the top-right of the body instead (below)
+      // rather than a bottom-right FAB, which used to sit right on top of
+      // the action rail's like/comment/share buttons on narrow screens.
       body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _loadPosts,
-          child: _loading
-              ? const Center(
-                  child: CircularProgressIndicator(color: AppColors.ochre))
-              : _error != null
-                  ? EmptyState(
-                      icon: _errorIsNetwork
-                          ? Icons.wifi_off_rounded
-                          : Icons.error_outline_rounded,
-                      title: _errorIsNetwork
-                          ? "Can't reach the server"
-                          : 'Something went wrong',
-                      message: _error!,
-                      onRetry: _loadPosts,
-                    )
-                  : _posts.isEmpty
-                      ? ListView(
-                          children: const [
-                            SizedBox(height: 120),
-                            EmptyState(
-                              icon: Icons.dynamic_feed_rounded,
-                              title: 'No posts yet',
-                              message:
-                                  'Be the first to share something with the community.',
-                            ),
-                          ],
+        child: Stack(
+          children: [
+            RefreshIndicator(
+              onRefresh: _loadPosts,
+              child: _loading
+                  ? const Center(
+                      child: CircularProgressIndicator(color: AppColors.ochre))
+                  : _error != null
+                      ? EmptyState(
+                          icon: _errorIsNetwork
+                              ? Icons.wifi_off_rounded
+                              : Icons.error_outline_rounded,
+                          title: _errorIsNetwork
+                              ? "Can't reach the server"
+                              : 'Something went wrong',
+                          message: _error!,
+                          onRetry: _loadPosts,
                         )
-                      : LayoutBuilder(
-                          builder: (context, constraints) {
-                            // Wide/web: size the video card off actual
-                            // available space (like TikTok's desktop video
-                            // panel) instead of a fixed narrow width that
-                            // leaves most of the window empty. Bounded by
-                            // whatever room is actually left over once the
-                            // rail and (if open) the comments panel take
-                            // their share, so it fills the rest without
-                            // overflowing past them.
-                            const railColumnWidth = 96.0;
-                            final commentsColumnWidth =
-                                openPost != null ? 380.0 + 16.0 : 0.0;
-                            final reserved =
-                                (currentPost != null ? railColumnWidth : 0.0) +
-                                    commentsColumnWidth;
-                            final maxWidthFromSpace =
-                                (constraints.maxWidth - reserved)
-                                    .clamp(320.0, 640.0);
-
-                            final cardHeight = (constraints.maxHeight - 48)
-                                .clamp(320.0, 900.0);
-                            final cardWidth = isWide
-                                ? (cardHeight * 9 / 16)
-                                    .clamp(320.0, maxWidthFromSpace)
-                                : double.infinity;
-
-                            return Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                ConstrainedBox(
-                                  constraints:
-                                      BoxConstraints(maxWidth: cardWidth),
-                                  child: Padding(
-                                    padding: isWide
-                                        ? const EdgeInsets.symmetric(
-                                            vertical: 24)
-                                        : EdgeInsets.zero,
-                                    child: pageView,
-                                  ),
+                      : _posts.isEmpty
+                          ? ListView(
+                              children: const [
+                                SizedBox(height: 120),
+                                EmptyState(
+                                  icon: Icons.dynamic_feed_rounded,
+                                  title: 'No posts yet',
+                                  message:
+                                      'Be the first to share something with the community.',
                                 ),
-                                if (currentPost != null) ...[
-                                  const SizedBox(width: 12),
-                                  Padding(
-                                    padding: const EdgeInsets.only(bottom: 20),
-                                    child: Align(
-                                      alignment: Alignment.bottomCenter,
-                                      child: PostActionRail(
-                                        post: currentPost,
-                                        currentUserId: currentUserId,
-                                        dark: false,
-                                        onLike: () => _toggleLike(currentPost),
-                                        onOpenComments: () => _openComments(
-                                          currentPost,
-                                          isWide: isWide,
-                                          currentUserId: currentUserId,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                                if (openPost != null) ...[
-                                  const SizedBox(width: 16),
-                                  SizedBox(
-                                    width: 380,
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                          vertical: 24),
-                                      child: Material(
-                                        color: Colors.white,
-                                        elevation: 3,
-                                        shadowColor: AppColors.ink
-                                            .withValues(alpha: 0.15),
-                                        borderRadius: BorderRadius.circular(24),
-                                        clipBehavior: Clip.antiAlias,
-                                        child: CommentsPanel(
-                                          post: openPost,
-                                          currentUserId: currentUserId,
-                                          onPostUpdated: _updatePost,
-                                          onClose: () => setState(
-                                              () => _openCommentsPostId = null),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
                               ],
-                            );
-                          },
-                        ),
+                            )
+                          : LayoutBuilder(
+                              builder: (context, constraints) {
+                                // Wide/web: size the video card off actual
+                                // available space (like TikTok's desktop video
+                                // panel) instead of a fixed narrow width that
+                                // leaves most of the window empty. Bounded by
+                                // whatever room is actually left over once the
+                                // rail and (if open) the comments panel take
+                                // their share, so it fills the rest without
+                                // overflowing past them.
+                                const railColumnWidth = 96.0;
+                                final commentsColumnWidth =
+                                    openPost != null ? 380.0 + 16.0 : 0.0;
+                                final reserved = (currentPost != null
+                                        ? railColumnWidth
+                                        : 0.0) +
+                                    commentsColumnWidth;
+                                final maxWidthFromSpace =
+                                    (constraints.maxWidth - reserved)
+                                        .clamp(320.0, 640.0);
+
+                                final cardHeight = (constraints.maxHeight - 48)
+                                    .clamp(320.0, 900.0);
+                                final cardWidth = isWide
+                                    ? (cardHeight * 9 / 16)
+                                        .clamp(320.0, maxWidthFromSpace)
+                                    : double.infinity;
+
+                                return Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    ConstrainedBox(
+                                      constraints:
+                                          BoxConstraints(maxWidth: cardWidth),
+                                      child: Padding(
+                                        padding: isWide
+                                            ? const EdgeInsets.symmetric(
+                                                vertical: 24)
+                                            : EdgeInsets.zero,
+                                        child: pageView,
+                                      ),
+                                    ),
+                                    if (currentPost != null) ...[
+                                      const SizedBox(width: 12),
+                                      Padding(
+                                        padding:
+                                            const EdgeInsets.only(bottom: 20),
+                                        child: Align(
+                                          alignment: Alignment.bottomCenter,
+                                          child: PostActionRail(
+                                            post: currentPost,
+                                            currentUserId: currentUserId,
+                                            dark: false,
+                                            onLike: () =>
+                                                _toggleLike(currentPost),
+                                            onOpenComments: () => _openComments(
+                                              currentPost,
+                                              isWide: isWide,
+                                              currentUserId: currentUserId,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                    if (openPost != null) ...[
+                                      const SizedBox(width: 16),
+                                      SizedBox(
+                                        width: 380,
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                              vertical: 24),
+                                          child: Material(
+                                            color: Colors.white,
+                                            elevation: 3,
+                                            shadowColor: AppColors.ink
+                                                .withValues(alpha: 0.15),
+                                            borderRadius:
+                                                BorderRadius.circular(24),
+                                            clipBehavior: Clip.antiAlias,
+                                            child: CommentsPanel(
+                                              post: openPost,
+                                              currentUserId: currentUserId,
+                                              onPostUpdated: _updatePost,
+                                              onClose: () => setState(() =>
+                                                  _openCommentsPostId = null),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                );
+                              },
+                            ),
+            ),
+            // Small top-right "new post" button — replaces the old
+            // bottom-right FAB, which used to land right on top of the
+            // action rail's like/comment/share buttons on narrow screens.
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Material(
+                color: AppColors.ochre,
+                shape: const CircleBorder(),
+                elevation: 4,
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: _createPost,
+                  child: const Padding(
+                    padding: EdgeInsets.all(10),
+                    child:
+                        Icon(Icons.add_rounded, color: Colors.white, size: 22),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

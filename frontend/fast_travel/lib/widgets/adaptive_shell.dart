@@ -94,10 +94,16 @@ class AdaptiveShell extends StatelessWidget {
     final destinations = _destinations(l10n);
 
     if (!isWide) {
+      // Feed (index 1) already puts its own controls in that same
+      // bottom-left corner — the caption/author block on the video, plus
+      // its own small "new post" button up top — so the floating Ask AI
+      // button just sits on top of them there. Every other tab still gets
+      // it.
+      final showAskAi = selectedIndex != 1;
       return Scaffold(
         appBar: AppBar(title: Text(title), actions: actions),
         body: SafeArea(child: child),
-        floatingActionButton: const _AskAiButton(),
+        floatingActionButton: showAskAi ? const _AskAiButton() : null,
         floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
         bottomNavigationBar: NavigationBar(
           selectedIndex: selectedIndex,

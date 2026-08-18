@@ -71,7 +71,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
     try {
       await widget.session.verifyEmail(
           _pendingRegistration!.email, _codeController.text.trim());
-      if (mounted) widget.onSignedIn();
+      if (mounted) {
+        widget.onSignedIn();
+        // onSignedIn() flips the app's root content to the home screen,
+        // but this screen is still sitting on top of it in the nav stack
+        // (pushed from LoginScreen) — pop back to actually reveal it
+        // instead of leaving the user stuck looking at this one.
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      }
     } on ApiException catch (e) {
       setState(() => _error = e.message);
     } catch (e) {
@@ -90,7 +97,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
     });
     try {
       await widget.session.signInWithGoogle();
-      if (mounted) widget.onSignedIn();
+      if (mounted) {
+        widget.onSignedIn();
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      }
     } on ApiException catch (e) {
       // Closing the account picker isn't a failure — leave _error alone
       // instead of showing "Sign-in cancelled" as if something broke.

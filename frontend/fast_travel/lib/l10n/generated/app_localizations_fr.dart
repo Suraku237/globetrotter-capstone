@@ -64,6 +64,13 @@ class AppLocalizationsFr extends AppLocalizations {
   String get passwordValidatorError => 'Au moins 6 caractères';
 
   @override
+  String get confirmPasswordLabel => 'Confirmer le mot de passe';
+
+  @override
+  String get confirmPasswordValidatorError =>
+      'Les mots de passe ne correspondent pas';
+
+  @override
   String get couldNotReachServer =>
       'Impossible de joindre le serveur. Le backend est-il en cours d\'exécution ?';
 

@@ -26,11 +26,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _name = TextEditingController();
   final _email = TextEditingController();
   final _password = TextEditingController();
+  final _confirmPassword = TextEditingController();
   final _codeController = TextEditingController();
   String _role = 'user';
   bool _loading = false;
   bool _googleLoading = false;
   bool _verifying = false;
+  bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
   String? _error;
   // Non-null once registration succeeds — switches the screen from the
   // form to either a code-entry step or an admin-pending message,
@@ -117,6 +120,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _name.dispose();
     _email.dispose();
     _password.dispose();
+    _confirmPassword.dispose();
     _codeController.dispose();
     super.dispose();
   }
@@ -213,10 +217,39 @@ class _RegisterScreenState extends State<RegisterScreen> {
             controller: _password,
             decoration: InputDecoration(
               labelText: l10n.passwordLabel,
+              suffixIcon: IconButton(
+                icon: Icon(_obscurePassword
+                    ? Icons.visibility_off_rounded
+                    : Icons.visibility_rounded),
+                onPressed: () =>
+                    setState(() => _obscurePassword = !_obscurePassword),
+              ),
             ),
-            obscureText: true,
+            obscureText: _obscurePassword,
+            // Re-validates confirm-password live as this field changes, so
+            // fixing the original password also clears a stale mismatch
+            // error on the field below instead of leaving it stuck.
+            onChanged: (_) => _formKey.currentState?.validate(),
             validator: (v) => (v == null || v.length < 6)
                 ? l10n.passwordValidatorError
+                : null,
+          ),
+          const SizedBox(height: 14),
+          TextFormField(
+            controller: _confirmPassword,
+            decoration: InputDecoration(
+              labelText: l10n.confirmPasswordLabel,
+              suffixIcon: IconButton(
+                icon: Icon(_obscureConfirmPassword
+                    ? Icons.visibility_off_rounded
+                    : Icons.visibility_rounded),
+                onPressed: () => setState(
+                    () => _obscureConfirmPassword = !_obscureConfirmPassword),
+              ),
+            ),
+            obscureText: _obscureConfirmPassword,
+            validator: (v) => (v != _password.text)
+                ? l10n.confirmPasswordValidatorError
                 : null,
           ),
           if (_error != null) ...[

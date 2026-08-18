@@ -20,6 +20,8 @@
   "emailValidatorError": "Saisissez un e-mail valide",
   "passwordLabel": "Mot de passe",
   "passwordValidatorError": "Au moins 6 caractères",
+  "confirmPasswordLabel": "Confirmer le mot de passe",
+  "confirmPasswordValidatorError": "Les mots de passe ne correspondent pas",
   "couldNotReachServer": "Impossible de joindre le serveur. Le backend est-il en cours d'exécution ?",
   "couldNotReachServerShort": "Impossible de joindre le serveur.",
   "googleSignInFailed": "Échec de la connexion avec Google. Veuillez réessayer.",

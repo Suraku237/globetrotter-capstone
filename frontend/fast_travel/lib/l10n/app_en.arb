@@ -20,6 +20,8 @@
   "emailValidatorError": "Enter a valid email",
   "passwordLabel": "Password",
   "passwordValidatorError": "At least 6 characters",
+  "confirmPasswordLabel": "Confirm password",
+  "confirmPasswordValidatorError": "Passwords don't match",
   "couldNotReachServer": "Could not reach the server. Is the backend running?",
   "couldNotReachServerShort": "Could not reach the server.",
   "googleSignInFailed": "Google sign-in failed. Please try again.",

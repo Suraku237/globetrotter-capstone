@@ -63,6 +63,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get passwordValidatorError => 'At least 6 characters';
 
   @override
+  String get confirmPasswordLabel => 'Confirm password';
+
+  @override
+  String get confirmPasswordValidatorError => 'Passwords don\'t match';
+
+  @override
   String get couldNotReachServer =>
       'Could not reach the server. Is the backend running?';
 

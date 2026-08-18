@@ -206,6 +206,18 @@ abstract class AppLocalizations {
   /// **'At least 6 characters'**
   String get passwordValidatorError;
 
+  /// No description provided for @confirmPasswordLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm password'**
+  String get confirmPasswordLabel;
+
+  /// No description provided for @confirmPasswordValidatorError.
+  ///
+  /// In en, this message translates to:
+  /// **'Passwords don\'t match'**
+  String get confirmPasswordValidatorError;
+
   /// No description provided for @couldNotReachServer.
   ///
   /// In en, this message translates to:

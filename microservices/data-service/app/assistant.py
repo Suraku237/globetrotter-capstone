@@ -121,7 +121,16 @@ async def chat(payload: ChatRequest, current_user: dict = Depends(get_current_us
             detail=f"The assistant is unavailable right now ({res.status_code}).",
         )
 
-    data = res.json()
+    try:
+        data = res.json()
+    except ValueError as exc:
+        # A 200 with a body that isn't actually JSON (e.g. an upstream/proxy
+        # error page slipping through) would otherwise raise unhandled here
+        # and surface as a bare 500 with no explanation.
+        raise HTTPException(
+            status_code=502,
+            detail="The assistant sent back an unexpected response. Try again.",
+        ) from exc
     try:
         reply = data["candidates"][0]["content"]["parts"][0]["text"]
     except (KeyError, IndexError):

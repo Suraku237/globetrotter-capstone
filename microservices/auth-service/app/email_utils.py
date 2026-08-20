@@ -109,21 +109,18 @@ def send_admin_approval_request_email(
         <div style="font-family: sans-serif; max-width: 480px; margin: auto;">
           <h2 style="color:#171932;">New admin request</h2>
           <p><strong>{requester_name}</strong> ({requester_email}) has requested an admin account.</p>
-          <p style="margin-top:24px;">
-            <a href="{approve_url}"
-               style="background:#FF6A4D; color:white; padding:12px 24px; border-radius:24px;
-                      text-decoration:none; font-weight:bold; margin-right:12px;">Approve</a>
-            <a href="{reject_url}"
-               style="background:#E5E5E5; color:#171932; padding:12px 24px; border-radius:24px;
-                      text-decoration:none; font-weight:bold;">Reject</a>
+          <p style="margin-top:24px; margin-bottom:4px;">
+            <strong style="color:#FF6A4D;">To approve</strong>, open this link:
           </p>
+          <p style="font-size:14px; word-break:break-all;">{approve_url}</p>
+          <p style="margin-top:20px; margin-bottom:4px;">
+            <strong style="color:#171932;">To reject</strong>, open this link instead:
+          </p>
+          <p style="font-size:14px; word-break:break-all;">{reject_url}</p>
           <p style="margin-top:20px; font-size:12px; color:#6B7280;">
-            If the buttons above don't work (e.g. click-tracking is
-            misbehaving), copy one of these links directly instead — plain
-            text on purpose, so it isn't rewritten the same way the buttons
-            above are:<br>
-            Approve: {approve_url}<br>
-            Reject: {reject_url}
+            These are plain links, not styled buttons — deliberately, so
+            email click-tracking can't silently rewrite them into a broken
+            redirect the way styled buttons were.
           </p>
         </div>
         """,

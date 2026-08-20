@@ -63,8 +63,17 @@ def create_access_token(data: dict) -> str:
 @router.post("/register", status_code=201)
 def register(payload: RegisterRequest):
     users = load_users()
-    if any(u["email"] == payload.email for u in users):
-        raise HTTPException(status_code=400, detail="Email already registered")
+    existing = next((u for u in users if u["email"] == payload.email), None)
+    if existing is not None:
+        if existing.get("status") != "rejected":
+            raise HTTPException(status_code=400, detail="Email already registered")
+        # A rejected admin request doesn't permanently lock out this email —
+        # drop the stale record so a fresh registration (as admin or as a
+        # regular user/worker) goes through cleanly instead of leaving two
+        # entries around for the same email, which would make login() find
+        # the old rejected one first forever.
+        users = [u for u in users if u["email"] != payload.email]
+        save_users(users)
 
     role = normalize_role(payload.role)
 

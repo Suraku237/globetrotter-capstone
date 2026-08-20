@@ -117,6 +117,14 @@ def send_admin_approval_request_email(
                style="background:#E5E5E5; color:#171932; padding:12px 24px; border-radius:24px;
                       text-decoration:none; font-weight:bold;">Reject</a>
           </p>
+          <p style="margin-top:20px; font-size:12px; color:#6B7280;">
+            If the buttons above don't work (e.g. click-tracking is
+            misbehaving), copy one of these links directly instead — plain
+            text on purpose, so it isn't rewritten the same way the buttons
+            above are:<br>
+            Approve: {approve_url}<br>
+            Reject: {reject_url}
+          </p>
         </div>
         """,
     )

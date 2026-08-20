@@ -11,7 +11,12 @@ class _ChatMessage {
 }
 
 class AssistantScreen extends StatefulWidget {
-  const AssistantScreen({super.key});
+  // Set when opened from a specific context (e.g. a destination's "Ask the
+  // assistant" row) — sent automatically once history loads, only if that
+  // history is empty, so reopening the chat later never re-asks it.
+  final String? initialQuestion;
+
+  const AssistantScreen({super.key, this.initialQuestion});
 
   @override
   State<AssistantScreen> createState() => _AssistantScreenState();
@@ -52,8 +57,9 @@ class _AssistantScreenState extends State<AssistantScreen> {
     try {
       final history = await ApiService.instance.getAssistantHistory();
       if (!mounted) return;
+      final wasEmpty = history.isEmpty;
       setState(() {
-        if (history.isEmpty) {
+        if (wasEmpty) {
           _messages.add(_greeting);
         } else {
           _messages.addAll(history.map((turn) => _ChatMessage(
@@ -64,6 +70,9 @@ class _AssistantScreenState extends State<AssistantScreen> {
         _loadingHistory = false;
       });
       _scrollToBottom();
+      if (wasEmpty && widget.initialQuestion != null) {
+        _send(widget.initialQuestion!);
+      }
     } catch (_) {
       if (!mounted) return;
       setState(() {

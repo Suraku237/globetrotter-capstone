@@ -8,7 +8,11 @@ services:
       BREVO_SMTP_PASSWORD: ${BREVO_SMTP_PASSWORD:-}
       BREVO_SENDER_EMAIL: ${BREVO_SENDER_EMAIL:-}
       SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL:-}
-      PUBLIC_API_BASE_URL: ${PUBLIC_API_BASE_URL:-}
+      # Empty-string fallback here would override models.py's own sensible
+      # default with "" (an env var that's *set but empty* wins over
+      # Python's os.getenv default) — that's what was producing
+      # domain-less "/admin-requests/..." links in approval emails.
+      PUBLIC_API_BASE_URL: ${PUBLIC_API_BASE_URL:-https://fasttravel-web.duckdns.org/api}
     volumes:
       - ./shared/data:/app/data
       - ./firebase-service-account.json:/app/firebase-service-account.json:ro

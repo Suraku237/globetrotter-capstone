@@ -3,9 +3,9 @@ import '../../models/models.dart';
 import '../../Services/api_service.dart';
 import '../../l10n/generated/app_localizations.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/category_ribbon.dart';
 import '../../widgets/destination_card.dart';
 import '../../widgets/empty_state.dart';
-import '../../widgets/region_ribbon.dart';
 import '../discover/suggest_destination_screen.dart';
 import 'destination_detail_screen.dart';
 
@@ -20,10 +20,11 @@ class DiscoverScreen extends StatefulWidget {
 class _DiscoverScreenState extends State<DiscoverScreen> {
   List<Destination> _allDestinations = [];
   List<Destination> _filteredDestinations = [];
+  List<String> _categories = [];
   bool _loading = true;
   String? _error;
   final TextEditingController _searchController = TextEditingController();
-  String? _selectedRegion;
+  String? _selectedCategory;
 
   @override
   void initState() {
@@ -45,9 +46,14 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     });
     try {
       final data = await ApiService.instance.getDestinations();
+      // Categories always match whatever tags actually exist on the
+      // loaded destinations, sorted, instead of a hardcoded list that
+      // could drift out of sync with real data.
+      final categories = data.expand((d) => d.tags).toSet().toList()..sort();
       setState(() {
         _allDestinations = data;
         _filteredDestinations = data;
+        _categories = categories;
         _loading = false;
       });
     } on ApiException catch (e) {
@@ -64,20 +70,20 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     final query = _searchController.text.trim().toLowerCase();
     setState(() {
       _filteredDestinations = _allDestinations.where((dest) {
-        final regionMatch =
-            _selectedRegion == null || dest.region == _selectedRegion;
+        final categoryMatch =
+            _selectedCategory == null || dest.tags.contains(_selectedCategory);
         final nameMatch = dest.name.toLowerCase().contains(query);
         final searchRegionMatch = dest.region.toLowerCase().contains(query);
         final tagsMatch =
             dest.tags.any((tag) => tag.toLowerCase().contains(query));
-        return regionMatch && (nameMatch || searchRegionMatch || tagsMatch);
+        return categoryMatch && (nameMatch || searchRegionMatch || tagsMatch);
       }).toList();
     });
   }
 
-  void _onRegionSelected(String? region) {
+  void _onCategorySelected(String? category) {
     setState(() {
-      _selectedRegion = (region == _selectedRegion) ? null : region;
+      _selectedCategory = (category == _selectedCategory) ? null : category;
     });
     _onSearchOrFilterChanged();
   }
@@ -110,9 +116,10 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              RegionRibbon(
-                selected: _selectedRegion,
-                onSelect: _onRegionSelected,
+              CategoryRibbon(
+                categories: _categories,
+                selected: _selectedCategory,
+                onSelect: _onCategorySelected,
               ),
               const SizedBox(height: 12),
               Expanded(

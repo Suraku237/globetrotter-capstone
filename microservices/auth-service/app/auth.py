@@ -233,8 +233,12 @@ def approve_admin_request(user_id: str, token: str):
 def reject_admin_request(user_id: str, token: str):
     users = _find_pending_admin(user_id, token)
     user = next(u for u in users if u["id"] == user_id)
-    user["status"] = "rejected"
-    user.pop("admin_approval_token", None)
+    # Rejecting removes the account outright rather than just marking it
+    # rejected — the email is freed up immediately (no stale record left
+    # to clean up later), and since the record's gone, any future login
+    # attempt with these credentials fails exactly like it would for an
+    # email that was never registered, landing back on the login screen.
+    users = [u for u in users if u["id"] != user_id]
     save_users(users)
     send_admin_rejection_email(user["email"], user["full_name"])
     return _APPROVAL_PAGE.format(

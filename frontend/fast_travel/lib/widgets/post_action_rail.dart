@@ -121,7 +121,9 @@ class _RailButton extends StatelessWidget {
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: Colors.black.withValues(alpha: 0.32),
+                    // Was 0.32 — too see-through against a bright video
+                    // frame (sky, sand, light clothing) to read reliably.
+                    color: Colors.black.withValues(alpha: 0.5),
                   ),
                   child: Icon(icon, color: color, size: 26),
                 )

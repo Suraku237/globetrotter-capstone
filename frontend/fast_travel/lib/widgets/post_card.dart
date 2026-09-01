@@ -238,7 +238,7 @@ class _PostCardState extends State<PostCard>
                   child: Container(
                     padding: const EdgeInsets.all(18),
                     decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.35),
+                      color: Colors.black.withValues(alpha: 0.55),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(Icons.play_arrow_rounded,
@@ -358,7 +358,7 @@ class _PostCardState extends State<PostCard>
                 child: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.45),
+                    color: Colors.black.withValues(alpha: 0.6),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(Icons.delete_outline_rounded,

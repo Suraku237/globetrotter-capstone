@@ -538,78 +538,104 @@ class _ItinerariesScreenState extends State<ItinerariesScreen> {
                   ),
                   child: Padding(
                     padding: const EdgeInsets.all(16.0),
-                    child: Row(
+                    // Two stacked rows instead of one long one: cramming the
+                    // thumbnail, title/date, countdown AND a labeled button
+                    // into a single Row doesn't fit on phone-width screens —
+                    // the fixed-width pieces alone (image + countdown +
+                    // button) already exceed ~290px, so the title column
+                    // (the only flexible part) gets squeezed to nothing and
+                    // the row overflows on anything narrower than ~360dp.
+                    // Splitting into "info" then "countdown + action" keeps
+                    // every piece full width to work with on any screen.
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: SizedBox(
-                            width: 50,
-                            height: 50,
-                            child: Image.network(
-                              ApiService.resolveUrl(destination.imageUrl ?? ''),
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) =>
-                                  Container(
-                                color: AppColors.canopy,
-                                alignment: Alignment.center,
-                                child: const Icon(Icons.image,
-                                    color: Colors.white),
+                        Row(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: SizedBox(
+                                width: 50,
+                                height: 50,
+                                child: Image.network(
+                                  ApiService.resolveUrl(
+                                      destination.imageUrl ?? ''),
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      Container(
+                                    color: AppColors.canopy,
+                                    alignment: Alignment.center,
+                                    child: const Icon(Icons.image,
+                                        color: Colors.white),
+                                  ),
+                                ),
                               ),
                             ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                it.title,
-                                style: Theme.of(context).textTheme.titleMedium,
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    it.title,
+                                    style:
+                                        Theme.of(context).textTheme.titleMedium,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '${_destinationName(it.destinationId)}  ·  ${it.startDate} → ${it.endDate}',
+                                    style:
+                                        Theme.of(context).textTheme.labelSmall,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
                               ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '${_destinationName(it.destinationId)}  ·  ${it.startDate} → ${it.endDate}',
-                                style: Theme.of(context).textTheme.labelSmall,
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            const Text('Starts in',
-                                style: TextStyle(fontSize: 10)),
-                            Text(
-                              _getCountdown(it.startDate),
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold, fontSize: 14),
+                            ),
+                            const SizedBox(width: 12),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                const Text('Starts in',
+                                    style: TextStyle(fontSize: 10)),
+                                Text(
+                                  _getCountdown(it.startDate),
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14),
+                                ),
+                              ],
                             ),
                           ],
                         ),
-                        const SizedBox(width: 8),
-                        ElevatedButton.icon(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => ItineraryMapScreen(
-                                  destLat: destination.lat,
-                                  destLng: destination.lng,
-                                  destName: destination.name,
+                        const SizedBox(height: 12),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => ItineraryMapScreen(
+                                    destLat: destination.lat,
+                                    destLng: destination.lng,
+                                    destName: destination.name,
+                                  ),
                                 ),
+                              );
+                            },
+                            icon:
+                                const Icon(Icons.directions_rounded, size: 16),
+                            label: const Text('Show path'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.ochre,
+                              foregroundColor: AppColors.ink,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
                               ),
-                            );
-                          },
-                          icon: const Icon(Icons.directions_rounded, size: 16),
-                          label: const Text('Show path'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.ochre,
-                            foregroundColor: AppColors.ink,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
                             ),
                           ),
                         ),

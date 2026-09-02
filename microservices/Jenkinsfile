@@ -35,25 +35,41 @@ pipeline {
 
         stage('Deploy') {
             steps {
-                sh '''
-                    cd ${DEPLOY_DIR}
-                    git fetch --all
-                    git reset --hard origin/main
-                    cd microservices
+                // git fetch/reset run against a plain long-lived clone at
+                // ${DEPLOY_DIR} on the VPS — a different clone than the one
+                // `checkout scm` made in the Jenkins workspace, so it never
+                // inherited Jenkins' own SCM credentials. It was relying on
+                // a cached/anonymous HTTPS auth that GitHub no longer
+                // accepts (password auth over HTTPS is retired — a PAT or
+                // SSH key is required now), hence "could not read Username
+                // for 'https://github.com'": git has nowhere non-interactive
+                // to get one and no TTY to prompt on. Supplying one from a
+                // Jenkins credential here, only for this command, fixes it.
+                withCredentials([usernamePassword(
+                    credentialsId: 'github-deploy-creds',
+                    usernameVariable: 'GIT_USERNAME',
+                    passwordVariable: 'GIT_PASSWORD'
+                )]) {
+                    sh '''
+                        cd ${DEPLOY_DIR}
+                        git -c credential.helper='!f() { echo "username=${GIT_USERNAME}"; echo "password=${GIT_PASSWORD}"; }; f' fetch --all
+                        git reset --hard origin/main
+                        cd microservices
 
-                    # Generate the JWT signing secret once; reused on every later deploy.
-                    if [ ! -f .env ]; then
-                        echo "JWT_SECRET=$(openssl rand -hex 32)" > .env
-                        echo "Generated new JWT_SECRET (first deploy on this host)"
-                    fi
+                        # Generate the JWT signing secret once; reused on every later deploy.
+                        if [ ! -f .env ]; then
+                            echo "JWT_SECRET=$(openssl rand -hex 32)" > .env
+                            echo "Generated new JWT_SECRET (first deploy on this host)"
+                        fi
 
-                    # Always leave a real file here — docker compose turns a missing
-                    # bind-mount source into an empty directory, which breaks the
-                    # container. An empty file is harmless: Google sign-in just stays
-                    # disabled (register/login are unaffected) until a real credential
-                    # is configured below.
-                    touch -a firebase-service-account.json
-                '''
+                        # Always leave a real file here — docker compose turns a missing
+                        # bind-mount source into an empty directory, which breaks the
+                        # container. An empty file is harmless: Google sign-in just stays
+                        # disabled (register/login are unaffected) until a real credential
+                        # is configured below.
+                        touch -a firebase-service-account.json
+                    '''
+                }
 
                 // Optional: only copies a real credential over the placeholder if the
                 // 'firebase-service-account' Secret file credential has been added in

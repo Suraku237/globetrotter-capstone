@@ -18,6 +18,12 @@ class AdaptiveShell extends StatelessWidget {
   // filled with the profile image" request.
   final String? avatarUrl;
   final String? userName;
+  // False hides the phone-layout AppBar entirely (edge-to-edge body,
+  // e.g. Feed matching TikTok's full-bleed screen with no title bar).
+  // Wide/web layout still gets its title row regardless — that layout
+  // already looks nothing like a full-bleed phone screen, so there's
+  // no "TikTok look" to preserve there.
+  final bool showAppBar;
 
   // ✅ UPDATED: Added 4th destination: Map
   // Labels come from AppLocalizations at build time (see _destinations),
@@ -56,6 +62,7 @@ class AdaptiveShell extends StatelessWidget {
     this.actions,
     this.avatarUrl,
     this.userName,
+    this.showAppBar = true,
   });
 
   Widget _profileIcon({required bool selected}) {
@@ -101,7 +108,8 @@ class AdaptiveShell extends StatelessWidget {
       // it.
       final showAskAi = selectedIndex != 1;
       return Scaffold(
-        appBar: AppBar(title: Text(title), actions: actions),
+        appBar:
+            showAppBar ? AppBar(title: Text(title), actions: actions) : null,
         body: SafeArea(child: child),
         floatingActionButton: showAskAi ? const _AskAiButton() : null,
         floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,

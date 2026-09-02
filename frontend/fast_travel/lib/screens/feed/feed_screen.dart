@@ -7,6 +7,7 @@ import '../../widgets/comments_panel.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/post_action_rail.dart';
 import '../../widgets/post_card.dart';
+import '../home/discover_screen.dart';
 import 'create_post_screen.dart';
 
 // Matches AdaptiveShell's own breakpoint (NavigationBar -> NavigationRail)
@@ -36,6 +37,10 @@ class _FeedScreenState extends State<FeedScreen> {
   bool _errorIsNetwork = false;
   int _currentPage = 0;
   String? _openCommentsPostId;
+  // Cosmetic only — the backend has no follow-graph, so both tabs show
+  // the same posts. Matches TikTok's top tab bar; "For You" is the
+  // default like the real app.
+  bool _followingSelected = false;
 
   @override
   void initState() {
@@ -74,6 +79,20 @@ class _FeedScreenState extends State<FeedScreen> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  // Tapping whichever tab is already selected refreshes and jumps back to
+  // the top of the feed — the same gesture TikTok itself uses instead of a
+  // dedicated refresh button.
+  void _onTabTap(bool followingTapped) {
+    if (followingTapped == _followingSelected) {
+      _loadPosts();
+      if (_pageController.hasClients) {
+        _pageController.jumpToPage(0);
+      }
+      return;
+    }
+    setState(() => _followingSelected = followingTapped);
   }
 
   Future<void> _toggleLike(Post post) async {
@@ -350,51 +369,124 @@ class _FeedScreenState extends State<FeedScreen> {
                               );
                             },
                           ),
-            // Small top-right "new post" + refresh buttons — replaces the
-            // old bottom-right FAB, which used to land right on top of the
-            // action rail's like/comment/share buttons on narrow screens.
-            // Refresh moved here (instead of RefreshIndicator's pull
-            // gesture) since it no longer competes with the PageView for
-            // vertical swipes.
+            // Top overlay — TikTok's own header: "Following / For You"
+            // tabs centered, search at top-right. No AppBar behind this
+            // (see AdaptiveShell's showAppBar: false for this tab) so the
+            // video sits truly full-bleed underneath it, same as the real
+            // app. Only on phone width — the wide/web layout isn't
+            // full-bleed to begin with, so this header isn't part of that
+            // look.
+            if (!isWide)
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: SizedBox(
+                  height: 44,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _FeedTab(
+                            label: 'Following',
+                            selected: _followingSelected,
+                            onTap: () => _onTabTap(true),
+                          ),
+                          const SizedBox(width: 24),
+                          _FeedTab(
+                            label: 'For You',
+                            selected: !_followingSelected,
+                            onTap: () => _onTabTap(false),
+                          ),
+                        ],
+                      ),
+                      Positioned(
+                        right: 8,
+                        child: IconButton(
+                          icon: const Icon(Icons.search_rounded,
+                              color: Colors.white,
+                              shadows: [
+                                Shadow(blurRadius: 8, color: Colors.black45)
+                              ]),
+                          onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const DiscoverScreen(),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            // "New post" — TikTok's own create button lives in the bottom
+            // tab bar rather than floating over the video, but this app's
+            // bottom nav is shared across every tab (Discover/Feed/My
+            // Trips/Map/Profile), so a Feed-only create button stays here
+            // instead of restructuring navigation used by every screen.
             Positioned(
-              top: 8,
+              top: isWide ? 8 : 52,
               right: 8,
-              child: Column(
-                children: [
-                  Material(
-                    color: Colors.black.withValues(alpha: 0.4),
-                    shape: const CircleBorder(),
-                    elevation: 4,
-                    child: InkWell(
-                      customBorder: const CircleBorder(),
-                      onTap: _loading ? null : _loadPosts,
-                      child: const Padding(
-                        padding: EdgeInsets.all(10),
-                        child: Icon(Icons.refresh_rounded,
-                            color: Colors.white, size: 22),
-                      ),
-                    ),
+              child: Material(
+                color: AppColors.ochre,
+                shape: const CircleBorder(),
+                elevation: 4,
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: _createPost,
+                  child: const Padding(
+                    padding: EdgeInsets.all(10),
+                    child:
+                        Icon(Icons.add_rounded, color: Colors.white, size: 22),
                   ),
-                  const SizedBox(height: 8),
-                  Material(
-                    color: AppColors.ochre,
-                    shape: const CircleBorder(),
-                    elevation: 4,
-                    child: InkWell(
-                      customBorder: const CircleBorder(),
-                      onTap: _createPost,
-                      child: const Padding(
-                        padding: EdgeInsets.all(10),
-                        child: Icon(Icons.add_rounded,
-                            color: Colors.white, size: 22),
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// TikTok's own top tab: bold white + a short underline when selected,
+// softer/translucent white when not.
+class _FeedTab extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _FeedTab(
+      {required this.label, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: selected ? Colors.white : Colors.white70,
+              fontWeight: selected ? FontWeight.bold : FontWeight.w600,
+              fontSize: 16,
+              shadows: const [Shadow(blurRadius: 8, color: Colors.black45)],
+            ),
+          ),
+          const SizedBox(height: 4),
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            height: 2,
+            width: selected ? 20 : 0,
+            color: Colors.white,
+          ),
+        ],
       ),
     );
   }

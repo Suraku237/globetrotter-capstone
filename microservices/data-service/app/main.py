@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from . import assistant, destinations, itineraries, posts, recommendations, stats
+from . import assistant, chat, destinations, itineraries, posts, recommendations, stats
 from .models import DATA_DIR
 
 app = FastAPI(title="GlobeTrotter Data Service", version="1.0.0")
@@ -26,7 +26,14 @@ images_dir = DATA_DIR / "images"
 images_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/images", StaticFiles(directory=str(images_dir)), name="images")
 
+# Same reasoning as /images above — created eagerly so voice messages
+# uploaded after startup are actually reachable, not 404s.
+audio_dir = DATA_DIR / "audio"
+audio_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/audio", StaticFiles(directory=str(audio_dir)), name="audio")
+
 app.include_router(assistant.router)
+app.include_router(chat.router)
 app.include_router(destinations.router)
 app.include_router(itineraries.router)
 app.include_router(posts.router)

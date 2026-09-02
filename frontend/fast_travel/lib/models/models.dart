@@ -190,3 +190,81 @@ class Post {
             .toList(),
       );
 }
+
+// ---- Direct messaging ----
+
+class ChatUser {
+  final String id;
+  final String fullName;
+  final String? avatarUrl;
+
+  ChatUser({required this.id, required this.fullName, this.avatarUrl});
+
+  factory ChatUser.fromJson(Map<String, dynamic> json) => ChatUser(
+        id: json['id'] as String,
+        fullName: (json['full_name'] ?? '').toString(),
+        avatarUrl: json['avatar_url'] as String?,
+      );
+}
+
+class ChatMessage {
+  final String id;
+  final String senderId;
+  final String type; // 'text' | 'audio' | 'sticker'
+  final String? text;
+  final String? sticker;
+  final String? audioUrl;
+  final String createdAt;
+  final List<String> readBy;
+
+  ChatMessage({
+    required this.id,
+    required this.senderId,
+    required this.type,
+    this.text,
+    this.sticker,
+    this.audioUrl,
+    required this.createdAt,
+    required this.readBy,
+  });
+
+  factory ChatMessage.fromJson(Map<String, dynamic> json) => ChatMessage(
+        id: json['id'] as String,
+        senderId: json['sender_id'] as String,
+        type: (json['type'] ?? 'text').toString(),
+        text: json['text'] as String?,
+        sticker: json['sticker'] as String?,
+        audioUrl: json['audio_url'] as String?,
+        createdAt: (json['created_at'] ?? '').toString(),
+        readBy: List<String>.from(json['read_by'] as List? ?? []),
+      );
+}
+
+class ChatConversation {
+  final String id;
+  final ChatUser? otherUser;
+  final ChatMessage? lastMessage;
+  final int unreadCount;
+  final String updatedAt;
+
+  ChatConversation({
+    required this.id,
+    this.otherUser,
+    this.lastMessage,
+    required this.unreadCount,
+    required this.updatedAt,
+  });
+
+  factory ChatConversation.fromJson(Map<String, dynamic> json) =>
+      ChatConversation(
+        id: json['id'] as String,
+        otherUser: json['other_user'] != null
+            ? ChatUser.fromJson(json['other_user'] as Map<String, dynamic>)
+            : null,
+        lastMessage: json['last_message'] != null
+            ? ChatMessage.fromJson(json['last_message'] as Map<String, dynamic>)
+            : null,
+        unreadCount: (json['unread_count'] as num? ?? 0).toInt(),
+        updatedAt: (json['updated_at'] ?? '').toString(),
+      );
+}

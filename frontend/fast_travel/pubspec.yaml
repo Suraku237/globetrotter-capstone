@@ -30,6 +30,8 @@ dependencies:
   speech_to_text: ^7.4.0
   flutter_tts: ^4.2.5
   maplibre_gl: ^0.26.2
+  record: ^5.1.2       # voice messages — mic capture, mobile + web
+  audioplayers: ^6.1.0  # voice message playback, mobile + web
 
 dev_dependencies:
   flutter_test:

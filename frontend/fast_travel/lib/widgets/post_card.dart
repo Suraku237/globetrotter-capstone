@@ -225,7 +225,10 @@ class _PostCardState extends State<PostCard>
           ),
 
           // Paused indicator — only visible while a video is paused, so a
-          // single tap always has a clear play-again affordance.
+          // single tap always has a clear play-again affordance. A bare
+          // icon with a shadow, no backing circle — matches how TikTok's
+          // own tap-to-pause feedback reads (mostly just the frozen frame
+          // itself, not a heavy overlay).
           if (hasVideo &&
               _videoController != null &&
               _videoController!.value.isInitialized)
@@ -235,14 +238,11 @@ class _PostCardState extends State<PostCard>
                 builder: (context, value, _) => AnimatedOpacity(
                   opacity: value.isPlaying ? 0 : 1,
                   duration: const Duration(milliseconds: 150),
-                  child: Container(
-                    padding: const EdgeInsets.all(18),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.55),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.play_arrow_rounded,
-                        color: Colors.white, size: 48),
+                  child: const Icon(
+                    Icons.play_arrow_rounded,
+                    color: Colors.white,
+                    size: 72,
+                    shadows: [Shadow(blurRadius: 12, color: Colors.black54)],
                   ),
                 ),
               ),
@@ -302,6 +302,11 @@ class _PostCardState extends State<PostCard>
 
           // Caption + author — bottom-left, TikTok-style (avatar lives in
           // the action rail, matching the reference layout, not here).
+          // "@handle" first (TikTok always shows the @-form here, not a
+          // display name), then the caption, then a small sound row —
+          // there's no separate audio-track metadata to show, so this
+          // reads as "original sound" from the post's own author, same as
+          // a plain photo/text post on TikTok shows its uploader there.
           Positioned(
             left: 16,
             right: 88,
@@ -311,10 +316,11 @@ class _PostCardState extends State<PostCard>
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  post.authorName,
+                  '@${post.authorName}',
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
+                    fontSize: 16,
                     shadows: [Shadow(blurRadius: 6, color: Colors.black54)],
                   ),
                   overflow: TextOverflow.ellipsis,
@@ -329,6 +335,32 @@ class _PostCardState extends State<PostCard>
                   ),
                   maxLines: 4,
                   overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.music_note_rounded,
+                        color: Colors.white,
+                        size: 14,
+                        shadows: [
+                          Shadow(blurRadius: 6, color: Colors.black54)
+                        ]),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        'original sound - ${post.authorName}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          shadows: [
+                            Shadow(blurRadius: 6, color: Colors.black54)
+                          ],
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

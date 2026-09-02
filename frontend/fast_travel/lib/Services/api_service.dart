@@ -382,6 +382,91 @@ class ApiService {
     await _handle(res, okStatus: 204);
   }
 
+  // ---- Direct messaging ----
+
+  Future<List<ChatUser>> getChatUsers() async {
+    final res =
+        await http.get(Uri.parse('$baseUrl/chat/users'), headers: _headers);
+    final data = await _handle(res) as List;
+    return data.map((e) => ChatUser.fromJson(e)).toList();
+  }
+
+  Future<List<ChatConversation>> getConversations() async {
+    final res = await http.get(Uri.parse('$baseUrl/chat/conversations'),
+        headers: _headers);
+    final data = await _handle(res) as List;
+    return data.map((e) => ChatConversation.fromJson(e)).toList();
+  }
+
+  Future<ChatConversation> startConversation(String otherUserId) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/chat/conversations'),
+      headers: _headers,
+      body: jsonEncode({'other_user_id': otherUserId}),
+    );
+    final data = await _handle(res, okStatus: 201);
+    return ChatConversation.fromJson(data as Map<String, dynamic>);
+  }
+
+  Future<List<ChatMessage>> getMessages(String conversationId) async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/chat/conversations/$conversationId/messages'),
+      headers: _headers,
+    );
+    final data = await _handle(res) as List;
+    return data.map((e) => ChatMessage.fromJson(e)).toList();
+  }
+
+  Future<ChatMessage> sendTextMessage(
+      String conversationId, String text) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/chat/conversations/$conversationId/messages'),
+      headers: _headers,
+      body: jsonEncode({'type': 'text', 'content': text}),
+    );
+    final data = await _handle(res, okStatus: 201);
+    return ChatMessage.fromJson(data as Map<String, dynamic>);
+  }
+
+  Future<ChatMessage> sendSticker(String conversationId, String sticker) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/chat/conversations/$conversationId/messages'),
+      headers: _headers,
+      body: jsonEncode({'type': 'sticker', 'content': sticker}),
+    );
+    final data = await _handle(res, okStatus: 201);
+    return ChatMessage.fromJson(data as Map<String, dynamic>);
+  }
+
+  // Takes raw bytes rather than a file path — MultipartFile.fromPath relies
+  // on dart:io and throws on web. The recorder widget is responsible for
+  // getting bytes regardless of platform (reading the recorded file on
+  // mobile/desktop, fetching the blob URL on web).
+  Future<ChatMessage> sendAudioMessage(
+      String conversationId, List<int> audioBytes, String filename) async {
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$baseUrl/chat/conversations/$conversationId/messages/audio'),
+    );
+    if (_token != null) request.headers['Authorization'] = 'Bearer $_token';
+    request.files.add(
+      http.MultipartFile.fromBytes('audio', audioBytes, filename: filename),
+    );
+
+    final streamed = await request.send();
+    final res = await http.Response.fromStream(streamed);
+    final data = await _handle(res, okStatus: 201);
+    return ChatMessage.fromJson(data as Map<String, dynamic>);
+  }
+
+  Future<void> markConversationRead(String conversationId) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/chat/conversations/$conversationId/read'),
+      headers: _headers,
+    );
+    await _handle(res);
+  }
+
   // ---- Destination suggestions ----
 
   Future<Destination> submitDestination({

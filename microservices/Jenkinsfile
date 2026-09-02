@@ -46,7 +46,7 @@ pipeline {
                 // to get one and no TTY to prompt on. Supplying one from a
                 // Jenkins credential here, only for this command, fixes it.
                 withCredentials([usernamePassword(
-                    credentialsId: 'github-deploy-creds',
+                    credentialsId: 'github-creds',
                     usernameVariable: 'GIT_USERNAME',
                     passwordVariable: 'GIT_PASSWORD'
                 )]) {
@@ -96,10 +96,16 @@ pipeline {
 
     post {
         success {
-            slackSend(
-                color: 'good',
-                message: "✅ Backend deploy succeeded: ${env.JOB_NAME} #${env.BUILD_NUMBER} (${env.BUILD_URL})"
-            )
+            script {
+                try {
+                    slackSend(
+                        color: 'good',
+                        message: "✅ Backend deploy succeeded: ${env.JOB_NAME} #${env.BUILD_NUMBER} (${env.BUILD_URL})"
+                    )
+                } catch (err) {
+                    echo "Slack notification failed (Slack isn't configured under Manage Jenkins → System → Slack yet) — ignoring: ${err}"
+                }
+            }
             emailext(
                 subject: "✅ Backend deploy succeeded - build #${env.BUILD_NUMBER}",
                 body: "The backend deploy pipeline succeeded.\n\nBuild: ${env.BUILD_URL}",
@@ -107,10 +113,16 @@ pipeline {
             )
         }
         failure {
-            slackSend(
-                color: 'danger',
-                message: "❌ Backend deploy FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER} (${env.BUILD_URL})"
-            )
+            script {
+                try {
+                    slackSend(
+                        color: 'danger',
+                        message: "❌ Backend deploy FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER} (${env.BUILD_URL})"
+                    )
+                } catch (err) {
+                    echo "Slack notification failed (Slack isn't configured under Manage Jenkins → System → Slack yet) — ignoring: ${err}"
+                }
+            }
             emailext(
                 subject: "❌ Backend deploy FAILED - build #${env.BUILD_NUMBER}",
                 body: "The backend deploy pipeline failed. Check logs.\n\nBuild: ${env.BUILD_URL}",

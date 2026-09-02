@@ -240,6 +240,44 @@ class ChatMessage {
       );
 }
 
+// ---- Public community room: one shared thread everyone can post in ----
+
+class RoomMessage {
+  final String id;
+  final String senderId;
+  final String senderName;
+  final String? senderAvatar;
+  final String type; // 'text' | 'audio' | 'sticker'
+  final String? text;
+  final String? sticker;
+  final String? audioUrl;
+  final String createdAt;
+
+  RoomMessage({
+    required this.id,
+    required this.senderId,
+    required this.senderName,
+    this.senderAvatar,
+    required this.type,
+    this.text,
+    this.sticker,
+    this.audioUrl,
+    required this.createdAt,
+  });
+
+  factory RoomMessage.fromJson(Map<String, dynamic> json) => RoomMessage(
+        id: json['id'] as String,
+        senderId: json['sender_id'] as String,
+        senderName: (json['sender_name'] ?? '').toString(),
+        senderAvatar: json['sender_avatar'] as String?,
+        type: (json['type'] ?? 'text').toString(),
+        text: json['text'] as String?,
+        sticker: json['sticker'] as String?,
+        audioUrl: json['audio_url'] as String?,
+        createdAt: (json['created_at'] ?? '').toString(),
+      );
+}
+
 class ChatConversation {
   final String id;
   final ChatUser? otherUser;

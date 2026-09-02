@@ -1,70 +1,94 @@
-// Two agents by design: the Windows PC (labeled below) has a working
-// Flutter install and real CPU/RAM headroom, so it does the actual build.
-// The VPS (built-in node) only receives the already-built static files and
-// copies them into place — it never runs Flutter/Gradle itself, which is
-// what made builds on the VPS alone crawl to a halt.
 pipeline {
-    agent none
-
-    // The default per-stage-agent checkout does a full clone (entire git
-    // history — every image/video/APK ever committed, even long-deleted
-    // ones, ~150MB+ here). On a slow/unstable connection that repeatedly
-    // blew past Jenkins' checkout retry limit before finishing. Disabled
-    // here in favor of an explicit shallow clone (depth 1) in the one
-    // stage that actually needs the source.
-    options {
-        skipDefaultCheckout()
-    }
+    agent any
 
     environment {
-        // Must match the label given to the PC's node in Jenkins
-        // (Manage Jenkins > Nodes > New Node).
-        PC_AGENT_LABEL = 'flutter-pc'
-        WEB_DEPLOY_DIR = '/var/www/fasttravel-app'
+        DEPLOY_DIR = '/opt/fast_travel_micro'
     }
 
     stages {
-        stage('Build (PC)') {
-            agent { label "${PC_AGENT_LABEL}" }
+        stage('Checkout') {
             steps {
-                checkout([
-                    $class: 'GitSCM',
-                    branches: [[name: '*/main']],
-                    extensions: [[$class: 'CloneOption', shallow: true, depth: 1, noTags: false, timeout: 30]],
-                    userRemoteConfigs: [[url: 'https://github.com/Suraku237/globetrotter-capstone', credentialsId: 'github-creds']]
-                ])
-                dir('frontend/fast_travel') {
-                    bat 'flutter pub get'
-                    // Only real analyzer ERRORs block the deploy —
-                    // pre-existing style lints don't affect correctness.
-                    bat 'flutter analyze --no-fatal-warnings --no-fatal-infos'
-                    bat 'flutter test'
-                    bat 'flutter build web --release'
-                }
-                stash name: 'web-build', includes: 'frontend/fast_travel/build/web/**'
+                checkout scm
             }
         }
 
-        stage('Deploy (VPS)') {
-            // If your Jenkins controller's built-in node uses a different
-            // label than "built-in" (check Manage Jenkins > Nodes), update
-            // this to match. No checkout needed here — this stage only
-            // copies the files the PC stage already built (via unstash).
-            agent { label 'built-in' }
+        stage('Test') {
             steps {
-                unstash 'web-build'
                 sh '''
-                    mkdir -p ${WEB_DEPLOY_DIR}/downloads
-                    # Clear out everything except downloads/ (the APK lives
-                    # there — this pipeline only builds the web app, so it
-                    # has no business touching that folder).
-                    find ${WEB_DEPLOY_DIR} -mindepth 1 -maxdepth 1 ! -name downloads -exec rm -rf {} +
-                    cp -r frontend/fast_travel/build/web/* ${WEB_DEPLOY_DIR}/
-                    # chmod, not chown: the Jenkins user owns these files
-                    # already (it just wrote them) — granting read access to
-                    # everyone is enough for nginx (www-data) to serve them,
-                    # and unlike chown it doesn't require root.
-                    chmod -R o+rX ${WEB_DEPLOY_DIR}
+                    cd microservices/data-service
+                    python3 -m venv .venv
+                    . .venv/bin/activate
+                    pip install --no-cache-dir -r requirements-dev.txt
+                    JWT_SECRET=ci-test-secret python -m pytest tests -v
+                '''
+            }
+        }
+
+        stage('Build') {
+            steps {
+                sh '''
+                    cd microservices
+                    docker compose -f docker-compose.yml build
+                '''
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                // git fetch/reset run against a plain long-lived clone at
+                // ${DEPLOY_DIR} on the VPS — a different clone than the one
+                // `checkout scm` made in the Jenkins workspace, so it never
+                // inherited Jenkins' own SCM credentials. It was relying on
+                // a cached/anonymous HTTPS auth that GitHub no longer
+                // accepts (password auth over HTTPS is retired — a PAT or
+                // SSH key is required now), hence "could not read Username
+                // for 'https://github.com'": git has nowhere non-interactive
+                // to get one and no TTY to prompt on. Supplying one from a
+                // Jenkins credential here, only for this command, fixes it.
+                withCredentials([usernamePassword(
+                    credentialsId: 'github-creds',
+                    usernameVariable: 'GIT_USERNAME',
+                    passwordVariable: 'GIT_PASSWORD'
+                )]) {
+                    sh '''
+                        cd ${DEPLOY_DIR}
+                        git -c credential.helper='!f() { echo "username=${GIT_USERNAME}"; echo "password=${GIT_PASSWORD}"; }; f' fetch --all
+                        git reset --hard origin/main
+                        cd microservices
+
+                        # Generate the JWT signing secret once; reused on every later deploy.
+                        if [ ! -f .env ]; then
+                            echo "JWT_SECRET=$(openssl rand -hex 32)" > .env
+                            echo "Generated new JWT_SECRET (first deploy on this host)"
+                        fi
+
+                        # Always leave a real file here — docker compose turns a missing
+                        # bind-mount source into an empty directory, which breaks the
+                        # container. An empty file is harmless: Google sign-in just stays
+                        # disabled (register/login are unaffected) until a real credential
+                        # is configured below.
+                        touch -a firebase-service-account.json
+                    '''
+                }
+
+                // Optional: only copies a real credential over the placeholder if the
+                // 'firebase-service-account' Secret file credential has been added in
+                // Jenkins. If it hasn't, the deploy still proceeds — Google sign-in
+                // just isn't available yet.
+                script {
+                    try {
+                        withCredentials([file(credentialsId: 'firebase-service-account', variable: 'FIREBASE_CRED_FILE')]) {
+                            sh 'cp "$FIREBASE_CRED_FILE" ${DEPLOY_DIR}/microservices/firebase-service-account.json'
+                        }
+                    } catch (err) {
+                        echo "No 'firebase-service-account' Jenkins credential configured — Google sign-in stays disabled. Email/password auth is unaffected."
+                    }
+                }
+
+                sh '''
+                    cd ${DEPLOY_DIR}/microservices
+                    docker compose up -d --build
+                    docker image prune -f
                 '''
             }
         }
@@ -72,24 +96,36 @@ pipeline {
 
     post {
         success {
-            slackSend(
-                color: 'good',
-                message: "✅ Frontend web deploy succeeded: ${env.JOB_NAME} #${env.BUILD_NUMBER} (${env.BUILD_URL})"
-            )
+            script {
+                try {
+                    slackSend(
+                        color: 'good',
+                        message: "✅ Backend deploy succeeded: ${env.JOB_NAME} #${env.BUILD_NUMBER} (${env.BUILD_URL})"
+                    )
+                } catch (err) {
+                    echo "Slack notification failed (Slack isn't configured under Manage Jenkins → System → Slack yet) — ignoring: ${err}"
+                }
+            }
             emailext(
-                subject: "✅ Frontend web deploy succeeded - build #${env.BUILD_NUMBER}",
-                body: "The frontend web deploy pipeline succeeded.\n\nBuild: ${env.BUILD_URL}",
+                subject: "✅ Backend deploy succeeded - build #${env.BUILD_NUMBER}",
+                body: "The backend deploy pipeline succeeded.\n\nBuild: ${env.BUILD_URL}",
                 to: '${DEFAULT_RECIPIENTS}'
             )
         }
         failure {
-            slackSend(
-                color: 'danger',
-                message: "❌ Frontend web deploy FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER} (${env.BUILD_URL})"
-            )
+            script {
+                try {
+                    slackSend(
+                        color: 'danger',
+                        message: "❌ Backend deploy FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER} (${env.BUILD_URL})"
+                    )
+                } catch (err) {
+                    echo "Slack notification failed (Slack isn't configured under Manage Jenkins → System → Slack yet) — ignoring: ${err}"
+                }
+            }
             emailext(
-                subject: "❌ Frontend web deploy FAILED - build #${env.BUILD_NUMBER}",
-                body: "The frontend web deploy pipeline failed. Check logs.\n\nBuild: ${env.BUILD_URL}",
+                subject: "❌ Backend deploy FAILED - build #${env.BUILD_NUMBER}",
+                body: "The backend deploy pipeline failed. Check logs.\n\nBuild: ${env.BUILD_URL}",
                 to: '${DEFAULT_RECIPIENTS}'
             )
         }

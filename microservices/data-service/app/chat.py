@@ -17,6 +17,12 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 CHAT_FILE = DATA_DIR / "chat_conversations.json"
 AUDIO_DIR = DATA_DIR / "audio" / "chat"
 
+# A single, always-existing public room every user is implicitly a member
+# of — separate from ROOM_FILE's DM conversations so the "everyone can
+# talk" community chat can't collide with (or be mistaken for) a 1:1 chat.
+ROOM_FILE = DATA_DIR / "chat_room.json"
+ROOM_AUDIO_DIR = DATA_DIR / "audio" / "chat_room"
+
 
 def _load_conversations() -> list:
     return _load(CHAT_FILE)
@@ -222,3 +228,78 @@ def mark_read(conversation_id: str, current_user: dict = Depends(get_current_use
     if changed:
         _save_conversations(conversations)
     return {"status": "ok"}
+
+
+# ---- Public community room: one shared thread everyone can post in ----
+
+
+def _load_room() -> list:
+    """The room file holds just the message list — there's exactly one
+    room, so there's no need for the conversation-wrapper object (id,
+    participant_ids, etc.) that per-pair DMs use."""
+    return _load(ROOM_FILE)
+
+
+def _save_room(messages: list) -> None:
+    _save(ROOM_FILE, messages)
+
+
+def _room_message(sender: dict, type_: str, **fields) -> dict:
+    return {
+        "id": str(uuid.uuid4()),
+        "sender_id": sender["id"],
+        "sender_name": sender["full_name"],
+        "sender_avatar": sender.get("avatar_url"),
+        "type": type_,
+        "text": fields.get("text"),
+        "sticker": fields.get("sticker"),
+        "audio_url": fields.get("audio_url"),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@router.get("/room/messages")
+def get_room_messages(current_user: dict = Depends(get_current_user)):
+    """Every user is implicitly a member — no join/leave step needed."""
+    return _load_room()
+
+
+@router.post("/room/messages", status_code=201)
+def send_room_message(
+    payload: MessageCreate, current_user: dict = Depends(get_current_user)
+):
+    messages = _load_room()
+    message = _room_message(
+        current_user,
+        payload.type,
+        text=payload.content if payload.type == "text" else None,
+        sticker=payload.content if payload.type == "sticker" else None,
+    )
+    messages.append(message)
+    _save_room(messages)
+    return message
+
+
+@router.post("/room/messages/audio", status_code=201)
+async def send_room_audio_message(
+    audio: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+):
+    ROOM_AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+    extension = (
+        audio.filename.rsplit(".", 1)[-1].lower()
+        if audio.filename and "." in audio.filename
+        else "m4a"
+    )
+    filename = f"{uuid.uuid4().hex}.{extension}"
+    contents = await audio.read()
+    with open(ROOM_AUDIO_DIR / filename, "wb") as f:
+        f.write(contents)
+
+    messages = _load_room()
+    message = _room_message(
+        current_user, "audio", audio_url=f"/audio/chat_room/{filename}"
+    )
+    messages.append(message)
+    _save_room(messages)
+    return message

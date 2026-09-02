@@ -467,6 +467,52 @@ class ApiService {
     await _handle(res);
   }
 
+  // ---- Community room (public, all users) ----
+
+  Future<List<RoomMessage>> getRoomMessages() async {
+    final res = await http.get(Uri.parse('$baseUrl/chat/room/messages'),
+        headers: _headers);
+    final data = await _handle(res) as List;
+    return data.map((e) => RoomMessage.fromJson(e)).toList();
+  }
+
+  Future<RoomMessage> sendRoomText(String text) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/chat/room/messages'),
+      headers: _headers,
+      body: jsonEncode({'type': 'text', 'content': text}),
+    );
+    final data = await _handle(res, okStatus: 201);
+    return RoomMessage.fromJson(data as Map<String, dynamic>);
+  }
+
+  Future<RoomMessage> sendRoomSticker(String sticker) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/chat/room/messages'),
+      headers: _headers,
+      body: jsonEncode({'type': 'sticker', 'content': sticker}),
+    );
+    final data = await _handle(res, okStatus: 201);
+    return RoomMessage.fromJson(data as Map<String, dynamic>);
+  }
+
+  Future<RoomMessage> sendRoomAudio(
+      List<int> audioBytes, String filename) async {
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$baseUrl/chat/room/messages/audio'),
+    );
+    if (_token != null) request.headers['Authorization'] = '******';
+    request.files.add(
+      http.MultipartFile.fromBytes('audio', audioBytes, filename: filename),
+    );
+
+    final streamed = await request.send();
+    final res = await http.Response.fromStream(streamed);
+    final data = await _handle(res, okStatus: 201);
+    return RoomMessage.fromJson(data as Map<String, dynamic>);
+  }
+
   // ---- Destination suggestions ----
 
   Future<Destination> submitDestination({

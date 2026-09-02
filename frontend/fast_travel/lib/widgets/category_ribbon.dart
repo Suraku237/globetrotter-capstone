@@ -26,6 +26,63 @@ class CategoryRibbon extends StatelessWidget {
   static String _label(String tag) =>
       tag.isEmpty ? tag : tag[0].toUpperCase() + tag.substring(1);
 
+  // Best-effort icon per tag, matched by keyword rather than an exact
+  // lookup table — tags are freeform (whatever admins/users have entered
+  // on destinations), so this can't be an exhaustive enum. Falls through
+  // to a generic "place" icon for anything unrecognized rather than
+  // leaving the chip iconless.
+  static const _iconsByKeyword = <String, IconData>{
+    'market': Icons.storefront_rounded,
+    'shop': Icons.storefront_rounded,
+    'nature': Icons.eco_rounded,
+    'wildlife': Icons.eco_rounded,
+    'forest': Icons.forest_rounded,
+    'rainforest': Icons.forest_rounded,
+    'park': Icons.park_rounded,
+    'garden': Icons.park_rounded,
+    'museum': Icons.museum_rounded,
+    'art': Icons.palette_rounded,
+    'cathedral': Icons.church_rounded,
+    'church': Icons.church_rounded,
+    'restaurant': Icons.restaurant_rounded,
+    'food': Icons.restaurant_rounded,
+    'soya': Icons.restaurant_rounded,
+    'street-food': Icons.restaurant_rounded,
+    'cinema': Icons.movie_rounded,
+    'nightlife': Icons.nightlife_rounded,
+    'bar': Icons.local_bar_rounded,
+    'sport': Icons.sports_soccer_rounded,
+    'hotel': Icons.hotel_rounded,
+    'hiking': Icons.hiking_rounded,
+    'mountain': Icons.terrain_rounded,
+    'volcano': Icons.terrain_rounded,
+    'beach': Icons.beach_access_rounded,
+    'relax': Icons.spa_rounded,
+    'river': Icons.water_rounded,
+    'boating': Icons.directions_boat_rounded,
+    'fishing': Icons.phishing_rounded,
+    'lake': Icons.water_rounded,
+    'bird': Icons.flutter_dash_rounded,
+    'animal': Icons.pets_rounded,
+    'conservation': Icons.eco_rounded,
+    'biodiversity': Icons.eco_rounded,
+    'ecotourism': Icons.travel_explore_rounded,
+    'bridge': Icons.architecture_rounded,
+    'architecture': Icons.architecture_rounded,
+    'city': Icons.location_city_rounded,
+    'business': Icons.business_center_rounded,
+    'adventure': Icons.hiking_rounded,
+    'local': Icons.place_rounded,
+  };
+
+  static IconData _iconFor(String tag) {
+    final lower = tag.toLowerCase();
+    for (final entry in _iconsByKeyword.entries) {
+      if (lower.contains(entry.key)) return entry.value;
+    }
+    return Icons.place_rounded;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (categories.isEmpty) return const SizedBox.shrink();
@@ -63,13 +120,24 @@ class CategoryRibbon extends StatelessWidget {
                   ),
                 ],
               ),
-              child: Text(
-                _label(category),
-                style: TextStyle(
-                  color: isSelected ? Colors.white : AppColors.ink,
-                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-                  fontSize: 13,
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    _iconFor(category),
+                    size: 16,
+                    color: isSelected ? Colors.white : color,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    _label(category),
+                    style: TextStyle(
+                      color: isSelected ? Colors.white : AppColors.ink,
+                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
               ),
             ),
           );

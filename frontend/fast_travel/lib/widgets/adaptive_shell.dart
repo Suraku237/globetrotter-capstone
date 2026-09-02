@@ -136,47 +136,26 @@ class AdaptiveShell extends StatelessWidget {
     }
 
     return Scaffold(
-      body: Row(
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          NavigationRail(
+          _TopNavBar(
             selectedIndex: selectedIndex,
             onDestinationSelected: onDestinationSelected,
-            backgroundColor: AppColors.canopy.withValues(alpha: 0.75),
-            extended: MediaQuery.sizeOf(context).width >= 1024,
-            leading: const Padding(
-              padding: EdgeInsets.symmetric(vertical: 24),
-              child: Icon(Icons.travel_explore_rounded,
-                  color: AppColors.ochre, size: 32),
-            ),
-            destinations: [
-              ...destinations.map((d) => NavigationRailDestination(
-                    icon: Icon(d.icon),
-                    selectedIcon: Icon(d.selected),
-                    label: Text(d.label),
-                  )),
-              NavigationRailDestination(
-                icon: _profileIcon(selected: false),
-                selectedIcon: _profileIcon(selected: true),
-                label: Text(l10n.navProfile),
-              ),
-            ],
+            destinations: destinations,
+            actions: actions,
+            profileIcon: _profileIcon(selected: selectedIndex == destinations.length),
+            profileLabel: l10n.navProfile,
           ),
-          const VerticalDivider(width: 1, color: Color(0x22000000)),
+          const Divider(height: 1, color: Color(0x1A16181D)),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(32, 28, 32, 8),
-                  child: Row(
-                    children: [
-                      Expanded(
-                          child: Text(title,
-                              style:
-                                  Theme.of(context).textTheme.headlineMedium)),
-                      ...?actions,
-                    ],
-                  ),
+                  padding: const EdgeInsets.fromLTRB(32, 20, 32, 8),
+                  child: Text(title,
+                      style: Theme.of(context).textTheme.headlineMedium),
                 ),
                 Expanded(
                   child: Padding(
@@ -191,6 +170,127 @@ class AdaptiveShell extends StatelessWidget {
       ),
       floatingActionButton: const _AskAiButton(),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
+    );
+  }
+}
+
+/// Light horizontal top nav bar for wide/desktop screens — icon + label
+/// per destination in a row, with the active tab underlined. Replaces the
+/// previous dark vertical NavigationRail so the wide layout reads like a
+/// standard web app header instead of a stretched phone shell.
+class _TopNavBar extends StatelessWidget {
+  final int selectedIndex;
+  final ValueChanged<int> onDestinationSelected;
+  final List<({IconData icon, IconData selected, String label})> destinations;
+  final List<Widget>? actions;
+  final Widget profileIcon;
+  final String profileLabel;
+
+  const _TopNavBar({
+    required this.selectedIndex,
+    required this.onDestinationSelected,
+    required this.destinations,
+    required this.actions,
+    required this.profileIcon,
+    required this.profileLabel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final profileIndex = destinations.length;
+    return Container(
+      color: AppColors.sand,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      child: Row(
+        children: [
+          const Icon(Icons.travel_explore_rounded,
+              color: AppColors.ochre, size: 28),
+          const SizedBox(width: 32),
+          Expanded(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ...List.generate(destinations.length, (i) {
+                  final d = destinations[i];
+                  return _TopNavItem(
+                    icon: d.icon,
+                    selectedIcon: d.selected,
+                    label: d.label,
+                    selected: selectedIndex == i,
+                    onTap: () => onDestinationSelected(i),
+                  );
+                }),
+                _TopNavItem(
+                  iconWidget: profileIcon,
+                  label: profileLabel,
+                  selected: selectedIndex == profileIndex,
+                  onTap: () => onDestinationSelected(profileIndex),
+                ),
+              ],
+            ),
+          ),
+          if (actions != null) ...actions!,
+        ],
+      ),
+    );
+  }
+}
+
+class _TopNavItem extends StatelessWidget {
+  final IconData? icon;
+  final IconData? selectedIcon;
+  final Widget? iconWidget;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _TopNavItem({
+    this.icon,
+    this.selectedIcon,
+    this.iconWidget,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected ? AppColors.canopy : AppColors.inkSoft;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                iconWidget ??
+                    Icon(selected ? (selectedIcon ?? icon) : icon,
+                        size: 20, color: color),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: color,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              height: 2,
+              width: selected ? 28 : 0,
+              color: AppColors.canopy,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

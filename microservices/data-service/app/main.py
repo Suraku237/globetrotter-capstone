@@ -1,5 +1,6 @@
 import logging
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,7 +11,36 @@ from .models import DATA_DIR, get_gemini_api_key
 
 logger = logging.getLogger("uvicorn.error")
 
-app = FastAPI(title="GlobeTrotter Data Service", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # A visible line in the container logs makes it obvious whether env
+    # actually made it into the process — the #1 cause of the AI assistant
+    # 503 has been "container was started before .env was populated".
+    # Uses the current lifespan-events API instead of the deprecated
+    # @app.on_event("startup") hook that was warned on in the CI logs.
+    key = get_gemini_api_key()
+    if key:
+        logger.info(
+            "AI assistant configured (GEMINI_API_KEY present, %d chars).",
+            len(key),
+        )
+    else:
+        logger.warning(
+            "AI assistant NOT configured — GEMINI_API_KEY is missing/empty. "
+            "Set it in microservices/.env, then recreate the data-service "
+            "container so the new value takes effect."
+        )
+    yield
+    # No shutdown work needed today — file writes are synchronous and
+    # everything else uses per-request httpx clients.
+
+
+app = FastAPI(
+    title="GlobeTrotter Data Service",
+    version="1.0.0",
+    lifespan=lifespan,
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -42,22 +72,6 @@ app.include_router(itineraries.router)
 app.include_router(posts.router)
 app.include_router(recommendations.router)
 app.include_router(stats.router)
-
-
-@app.on_event("startup")
-def _log_config_state() -> None:
-    # A visible line in the container logs makes it obvious whether env
-    # actually made it into the process — the #1 cause of the AI assistant
-    # 503 has been "container was started before .env was populated".
-    key = get_gemini_api_key()
-    if key:
-        logger.info("AI assistant configured (GEMINI_API_KEY present, %d chars).", len(key))
-    else:
-        logger.warning(
-            "AI assistant NOT configured — GEMINI_API_KEY is missing/empty. "
-            "Set it in microservices/.env, then recreate the data-service "
-            "container so the new value takes effect."
-        )
 
 
 @app.get("/health")

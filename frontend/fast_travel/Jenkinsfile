@@ -1,8 +1,28 @@
+// Frontend deploy pipeline for the Flutter web app served at
+// fasttravel-web.duckdns.org. Runs on the same Jenkins agent as the
+// backend pipeline (which is the VPS itself), so "deploy" is a local
+// rsync of the compiled build/web/ output into the nginx doc root.
+//
+// This file used to be a byte-for-byte copy of the backend Jenkinsfile,
+// which meant every "frontend-deploy" build silently redeployed the
+// backend and left the Flutter web files untouched — that's why the
+// site kept showing an old build even after every "successful"
+// frontend build. The pipeline below actually builds Flutter web now.
+
 pipeline {
     agent any
 
     environment {
-        DEPLOY_DIR = '/opt/fast_travel_micro'
+        // Persistent Flutter SDK checkout — cloned on the first build,
+        // reused on every subsequent build so we don't re-download
+        // ~1 GB of Dart SDK each time.
+        FLUTTER_HOME = "${env.HOME}/flutter-sdk"
+        // Nginx serves the Flutter web bundle from this directory (see
+        // /etc/nginx/sites-enabled/fasttravel-web on the VPS). rsync
+        // writes into it with --delete so old bundle files can't linger
+        // and confuse the browser's cache-busting logic.
+        WEB_DIR = '/var/www/fasttravel-web'
+        APP_DIR = 'frontend/fast_travel'
     }
 
     stages {
@@ -12,83 +32,68 @@ pipeline {
             }
         }
 
-        stage('Test') {
+        stage('Setup Flutter') {
             steps {
                 sh '''
-                    cd microservices/data-service
-                    python3 -m venv .venv
-                    . .venv/bin/activate
-                    pip install --no-cache-dir -r requirements-dev.txt
-                    JWT_SECRET=ci-test-secret python -m pytest tests -v
+                    set -e
+                    if [ ! -d "$FLUTTER_HOME" ]; then
+                        echo "First-time Flutter setup — cloning stable channel."
+                        git clone --depth 1 -b stable https://github.com/flutter/flutter.git "$FLUTTER_HOME"
+                    fi
+                    export PATH="$FLUTTER_HOME/bin:$PATH"
+
+                    # Ownership of the SDK path itself matters for
+                    # `flutter upgrade` — refuses to run otherwise.
+                    # `config --no-analytics` silences the interactive
+                    # first-run prompt that would otherwise hang.
+                    git config --global --add safe.directory "$FLUTTER_HOME"
+                    flutter config --no-analytics --enable-web
+                    flutter --version
                 '''
             }
         }
 
-        stage('Build') {
+        stage('Build web') {
             steps {
                 sh '''
-                    cd microservices
-                    docker compose -f docker-compose.yml build
+                    set -e
+                    export PATH="$FLUTTER_HOME/bin:$PATH"
+                    cd "$APP_DIR"
+                    flutter pub get
+                    # --release: minified + tree-shaken, smaller bundle
+                    # for production. Icon tree-shaking sometimes trips
+                    # up on the Cameroon flag emoji + Material Symbols
+                    # combo, hence --no-tree-shake-icons.
+                    flutter build web --release --no-tree-shake-icons
                 '''
             }
         }
 
         stage('Deploy') {
             steps {
-                // git fetch/reset run against a plain long-lived clone at
-                // ${DEPLOY_DIR} on the VPS — a different clone than the one
-                // `checkout scm` made in the Jenkins workspace, so it never
-                // inherited Jenkins' own SCM credentials. It was relying on
-                // a cached/anonymous HTTPS auth that GitHub no longer
-                // accepts (password auth over HTTPS is retired — a PAT or
-                // SSH key is required now), hence "could not read Username
-                // for 'https://github.com'": git has nowhere non-interactive
-                // to get one and no TTY to prompt on. Supplying one from a
-                // Jenkins credential here, only for this command, fixes it.
-                withCredentials([usernamePassword(
-                    credentialsId: 'github-creds',
-                    usernameVariable: 'GIT_USERNAME',
-                    passwordVariable: 'GIT_PASSWORD'
-                )]) {
-                    sh '''
-                        cd ${DEPLOY_DIR}
-                        git -c credential.helper='!f() { echo "username=${GIT_USERNAME}"; echo "password=${GIT_PASSWORD}"; }; f' fetch --all
-                        git reset --hard origin/main
-                        cd microservices
-
-                        # Generate the JWT signing secret once; reused on every later deploy.
-                        if [ ! -f .env ]; then
-                            echo "JWT_SECRET=$(openssl rand -hex 32)" > .env
-                            echo "Generated new JWT_SECRET (first deploy on this host)"
-                        fi
-
-                        # Always leave a real file here — docker compose turns a missing
-                        # bind-mount source into an empty directory, which breaks the
-                        # container. An empty file is harmless: Google sign-in just stays
-                        # disabled (register/login are unaffected) until a real credential
-                        # is configured below.
-                        touch -a firebase-service-account.json
-                    '''
-                }
-
-                // Optional: only copies a real credential over the placeholder if the
-                // 'firebase-service-account' Secret file credential has been added in
-                // Jenkins. If it hasn't, the deploy still proceeds — Google sign-in
-                // just isn't available yet.
-                script {
-                    try {
-                        withCredentials([file(credentialsId: 'firebase-service-account', variable: 'FIREBASE_CRED_FILE')]) {
-                            sh 'cp "$FIREBASE_CRED_FILE" ${DEPLOY_DIR}/microservices/firebase-service-account.json'
-                        }
-                    } catch (err) {
-                        echo "No 'firebase-service-account' Jenkins credential configured — Google sign-in stays disabled. Email/password auth is unaffected."
-                    }
-                }
-
                 sh '''
-                    cd ${DEPLOY_DIR}/microservices
-                    docker compose up -d --build
-                    docker image prune -f
+                    set -e
+                    if [ ! -d "$WEB_DIR" ]; then
+                        echo "Target directory $WEB_DIR does not exist."
+                        echo "Create it once on the VPS with:"
+                        echo "  sudo mkdir -p $WEB_DIR"
+                        echo "  sudo chown jenkins:www-data $WEB_DIR"
+                        echo "  sudo chmod g+ws $WEB_DIR"
+                        exit 1
+                    fi
+                    # --delete removes stale files from a previous
+                    # bundle (Flutter web uses hashed filenames per
+                    # build, so keeping them around forever would grow
+                    # the doc root without limit).
+                    rsync -a --delete "$APP_DIR/build/web/" "$WEB_DIR/"
+
+                    # Best-effort ownership + group-read flags so nginx
+                    # (running as www-data) can serve everything.
+                    # Ignored if the Jenkins user lacks permission — in
+                    # that case the doc root should already be set up so
+                    # files are readable regardless.
+                    chown -R jenkins:www-data "$WEB_DIR" 2>/dev/null || true
+                    chmod -R g+r "$WEB_DIR" 2>/dev/null || true
                 '''
             }
         }
@@ -100,15 +105,15 @@ pipeline {
                 try {
                     slackSend(
                         color: 'good',
-                        message: "✅ Backend deploy succeeded: ${env.JOB_NAME} #${env.BUILD_NUMBER} (${env.BUILD_URL})"
+                        message: "Frontend deploy succeeded: ${env.JOB_NAME} #${env.BUILD_NUMBER} (${env.BUILD_URL})"
                     )
                 } catch (err) {
-                    echo "Slack notification failed (Slack isn't configured under Manage Jenkins → System → Slack yet) — ignoring: ${err}"
+                    echo "Slack not configured yet - ignoring: ${err}"
                 }
             }
             emailext(
-                subject: "✅ Backend deploy succeeded - build #${env.BUILD_NUMBER}",
-                body: "The backend deploy pipeline succeeded.\n\nBuild: ${env.BUILD_URL}",
+                subject: "Frontend deploy succeeded - build #${env.BUILD_NUMBER}",
+                body: "The Flutter web deploy pipeline succeeded.\n\nBuild: ${env.BUILD_URL}",
                 to: '${DEFAULT_RECIPIENTS}'
             )
         }
@@ -117,15 +122,15 @@ pipeline {
                 try {
                     slackSend(
                         color: 'danger',
-                        message: "❌ Backend deploy FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER} (${env.BUILD_URL})"
+                        message: "Frontend deploy FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER} (${env.BUILD_URL})"
                     )
                 } catch (err) {
-                    echo "Slack notification failed (Slack isn't configured under Manage Jenkins → System → Slack yet) — ignoring: ${err}"
+                    echo "Slack not configured yet - ignoring: ${err}"
                 }
             }
             emailext(
-                subject: "❌ Backend deploy FAILED - build #${env.BUILD_NUMBER}",
-                body: "The backend deploy pipeline failed. Check logs.\n\nBuild: ${env.BUILD_URL}",
+                subject: "Frontend deploy FAILED - build #${env.BUILD_NUMBER}",
+                body: "The Flutter web deploy pipeline failed. Check logs.\n\nBuild: ${env.BUILD_URL}",
                 to: '${DEFAULT_RECIPIENTS}'
             )
         }

@@ -137,25 +137,58 @@ class _AssistantScreenState extends State<AssistantScreen> {
   Future<void> _send(String text) async {
     if (text.trim().isEmpty || _sending) return;
 
+    // Push the user bubble immediately, plus a placeholder assistant
+    // bubble we'll append tokens into as the stream ticks. This is what
+    // makes the UI feel instant — the user never sits on a spinner
+    // waiting for the full reply to arrive.
     setState(() {
       _messages.add(_ChatMessage(text, true));
+      _messages.add(const _ChatMessage('', false));
       _sending = true;
     });
     _textController.clear();
     _scrollToBottom();
 
+    final assistantIndex = _messages.length - 1;
+    final buffer = StringBuffer();
     try {
-      final reply = await ApiService.instance.askAssistant(message: text);
-      setState(() => _messages.add(_ChatMessage(reply, false)));
-      if (_speakReplies) {
-        await _tts.speak(reply);
+      await for (final delta
+          in ApiService.instance.streamAssistant(message: text)) {
+        if (!mounted) return;
+        buffer.write(delta);
+        setState(() {
+          _messages[assistantIndex] = _ChatMessage(buffer.toString(), false);
+        });
+        _scrollToBottom();
+      }
+      // Speak the whole reply once — piecemeal TTS on every delta
+      // stutters badly and reads punctuation out loud.
+      if (_speakReplies && buffer.isNotEmpty) {
+        await _tts.speak(buffer.toString());
       }
     } on ApiException catch (e) {
-      setState(() => _messages.add(
-          _ChatMessage("Couldn't reach the assistant: ${e.message}", false)));
+      // The stream reported an error mid-flight (rate limit, safety
+      // block, upstream fault…). Replace the placeholder with a
+      // targeted message rather than leaving an empty bubble.
+      if (!mounted) return;
+      final friendly = e.statusCode == 429
+          ? "The assistant is busy — try again in a moment."
+          : e.statusCode == 400
+              ? "I couldn't answer that. Try rephrasing your question."
+              : e.statusCode == 503
+                  ? "The assistant isn't available: ${e.message}"
+                  : "Couldn't reach the assistant: ${e.message}";
+      setState(() {
+        _messages[assistantIndex] = _ChatMessage(friendly, false);
+      });
     } catch (_) {
-      setState(() => _messages.add(_ChatMessage(
-          "Couldn't reach the assistant. Check your connection.", false)));
+      if (!mounted) return;
+      setState(() {
+        _messages[assistantIndex] = const _ChatMessage(
+          "Couldn't reach the assistant. Check your connection.",
+          false,
+        );
+      });
     } finally {
       if (mounted) setState(() => _sending = false);
       _scrollToBottom();

@@ -625,4 +625,84 @@ class ApiService {
     final data = await _handle(res);
     return (data as Map<String, dynamic>)['reply'] as String;
   }
+
+  /// Streams the assistant's reply as it's generated, so the UI can
+  /// render the answer token by token instead of freezing on a spinner
+  /// for the whole roundtrip. Each yielded string is a text delta —
+  /// concatenate them in order to get the full reply.
+  ///
+  /// The backend speaks a tiny newline-delimited-JSON protocol:
+  ///   {"type":"delta","text":"partial reply "}
+  ///   {"type":"error","status":429,"detail":"…"}
+  ///   {"type":"done"}
+  /// Any `error` frame is surfaced as an [ApiException] with the
+  /// server-provided status code so the UI can show a targeted message
+  /// (quota, safety-blocked, etc.).
+  Stream<String> streamAssistant({required String message}) async* {
+    final client = http.Client();
+    try {
+      final request = http.Request('POST', Uri.parse('$baseUrl/assistant/chat/stream'));
+      request.headers['Content-Type'] = 'application/json';
+      final auth = _bearerHeader();
+      if (auth != null) request.headers['Authorization'] = auth;
+      request.body = jsonEncode({'message': message});
+
+      final streamed = await client.send(request);
+      if (streamed.statusCode != 200) {
+        // The server didn't even start streaming — treat this like a
+        // plain HTTP error so the caller gets the same ApiException it
+        // would from askAssistant().
+        final body = await streamed.stream.bytesToString();
+        String detail = body;
+        try {
+          detail = (jsonDecode(body) as Map<String, dynamic>)['detail']
+                  ?.toString() ??
+              body;
+        } catch (_) {}
+        if (streamed.statusCode == 401) {
+          setToken(null);
+          onUnauthorized?.call();
+        }
+        throw ApiException(detail, statusCode: streamed.statusCode);
+      }
+
+      // The server writes one JSON object per line. We can't rely on
+      // http.ByteStream giving us line-aligned chunks, so buffer until
+      // we see a newline and parse each complete line.
+      final buffer = StringBuffer();
+      await for (final chunk in streamed.stream.transform(utf8.decoder)) {
+        buffer.write(chunk);
+        while (true) {
+          final text = buffer.toString();
+          final newlineIndex = text.indexOf('\n');
+          if (newlineIndex < 0) break;
+          final line = text.substring(0, newlineIndex).trim();
+          buffer
+            ..clear()
+            ..write(text.substring(newlineIndex + 1));
+          if (line.isEmpty) continue;
+          Map<String, dynamic> frame;
+          try {
+            frame = jsonDecode(line) as Map<String, dynamic>;
+          } catch (_) {
+            continue;
+          }
+          final type = frame['type']?.toString();
+          if (type == 'delta') {
+            final text = frame['text']?.toString();
+            if (text != null && text.isNotEmpty) yield text;
+          } else if (type == 'error') {
+            final status = (frame['status'] as num?)?.toInt() ?? 502;
+            final detail =
+                frame['detail']?.toString() ?? 'Assistant stream failed.';
+            throw ApiException(detail, statusCode: status);
+          } else if (type == 'done') {
+            return;
+          }
+        }
+      }
+    } finally {
+      client.close();
+    }
+  }
 }

@@ -7,7 +7,6 @@ import 'screens/admin/pending_destinations_screen.dart';
 import 'screens/assistant/assistant_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/chat/chat_list_screen.dart';
-import 'screens/chat/community_room_screen.dart';
 import 'screens/feed/feed_screen.dart';
 import 'screens/home/discover_screen.dart';
 import 'screens/itineraries/itineraries_screen.dart';
@@ -269,33 +268,15 @@ class _HomeShellState extends State<_HomeShell> {
       onDestinationSelected: (i) => setState(() => _index = i),
       avatarUrl: widget.session.currentUser?.avatarUrl,
       userName: widget.session.currentUser?.fullName,
+      onOpenChat: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ChatListScreen(session: widget.session),
+          ),
+        );
+      },
       actions: [
-        IconButton(
-          tooltip: 'Community room',
-          icon: const Icon(Icons.public_rounded, color: AppColors.inkSoft),
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) =>
-                    CommunityRoomScreen(session: widget.session),
-              ),
-            );
-          },
-        ),
-        IconButton(
-          tooltip: 'Messages',
-          icon: const Icon(Icons.chat_bubble_outline_rounded,
-              color: AppColors.inkSoft),
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => ChatListScreen(session: widget.session),
-              ),
-            );
-          },
-        ),
         if (widget.isAdmin)
           IconButton(
             tooltip: l10n.reviewDestinationsTooltip,

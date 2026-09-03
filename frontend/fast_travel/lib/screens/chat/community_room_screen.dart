@@ -153,26 +153,35 @@ class _CommunityRoomScreenState extends State<CommunityRoomScreen> {
   }
 
   Future<void> _toggleRecording() async {
-    if (_recording) {
-      final path = await _recorder.stop();
-      setState(() => _recording = false);
-      if (path == null) return;
-      await _uploadRecording(path);
-      return;
-    }
-    if (!await _recorder.hasPermission()) {
+    try {
+      if (_recording) {
+        final path = await _recorder.stop();
+        if (mounted) setState(() => _recording = false);
+        if (path == null) return;
+        await _uploadRecording(path);
+        return;
+      }
+      if (!await _recorder.hasPermission()) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text(
+                  'Microphone permission is needed to record a voice message.')),
+        );
+        return;
+      }
+      final path =
+          audioTempPath('${DateTime.now().microsecondsSinceEpoch}.m4a');
+      await _recorder.start(const RecordConfig(encoder: AudioEncoder.aacLc),
+          path: path);
+      if (mounted) setState(() => _recording = true);
+    } on Object {
       if (!mounted) return;
+      setState(() => _recording = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text(
-                'Microphone permission is needed to record a voice message.')),
+        const SnackBar(content: Text('Could not access the microphone.')),
       );
-      return;
     }
-    final path = audioTempPath('${DateTime.now().microsecondsSinceEpoch}.m4a');
-    await _recorder.start(const RecordConfig(encoder: AudioEncoder.aacLc),
-        path: path);
-    setState(() => _recording = true);
   }
 
   Future<void> _uploadRecording(String path) async {

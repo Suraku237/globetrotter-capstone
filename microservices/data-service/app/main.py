@@ -1,3 +1,4 @@
+import logging
 import os
 
 from fastapi import FastAPI
@@ -5,7 +6,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from . import assistant, chat, destinations, itineraries, posts, recommendations, stats
-from .models import DATA_DIR
+from .models import DATA_DIR, get_gemini_api_key
+
+logger = logging.getLogger("uvicorn.error")
 
 app = FastAPI(title="GlobeTrotter Data Service", version="1.0.0")
 
@@ -41,6 +44,28 @@ app.include_router(recommendations.router)
 app.include_router(stats.router)
 
 
+@app.on_event("startup")
+def _log_config_state() -> None:
+    # A visible line in the container logs makes it obvious whether env
+    # actually made it into the process — the #1 cause of the AI assistant
+    # 503 has been "container was started before .env was populated".
+    key = get_gemini_api_key()
+    if key:
+        logger.info("AI assistant configured (GEMINI_API_KEY present, %d chars).", len(key))
+    else:
+        logger.warning(
+            "AI assistant NOT configured — GEMINI_API_KEY is missing/empty. "
+            "Set it in microservices/.env, then recreate the data-service "
+            "container so the new value takes effect."
+        )
+
+
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    # Reports whether the assistant is usable, so a browser hit to
+    # /api/health (or a curl from your laptop) diagnoses the 503 without
+    # needing shell access to the server.
+    return {
+        "status": "ok",
+        "assistant_configured": bool(get_gemini_api_key()),
+    }

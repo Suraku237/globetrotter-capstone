@@ -77,11 +77,11 @@ def register(payload: RegisterRequest):
 
     role = normalize_role(payload.role)
 
-    if role == "admin":
-        # Admin signups still create the account right away — the gate here
-        # is on *login*, not on storage, since a human (SUPER_ADMIN_EMAIL)
-        # needs to review a real request, not a one-time code the requester
-        # types straight back in themselves.
+    if role in ("admin", "worker"):
+        # Admin and worker signups still create the account right away —
+        # the gate here is on *login*, not on storage, since a human
+        # (SUPER_ADMIN_EMAIL) needs to review a real request, not a
+        # one-time code the requester types straight back in themselves.
         user_id = str(__import__("uuid").uuid4())
         user = {
             "id": user_id,
@@ -98,7 +98,9 @@ def register(payload: RegisterRequest):
         user["email_verified"] = True
         users.append(user)
         save_users(users)
-        send_admin_approval_request_email(user_id, payload.email, payload.full_name, token)
+        send_admin_approval_request_email(
+            user_id, payload.email, payload.full_name, token, role=role
+        )
         return {
             "id": user_id,
             "email": payload.email,
@@ -107,7 +109,7 @@ def register(payload: RegisterRequest):
             "status": "pending_admin_approval",
         }
 
-    # Regular user/worker signups: nothing is written to users.json yet.
+    # Regular user signups: nothing is written to users.json yet.
     # The email + hashed password sit in a separate pending store until the
     # code is confirmed, so a mistyped or fake email never leaves a real,
     # usable credential in the database.
@@ -219,13 +221,15 @@ _APPROVAL_PAGE = """
 def approve_admin_request(user_id: str, token: str):
     users = _find_pending_admin(user_id, token)
     user = next(u for u in users if u["id"] == user_id)
+    role = user.get("role", "admin")
     user["status"] = "active"
     user.pop("admin_approval_token", None)
     save_users(users)
-    send_admin_admission_email(user["email"], user["full_name"])
+    send_admin_admission_email(user["email"], user["full_name"], role=role)
+    role_label = "worker" if role == "worker" else "admin"
     return _APPROVAL_PAGE.format(
-        heading="Admin request approved",
-        message=f"{user['full_name']} ({user['email']}) can now sign in as an admin.",
+        heading=f"{role_label.capitalize()} request approved",
+        message=f"{user['full_name']} ({user['email']}) can now sign in as a {role_label}.",
     )
 
 
@@ -233,6 +237,7 @@ def approve_admin_request(user_id: str, token: str):
 def reject_admin_request(user_id: str, token: str):
     users = _find_pending_admin(user_id, token)
     user = next(u for u in users if u["id"] == user_id)
+    role = user.get("role", "admin")
     # Rejecting removes the account outright rather than just marking it
     # rejected — the email is freed up immediately (no stale record left
     # to clean up later), and since the record's gone, any future login
@@ -240,9 +245,10 @@ def reject_admin_request(user_id: str, token: str):
     # email that was never registered, landing back on the login screen.
     users = [u for u in users if u["id"] != user_id]
     save_users(users)
-    send_admin_rejection_email(user["email"], user["full_name"])
+    send_admin_rejection_email(user["email"], user["full_name"], role=role)
+    role_label = "worker" if role == "worker" else "admin"
     return _APPROVAL_PAGE.format(
-        heading="Admin request rejected",
+        heading=f"{role_label.capitalize()} request rejected",
         message=f"{user['full_name']} ({user['email']}) has been notified.",
     )
 
@@ -260,9 +266,11 @@ def login(payload: LoginRequest):
     # verification/approval.
     if not user.get("email_verified", True):
         raise HTTPException(status_code=403, detail="Please verify your email first")
-    if user.get("role") == "admin" and user.get("status", "active") != "active":
+    if user.get("role") in ("admin", "worker") and user.get("status", "active") != "active":
+        role_label = "worker" if user.get("role") == "worker" else "admin"
         raise HTTPException(
-            status_code=403, detail="Your admin request is still pending approval"
+            status_code=403,
+            detail=f"Your {role_label} request is still pending approval",
         )
 
     token = create_access_token({"sub": user["id"], "role": user.get("role", "user")})

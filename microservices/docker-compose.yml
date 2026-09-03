@@ -21,6 +21,14 @@ services:
   data-service:
     build:
       context: ./data-service
+    env_file:
+      # Explicitly loading .env — the top-level `${GEMINI_API_KEY:-}`
+      # substitution alone silently falls back to an empty string when
+      # the shell running `docker compose` doesn't already have the var
+      # exported, which is easy to miss and shows up as a 503 from
+      # /assistant/chat. env_file guarantees the container itself
+      # receives whatever is in .env.
+      - .env
     environment:
       JWT_SECRET: ${JWT_SECRET}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}

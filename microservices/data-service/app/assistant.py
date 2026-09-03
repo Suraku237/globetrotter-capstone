@@ -15,7 +15,12 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from .models import GEMINI_API_KEY, load_conversations, load_destinations, save_conversations
+from .models import (
+    get_gemini_api_key,
+    load_conversations,
+    load_destinations,
+    save_conversations,
+)
 from .security import get_current_user
 
 router = APIRouter(prefix="/assistant", tags=["assistant"])
@@ -80,10 +85,17 @@ def history(current_user: dict = Depends(get_current_user)):
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(payload: ChatRequest, current_user: dict = Depends(get_current_user)):
-    if not GEMINI_API_KEY:
+    api_key = get_gemini_api_key()
+    if not api_key:
         raise HTTPException(
             status_code=503,
-            detail="The AI assistant isn't configured yet (missing GEMINI_API_KEY).",
+            detail=(
+                "The AI assistant isn't configured yet (GEMINI_API_KEY is "
+                "missing or empty in data-service). Set it in "
+                "microservices/.env, then `docker compose up -d "
+                "--force-recreate data-service` so the container picks up "
+                "the new value."
+            ),
         )
 
     conversations = load_conversations()
@@ -106,7 +118,7 @@ async def chat(payload: ChatRequest, current_user: dict = Depends(get_current_us
         async with httpx.AsyncClient(timeout=30.0) as client:
             res = await client.post(
                 GEMINI_URL,
-                params={"key": GEMINI_API_KEY},
+                params={"key": api_key},
                 json=body,
             )
     except httpx.HTTPError as exc:

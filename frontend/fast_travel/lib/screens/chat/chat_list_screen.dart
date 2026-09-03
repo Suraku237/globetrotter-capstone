@@ -4,6 +4,7 @@ import '../../Services/session_state.dart';
 import '../../models/models.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/empty_state.dart';
+import 'community_room_screen.dart';
 import 'chat_thread_screen.dart';
 import 'new_chat_screen.dart';
 
@@ -57,6 +58,15 @@ class _ChatListScreenState extends State<ChatListScreen> {
     if (started == true) _load();
   }
 
+  Future<void> _openCommunityRoom() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CommunityRoomScreen(session: widget.session),
+      ),
+    );
+  }
+
   Future<void> _openThread(ChatConversation convo) async {
     await Navigator.push(
       context,
@@ -79,6 +89,11 @@ class _ChatListScreenState extends State<ChatListScreen> {
       appBar: AppBar(
         title: const Text('Messages'),
         actions: [
+          IconButton(
+            tooltip: 'Community room',
+            icon: const Icon(Icons.public_rounded),
+            onPressed: _openCommunityRoom,
+          ),
           IconButton(
             tooltip: 'New message',
             icon: const Icon(Icons.add_comment_rounded),

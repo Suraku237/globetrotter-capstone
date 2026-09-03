@@ -24,6 +24,11 @@ class AdaptiveShell extends StatelessWidget {
   // already looks nothing like a full-bleed phone screen, so there's
   // no "TikTok look" to preserve there.
   final bool showAppBar;
+  // Called both by the phone AppBar's chat icon and the wide top nav
+  // bar's "Chat" item — chat is a pushed screen (like the admin review
+  // screen), not one of the indexed tabs in `destinations`, so it isn't
+  // part of selectedIndex/onDestinationSelected.
+  final VoidCallback onOpenChat;
 
   // ✅ UPDATED: Added 4th destination: Map
   // Labels come from AppLocalizations at build time (see _destinations),
@@ -63,6 +68,7 @@ class AdaptiveShell extends StatelessWidget {
     this.avatarUrl,
     this.userName,
     this.showAppBar = true,
+    required this.onOpenChat,
   });
 
   Widget _profileIcon({required bool selected}) {
@@ -108,9 +114,30 @@ class AdaptiveShell extends StatelessWidget {
       // it.
       final showAskAi = selectedIndex != 1;
       return Scaffold(
-        appBar:
-            showAppBar ? AppBar(title: Text(title), actions: actions) : null,
-        body: SafeArea(child: child),
+        appBar: showAppBar
+            ? AppBar(
+                title: Text(title),
+                actions: [
+                  IconButton(
+                    tooltip: 'Messages',
+                    icon: const Icon(Icons.chat_bubble_outline_rounded,
+                        color: AppColors.inkSoft),
+                    onPressed: onOpenChat,
+                  ),
+                  ...?actions,
+                ],
+              )
+            : null,
+        body: showAppBar
+            ? SafeArea(child: child)
+            // Feed (and any other future full-bleed screen) opts out of
+            // the top-level SafeArea so its background — the vertical
+            // video — actually extends edge-to-edge under the status bar,
+            // instead of leaving a black strip that clips the top of the
+            // video. Overlaid controls (tabs, search, "new post" button)
+            // apply their own SafeArea from inside the screen so they
+            // stay clear of the notch.
+            : child,
         floatingActionButton: showAskAi ? const _AskAiButton() : null,
         floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
         bottomNavigationBar: NavigationBar(
@@ -137,33 +164,29 @@ class AdaptiveShell extends StatelessWidget {
 
     return Scaffold(
       body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _TopNavBar(
+            destinations: destinations,
             selectedIndex: selectedIndex,
             onDestinationSelected: onDestinationSelected,
-            destinations: destinations,
-            actions: actions,
-            profileIcon: _profileIcon(selected: selectedIndex == destinations.length),
+            onOpenChat: onOpenChat,
             profileLabel: l10n.navProfile,
+            profileIndex: destinations.length,
+            profileIcon: _profileIcon,
+            actions: actions,
           ),
-          const Divider(height: 1, color: Color(0x1A16181D)),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(32, 20, 32, 8),
-                  child: Text(title,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(32, 20, 32, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(title,
                       style: Theme.of(context).textTheme.headlineMedium),
-                ),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 32),
-                    child: child,
-                  ),
-                ),
-              ],
+                  const SizedBox(height: 12),
+                  Expanded(child: child),
+                ],
+              ),
             ),
           ),
         ],
@@ -174,80 +197,89 @@ class AdaptiveShell extends StatelessWidget {
   }
 }
 
-/// Light horizontal top nav bar for wide/desktop screens — icon + label
-/// per destination in a row, with the active tab underlined. Replaces the
-/// previous dark vertical NavigationRail so the wide layout reads like a
-/// standard web app header instead of a stretched phone shell.
+// Horizontal top nav bar for the wide/web layout — icon + label per item,
+// a short underline beneath whichever one is active. Replaces the old
+// left-hand NavigationRail with the more familiar top-bar pattern.
 class _TopNavBar extends StatelessWidget {
+  final List<({IconData icon, IconData selected, String label})> destinations;
   final int selectedIndex;
   final ValueChanged<int> onDestinationSelected;
-  final List<({IconData icon, IconData selected, String label})> destinations;
-  final List<Widget>? actions;
-  final Widget profileIcon;
+  final VoidCallback onOpenChat;
   final String profileLabel;
+  final int profileIndex;
+  final Widget Function({required bool selected}) profileIcon;
+  final List<Widget>? actions;
 
   const _TopNavBar({
+    required this.destinations,
     required this.selectedIndex,
     required this.onDestinationSelected,
-    required this.destinations,
-    required this.actions,
-    required this.profileIcon,
+    required this.onOpenChat,
     required this.profileLabel,
+    required this.profileIndex,
+    required this.profileIcon,
+    required this.actions,
   });
 
   @override
   Widget build(BuildContext context) {
-    final profileIndex = destinations.length;
     return Container(
-      color: AppColors.sand,
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      height: 64,
+      padding: const EdgeInsets.symmetric(horizontal: 32),
+      decoration: const BoxDecoration(
+        color: AppColors.sand,
+        border: Border(bottom: BorderSide(color: Color(0x1A16181D))),
+      ),
       child: Row(
         children: [
           const Icon(Icons.travel_explore_rounded,
-              color: AppColors.ochre, size: 28),
+              color: AppColors.ochre, size: 26),
           const SizedBox(width: 32),
-          Expanded(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                ...List.generate(destinations.length, (i) {
-                  final d = destinations[i];
-                  return _TopNavItem(
-                    icon: d.icon,
-                    selectedIcon: d.selected,
-                    label: d.label,
-                    selected: selectedIndex == i,
-                    onTap: () => onDestinationSelected(i),
-                  );
-                }),
-                _TopNavItem(
-                  iconWidget: profileIcon,
-                  label: profileLabel,
-                  selected: selectedIndex == profileIndex,
-                  onTap: () => onDestinationSelected(profileIndex),
+          ...destinations.asMap().entries.map(
+                (entry) => _NavBarItem(
+                  icon: entry.value.icon,
+                  selectedIcon: entry.value.selected,
+                  label: entry.value.label,
+                  selected: entry.key == selectedIndex,
+                  onTap: () => onDestinationSelected(entry.key),
                 ),
-              ],
-            ),
+              ),
+          _NavBarItem(
+            icon: Icons.chat_bubble_outline_rounded,
+            selectedIcon: Icons.chat_bubble_rounded,
+            label: 'Chat',
+            // Chat is a pushed screen, not a tab — it never shows as
+            // "active" in the bar the way Discover/Feed/etc. do.
+            selected: false,
+            onTap: onOpenChat,
           ),
-          if (actions != null) ...actions!,
+          const Spacer(),
+          ...?actions,
+          _NavBarItem(
+            icon: null,
+            customIcon: profileIcon(selected: selectedIndex == profileIndex),
+            label: profileLabel,
+            selected: selectedIndex == profileIndex,
+            onTap: () => onDestinationSelected(profileIndex),
+          ),
         ],
       ),
     );
   }
 }
 
-class _TopNavItem extends StatelessWidget {
+class _NavBarItem extends StatelessWidget {
   final IconData? icon;
   final IconData? selectedIcon;
-  final Widget? iconWidget;
+  final Widget? customIcon;
   final String label;
   final bool selected;
   final VoidCallback onTap;
 
-  const _TopNavItem({
+  const _NavBarItem({
     this.icon,
     this.selectedIcon,
-    this.iconWidget,
+    this.customIcon,
     required this.label,
     required this.selected,
     required this.onTap,
@@ -255,40 +287,42 @@ class _TopNavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? AppColors.canopy : AppColors.inkSoft;
+    final color = selected ? AppColors.ochre : AppColors.inkSoft;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                iconWidget ??
-                    Icon(selected ? (selectedIcon ?? icon) : icon,
-                        size: 20, color: color),
-                const SizedBox(width: 6),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: color,
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                    fontSize: 14,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: IntrinsicWidth(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 10),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  customIcon ??
+                      Icon(selected ? (selectedIcon ?? icon) : icon,
+                          size: 20, color: color),
+                  const SizedBox(width: 8),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: selected ? AppColors.ink : AppColors.inkSoft,
+                      fontWeight: selected ? FontWeight.bold : FontWeight.w600,
+                      fontSize: 15,
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              height: 2,
-              width: selected ? 28 : 0,
-              color: AppColors.canopy,
-            ),
-          ],
+                ],
+              ),
+              const SizedBox(height: 10),
+              Container(
+                height: 2,
+                width: double.infinity,
+                color: selected ? AppColors.ochre : Colors.transparent,
+              ),
+            ],
+          ),
         ),
       ),
     );

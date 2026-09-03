@@ -118,7 +118,7 @@ class _PostActionRailState extends State<PostActionRail> {
   }
 }
 
-class _RailButton extends StatelessWidget {
+class _RailButton extends StatefulWidget {
   final IconData icon;
   final bool flip;
   final Color color;
@@ -138,9 +138,34 @@ class _RailButton extends StatelessWidget {
   });
 
   @override
+  State<_RailButton> createState() => _RailButtonState();
+}
+
+class _RailButtonState extends State<_RailButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 220),
+    lowerBound: 0.85,
+    upperBound: 1.0,
+    value: 1.0,
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _bounce() {
+    _controller.reverse().then((_) => _controller.forward());
+  }
+
+  @override
   Widget build(BuildContext context) {
-    Widget iconWidget = Icon(icon, color: color, size: 32, shadows: shadows);
-    if (flip) {
+    Widget iconWidget =
+        Icon(widget.icon, color: widget.color, size: 32, shadows: widget.shadows);
+    if (widget.flip) {
       iconWidget = Transform(
         alignment: Alignment.center,
         transform: Matrix4.rotationY(math.pi),
@@ -148,21 +173,24 @@ class _RailButton extends StatelessWidget {
       );
     }
     return GestureDetector(
-      onTap: onTap,
+      onTap: () {
+        _bounce();
+        widget.onTap();
+      },
       behavior: HitTestBehavior.opaque,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          iconWidget,
-          if (label != null) ...[
+          ScaleTransition(scale: _controller, child: iconWidget),
+          if (widget.label != null) ...[
             const SizedBox(height: 4),
             Text(
-              label!,
+              widget.label!,
               style: TextStyle(
-                color: labelColor,
+                color: widget.labelColor,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                shadows: shadows,
+                shadows: widget.shadows,
               ),
             ),
           ],

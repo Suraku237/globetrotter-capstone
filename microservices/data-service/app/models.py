@@ -30,10 +30,25 @@ if not SECRET_KEY:
 ALGORITHM = "HS256"
 
 # Optional — unlike JWT_SECRET, a missing key here shouldn't take down the
-# whole service (destinations/itineraries/posts don't need it). assistant.py
-# checks for this itself and returns a clear error only when /assistant/chat
-# is actually called without it configured.
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+# whole service (destinations/itineraries/posts don't need it). Read at
+# request time via get_gemini_api_key() below rather than caching here, so
+# that:
+#   1. If the container was started before .env was populated and someone
+#      later injects the env var (e.g. `docker compose up -d` after editing
+#      .env), the next request picks it up without rebuilding the image.
+#   2. A key pasted with surrounding whitespace/quotes doesn't silently
+#      fail as a bad request to Google (which would surface as an opaque
+#      502 rather than the clean 503 users can actually act on).
+def get_gemini_api_key() -> Optional[str]:
+    raw = os.getenv("GEMINI_API_KEY") or ""
+    key = raw.strip().strip('"').strip("'")
+    return key or None
+
+
+# Kept for backwards compatibility with any callers doing
+# `from .models import GEMINI_API_KEY` — but prefer get_gemini_api_key()
+# in new code so the request-time lookup above is used.
+GEMINI_API_KEY = get_gemini_api_key()
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 DATA_DIR.mkdir(exist_ok=True)

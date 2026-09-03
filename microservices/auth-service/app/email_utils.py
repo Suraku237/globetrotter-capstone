@@ -1,11 +1,11 @@
 """
 Transactional email via Brevo's SMTP relay — used for the two flows that
 need a human to receive mail:
-  1. New user/worker signups get a 6-digit code to prove the email address
+  1. New regular-user signups get a 6-digit code to prove the email address
      they entered is real, before their account can log in.
-  2. New admin signups don't self-activate at all — a request goes to
-     SUPER_ADMIN_EMAIL with an approve/reject link, and the requester only
-     gets in once that's clicked.
+  2. New admin *and* worker signups don't self-activate at all — a request
+     goes to SUPER_ADMIN_EMAIL with an approve/reject link, and the
+     requester only gets in once that's clicked.
 """
 
 import logging
@@ -89,7 +89,11 @@ def send_verification_code_email(to_email: str, full_name: str, code: str) -> No
 
 
 def send_admin_approval_request_email(
-    requester_id: str, requester_email: str, requester_name: str, token: str
+    requester_id: str,
+    requester_email: str,
+    requester_name: str,
+    token: str,
+    role: str = "admin",
 ) -> None:
     if not SUPER_ADMIN_EMAIL:
         raise HTTPException(
@@ -102,13 +106,14 @@ def send_admin_approval_request_email(
     reject_url = (
         f"{PUBLIC_API_BASE_URL}/admin-requests/{requester_id}/reject?token={token}"
     )
+    role_label = "worker" if role == "worker" else "admin"
     _send(
         SUPER_ADMIN_EMAIL,
-        "New admin account request — Fast Travel",
+        f"New {role_label} account request — Fast Travel",
         f"""
         <div style="font-family: sans-serif; max-width: 480px; margin: auto;">
-          <h2 style="color:#171932;">New admin request</h2>
-          <p><strong>{requester_name}</strong> ({requester_email}) has requested an admin account.</p>
+          <h2 style="color:#171932;">New {role_label} request</h2>
+          <p><strong>{requester_name}</strong> ({requester_email}) has requested a <strong>{role_label}</strong> account.</p>
           <p style="margin-top:24px;">
             <a href="{approve_url}"
                style="background:#FF6A4D; color:white; padding:12px 24px; border-radius:24px;
@@ -129,28 +134,34 @@ def send_admin_approval_request_email(
     )
 
 
-def send_admin_admission_email(to_email: str, full_name: str) -> None:
+def send_admin_admission_email(
+    to_email: str, full_name: str, role: str = "admin"
+) -> None:
+    role_label = "worker" if role == "worker" else "admin"
     _send(
         to_email,
-        "You're approved as a Fast Travel admin",
+        f"You're approved as a Fast Travel {role_label}",
         f"""
         <div style="font-family: sans-serif; max-width: 480px; margin: auto;">
           <h2 style="color:#171932;">Congratulations, {full_name}!</h2>
-          <p>Your Fast Travel admin account has been approved. You can now sign in with the
+          <p>Your Fast Travel {role_label} account has been approved. You can now sign in with the
              email and password you registered with.</p>
         </div>
         """,
     )
 
 
-def send_admin_rejection_email(to_email: str, full_name: str) -> None:
+def send_admin_rejection_email(
+    to_email: str, full_name: str, role: str = "admin"
+) -> None:
+    role_label = "worker" if role == "worker" else "admin"
     _send(
         to_email,
-        "Your Fast Travel admin request",
+        f"Your Fast Travel {role_label} request",
         f"""
         <div style="font-family: sans-serif; max-width: 480px; margin: auto;">
           <h2 style="color:#171932;">Hi {full_name},</h2>
-          <p>Your request for an admin account on Fast Travel was not approved at this time.</p>
+          <p>Your request for a {role_label} account on Fast Travel was not approved at this time.</p>
         </div>
         """,
     )

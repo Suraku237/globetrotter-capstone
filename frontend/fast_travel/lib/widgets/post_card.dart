@@ -315,15 +315,44 @@ class _PostCardState extends State<PostCard>
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  '@${post.authorName}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    shadows: [Shadow(blurRadius: 6, color: Colors.black54)],
-                  ),
-                  overflow: TextOverflow.ellipsis,
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 14,
+                      backgroundColor: Colors.white24,
+                      backgroundImage: post.authorAvatar != null
+                          ? NetworkImage(
+                              ApiService.resolveUrl(post.authorAvatar!))
+                          : null,
+                      child: post.authorAvatar == null
+                          ? Text(
+                              post.authorName.isNotEmpty
+                                  ? post.authorName[0].toUpperCase()
+                                  : '?',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12,
+                              ),
+                            )
+                          : null,
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        '@${post.authorName}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          shadows: [
+                            Shadow(blurRadius: 6, color: Colors.black54)
+                          ],
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 8),
                 Text(
@@ -420,11 +449,25 @@ class _FallbackBackground extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [AppColors.teal, AppColors.ochre],
+          colors: [AppColors.teal, AppColors.canopyLight, AppColors.ochre],
         ),
       ),
-      child: buffering
-          ? const Center(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Faint decorative watermark so a text-only/no-media post still
+          // reads as a deliberate "postcard" rather than a blank fill —
+          // low-opacity so it never competes with the caption overlay.
+          if (!buffering)
+            Center(
+              child: Icon(
+                Icons.travel_explore_rounded,
+                size: 120,
+                color: Colors.white.withValues(alpha: 0.14),
+              ),
+            ),
+          if (buffering)
+            const Center(
               child: SizedBox(
                 width: 34,
                 height: 34,
@@ -433,8 +476,9 @@ class _FallbackBackground extends StatelessWidget {
                   color: Colors.white,
                 ),
               ),
-            )
-          : null,
+            ),
+        ],
+      ),
     );
   }
 }

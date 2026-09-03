@@ -191,67 +191,50 @@ class Post {
       );
 }
 
-// ---- Direct messaging ----
+// ---- Public community room: one shared thread everyone can post in ----
 
-class ChatUser {
+class RoomReplyPreview {
   final String id;
-  final String fullName;
-  final String? avatarUrl;
+  final String? senderId;
+  final String? senderName;
+  final String excerpt;
 
-  ChatUser({required this.id, required this.fullName, this.avatarUrl});
-
-  factory ChatUser.fromJson(Map<String, dynamic> json) => ChatUser(
-        id: json['id'] as String,
-        fullName: (json['full_name'] ?? '').toString(),
-        avatarUrl: json['avatar_url'] as String?,
-      );
-}
-
-class ChatMessage {
-  final String id;
-  final String senderId;
-  final String type; // 'text' | 'audio' | 'sticker'
-  final String? text;
-  final String? sticker;
-  final String? audioUrl;
-  final String createdAt;
-  final List<String> readBy;
-
-  ChatMessage({
+  const RoomReplyPreview({
     required this.id,
-    required this.senderId,
-    required this.type,
-    this.text,
-    this.sticker,
-    this.audioUrl,
-    required this.createdAt,
-    required this.readBy,
+    this.senderId,
+    this.senderName,
+    required this.excerpt,
   });
 
-  factory ChatMessage.fromJson(Map<String, dynamic> json) => ChatMessage(
+  factory RoomReplyPreview.fromJson(Map<String, dynamic> json) =>
+      RoomReplyPreview(
         id: json['id'] as String,
-        senderId: json['sender_id'] as String,
-        type: (json['type'] ?? 'text').toString(),
-        text: json['text'] as String?,
-        sticker: json['sticker'] as String?,
-        audioUrl: json['audio_url'] as String?,
-        createdAt: (json['created_at'] ?? '').toString(),
-        readBy: List<String>.from(json['read_by'] as List? ?? []),
+        senderId: json['sender_id'] as String?,
+        senderName: json['sender_name'] as String?,
+        excerpt: (json['excerpt'] ?? '').toString(),
       );
 }
-
-// ---- Public community room: one shared thread everyone can post in ----
 
 class RoomMessage {
   final String id;
   final String senderId;
   final String senderName;
   final String? senderAvatar;
-  final String type; // 'text' | 'audio' | 'sticker'
+  // 'text' | 'audio' | 'sticker' | 'image' — a soft-deleted message
+  // keeps its original type but has `deleted == true`, so the UI can
+  // still render it in the correct row style (own vs other) while
+  // showing a tombstone instead of the content.
+  final String type;
   final String? text;
   final String? sticker;
   final String? audioUrl;
+  final String? imageUrl;
   final String createdAt;
+  final RoomReplyPreview? replyTo;
+  // emoji -> list of user ids who reacted with it. Keeps the JSON round
+  // trip cheap; the UI aggregates counts on the client.
+  final Map<String, List<String>> reactions;
+  final bool deleted;
 
   RoomMessage({
     required this.id,
@@ -262,47 +245,72 @@ class RoomMessage {
     this.text,
     this.sticker,
     this.audioUrl,
+    this.imageUrl,
     required this.createdAt,
+    this.replyTo,
+    this.reactions = const {},
+    this.deleted = false,
   });
 
-  factory RoomMessage.fromJson(Map<String, dynamic> json) => RoomMessage(
+  factory RoomMessage.fromJson(Map<String, dynamic> json) {
+    final rawReactions = json['reactions'];
+    final reactions = <String, List<String>>{};
+    if (rawReactions is Map) {
+      rawReactions.forEach((key, value) {
+        if (value is List) {
+          reactions[key.toString()] =
+              value.map((v) => v.toString()).toList(growable: false);
+        }
+      });
+    }
+    return RoomMessage(
+      id: json['id'] as String,
+      senderId: json['sender_id'] as String,
+      senderName: (json['sender_name'] ?? '').toString(),
+      senderAvatar: json['sender_avatar'] as String?,
+      type: (json['type'] ?? 'text').toString(),
+      text: json['text'] as String?,
+      sticker: json['sticker'] as String?,
+      audioUrl: json['audio_url'] as String?,
+      imageUrl: json['image_url'] as String?,
+      createdAt: (json['created_at'] ?? '').toString(),
+      replyTo: json['reply_to'] is Map<String, dynamic>
+          ? RoomReplyPreview.fromJson(json['reply_to'] as Map<String, dynamic>)
+          : null,
+      reactions: reactions,
+      deleted: json['deleted'] as bool? ?? false,
+    );
+  }
+}
+
+class RoomActiveUser {
+  final String id;
+  final String fullName;
+  final String? avatarUrl;
+
+  const RoomActiveUser({
+    required this.id,
+    required this.fullName,
+    this.avatarUrl,
+  });
+
+  factory RoomActiveUser.fromJson(Map<String, dynamic> json) => RoomActiveUser(
         id: json['id'] as String,
-        senderId: json['sender_id'] as String,
-        senderName: (json['sender_name'] ?? '').toString(),
-        senderAvatar: json['sender_avatar'] as String?,
-        type: (json['type'] ?? 'text').toString(),
-        text: json['text'] as String?,
-        sticker: json['sticker'] as String?,
-        audioUrl: json['audio_url'] as String?,
-        createdAt: (json['created_at'] ?? '').toString(),
+        fullName: (json['full_name'] ?? '').toString(),
+        avatarUrl: json['avatar_url'] as String?,
       );
 }
 
-class ChatConversation {
-  final String id;
-  final ChatUser? otherUser;
-  final ChatMessage? lastMessage;
-  final int unreadCount;
-  final String updatedAt;
+class RoomPresence {
+  final int count;
+  final List<RoomActiveUser> users;
 
-  ChatConversation({
-    required this.id,
-    this.otherUser,
-    this.lastMessage,
-    required this.unreadCount,
-    required this.updatedAt,
-  });
+  const RoomPresence({required this.count, required this.users});
 
-  factory ChatConversation.fromJson(Map<String, dynamic> json) =>
-      ChatConversation(
-        id: json['id'] as String,
-        otherUser: json['other_user'] != null
-            ? ChatUser.fromJson(json['other_user'] as Map<String, dynamic>)
-            : null,
-        lastMessage: json['last_message'] != null
-            ? ChatMessage.fromJson(json['last_message'] as Map<String, dynamic>)
-            : null,
-        unreadCount: (json['unread_count'] as num? ?? 0).toInt(),
-        updatedAt: (json['updated_at'] ?? '').toString(),
+  factory RoomPresence.fromJson(Map<String, dynamic> json) => RoomPresence(
+        count: (json['count'] as num? ?? 0).toInt(),
+        users: (json['users'] as List? ?? [])
+            .map((u) => RoomActiveUser.fromJson(u as Map<String, dynamic>))
+            .toList(),
       );
 }

@@ -3,6 +3,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 import '../../Services/api_service.dart';
 import '../../models/models.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/destination_essentials.dart';
 import '../../widgets/star_rating.dart';
 import '../assistant/assistant_screen.dart';
 import '../itineraries/itineraries_screen.dart';
@@ -49,6 +50,12 @@ class _DestinationDetailScreenState extends State<DestinationDetailScreen> {
   }
 
   void _planTrip() {
+    // Also seed the itinerary's notes with the same "what to bring"
+    // essentials that the section below renders — the user tapped
+    // "Plan Trip" for this specific place, so they shouldn't have to
+    // retype the packing list into their itinerary.
+    final essentialsNote =
+        essentialsAsNoteText(essentialsForDestination(widget.destination));
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -56,7 +63,10 @@ class _DestinationDetailScreenState extends State<DestinationDetailScreen> {
           backgroundColor: Colors.transparent,
           appBar: AppBar(title: const Text('Plan a Trip')),
           body: SafeArea(
-            child: ItinerariesScreen(presetDestination: widget.destination),
+            child: ItinerariesScreen(
+              presetDestination: widget.destination,
+              presetNotes: essentialsNote,
+            ),
           ),
         ),
       ),
@@ -98,7 +108,11 @@ class _DestinationDetailScreenState extends State<DestinationDetailScreen> {
                   ),
                   child: SizedBox(
                     width: double.infinity,
-                    height: 340,
+                    // Was 340 — dropped to 220 so the image doesn't
+                    // dominate the whole first screen and the "About"
+                    // + "What to bring" content sits above the fold on
+                    // typical phones.
+                    height: 220,
                     child: Image.network(
                       ApiService.resolveUrl(destination.imageUrl ?? ''),
                       fit: BoxFit.cover,
@@ -241,6 +255,10 @@ class _DestinationDetailScreenState extends State<DestinationDetailScreen> {
                       height: 1.6,
                       color: AppColors.ink.withValues(alpha: 0.8),
                     ),
+                  ),
+                  const SizedBox(height: 24),
+                  _EssentialsSection(
+                    items: essentialsForDestination(destination),
                   ),
                   const SizedBox(height: 20),
                   _ActionRow(
@@ -388,6 +406,70 @@ class _ActionRow extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Compact "What to bring" section — a headline + a Wrap of small
+/// emoji-labeled chips derived from the destination's tags/region (see
+/// [essentialsForDestination]). Kept short deliberately: the user is
+/// scanning, not reading a packing manual, and the same content is
+/// echoed into the itinerary notes when they tap Plan Trip.
+class _EssentialsSection extends StatelessWidget {
+  final List<Essential> items;
+
+  const _EssentialsSection({required this.items});
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) return const SizedBox.shrink();
+    final textTheme = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'What to bring',
+          style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Handy essentials for this place. This same list is pre-filled in your itinerary notes.',
+          style: TextStyle(
+            color: AppColors.ink.withValues(alpha: 0.6),
+            fontSize: 12,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: items
+              .map((e) => Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppColors.sandDim,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(e.emoji, style: const TextStyle(fontSize: 16)),
+                        const SizedBox(width: 6),
+                        Text(
+                          e.label,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.ink,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ))
+              .toList(),
+        ),
+      ],
     );
   }
 }

@@ -10,8 +10,17 @@ class ItinerariesScreen extends StatefulWidget {
   // page), the create-itinerary dialog opens automatically with this
   // destination already selected instead of landing on a blank list.
   final Destination? presetDestination;
+  // Optional text to pre-fill the itinerary's notes field with — used to
+  // carry the "what to bring" essentials from the destination detail
+  // screen into the plan so the user doesn't have to retype them. Still
+  // fully editable; it's just a starting point.
+  final String? presetNotes;
 
-  const ItinerariesScreen({super.key, this.presetDestination});
+  const ItinerariesScreen({
+    super.key,
+    this.presetDestination,
+    this.presetNotes,
+  });
 
   @override
   State<ItinerariesScreen> createState() => _ItinerariesScreenState();
@@ -30,7 +39,12 @@ class _ItinerariesScreenState extends State<ItinerariesScreen> {
     _load();
     if (widget.presetDestination != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _openCreateDialog(preset: widget.presetDestination);
+        if (mounted) {
+          _openCreateDialog(
+            preset: widget.presetDestination,
+            presetNotes: widget.presetNotes,
+          );
+        }
       });
     }
   }
@@ -465,7 +479,10 @@ class _ItinerariesScreenState extends State<ItinerariesScreen> {
     ];
   }
 
-  Future<void> _openCreateDialog({Destination? preset}) async {
+  Future<void> _openCreateDialog({
+    Destination? preset,
+    String? presetNotes,
+  }) async {
     // Make sure the preset destination is actually in the dropdown's
     // options even if it isn't one of the currently-loaded/fallback ones
     // (e.g. a brand-new suggestion) — otherwise preselecting its id would
@@ -479,6 +496,7 @@ class _ItinerariesScreenState extends State<ItinerariesScreen> {
       builder: (_) => _CreateItineraryDialog(
         destinations: options,
         preselectedDestinationId: preset?.id,
+        initialNotes: presetNotes,
       ),
     );
     if (created == true) _load();
@@ -665,9 +683,11 @@ class _ItinerariesScreenState extends State<ItinerariesScreen> {
 class _CreateItineraryDialog extends StatefulWidget {
   final List<Destination> destinations;
   final String? preselectedDestinationId;
+  final String? initialNotes;
   const _CreateItineraryDialog({
     required this.destinations,
     this.preselectedDestinationId,
+    this.initialNotes,
   });
 
   @override
@@ -689,6 +709,14 @@ class _CreateItineraryDialogState extends State<_CreateItineraryDialog> {
   void initState() {
     super.initState();
     _destinationId = widget.preselectedDestinationId;
+    // Pre-fill the notes with the caller-provided starter text (the
+    // destination detail screen passes the "what to bring" essentials
+    // here). Only applied when non-empty so the placeholder still shows
+    // for a plain trip creation opened from the empty state.
+    final seed = widget.initialNotes?.trim();
+    if (seed != null && seed.isNotEmpty) {
+      _notes.text = seed;
+    }
   }
 
   String _fmt(DateTime d) =>

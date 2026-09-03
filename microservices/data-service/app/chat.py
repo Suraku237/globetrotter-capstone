@@ -1,8 +1,36 @@
+"""
+Community room chat — a single public thread every logged-in user can
+post to. This module used to also handle 1:1 direct messages, but the
+product decided a single "everyone is in the same room" model (like a
+WhatsApp community/group chat) is a better fit, so all conversation-based
+endpoints were removed. The old chat_conversations.json file is left in
+place on disk in case an operator wants to inspect it, but nothing in the
+API reads from it anymore.
+
+WhatsApp-style features implemented on top of the plain text/sticker/audio
+messages we already had:
+  * Image messages (photos) — reuses the same JPEG re-compression path
+    the feed uses so a phone-camera upload doesn't ship as a 5 MB file.
+  * Reply-to-a-message — carries a small "preview" of the parent so the
+    UI can render "▎ Kamga: …" without a second fetch.
+  * Emoji reactions — a plain dict of emoji → list of user ids, so the
+    client can toggle a user's own reaction with a single POST.
+  * Soft delete — the sender (or an admin) can wipe a message's contents;
+    the message stays in place with `deleted: true` so replies that
+    pointed at it still make sense in the transcript.
+  * Presence — a lightweight heartbeat endpoint clients call every few
+    seconds while the room is open; GET /chat/room/presence returns the
+    users seen in the last ~15 s so the header can show "Kamga, Alice
+    and 3 others active now".
+"""
+
+import io
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from PIL import Image
 from pydantic import BaseModel
 
 from .models import DATA_DIR, _load, _save, load_users
@@ -10,233 +38,28 @@ from .security import get_current_user
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
-# Deliberately its own file, separate from CONVERSATIONS_FILE — that one
-# already belongs to the AI assistant's per-user chat history (see
-# models.py). Mixing the two would corrupt the assistant's history with
-# user-to-user messages and vice versa.
-CHAT_FILE = DATA_DIR / "chat_conversations.json"
-AUDIO_DIR = DATA_DIR / "audio" / "chat"
-
-# A single, always-existing public room every user is implicitly a member
-# of — separate from ROOM_FILE's DM conversations so the "everyone can
-# talk" community chat can't collide with (or be mistaken for) a 1:1 chat.
+# One file per persistent surface — the room's message list, an audio
+# subdirectory for voice messages, and an image subdirectory for photos.
 ROOM_FILE = DATA_DIR / "chat_room.json"
 ROOM_AUDIO_DIR = DATA_DIR / "audio" / "chat_room"
+ROOM_IMAGE_DIR = DATA_DIR / "images" / "chat_room"
+# Presence is intentionally kept out of the room file (which is a list)
+# and given its own tiny dict store — otherwise every heartbeat would
+# rewrite the whole message log.
+PRESENCE_FILE = DATA_DIR / "chat_room_presence.json"
+
+# A viewer counts as "active in the room" if they've pinged within this
+# window. Matches roughly two poll cycles at the client's 4 s cadence.
+PRESENCE_WINDOW = timedelta(seconds=15)
+# Maximum uploaded photo dimension — the same 1600 px cap the feed uses,
+# recompressed to JPEG so a full-res phone shot doesn't ship as-is.
+_MAX_IMAGE_WIDTH = 1600
 
 
-def _load_conversations() -> list:
-    return _load(CHAT_FILE)
-
-
-def _save_conversations(conversations: list) -> None:
-    _save(CHAT_FILE, conversations)
-
-
-def _public_user(user: dict) -> dict:
-    return {
-        "id": user["id"],
-        "full_name": user["full_name"],
-        "avatar_url": user.get("avatar_url"),
-    }
-
-
-def _find_conversation(conversations: list, conversation_id: str) -> dict:
-    convo = next((c for c in conversations if c["id"] == conversation_id), None)
-    if convo is None:
-        raise HTTPException(status_code=404, detail="Conversation not found")
-    return convo
-
-
-def _require_participant(convo: dict, user_id: str) -> None:
-    if user_id not in convo["participant_ids"]:
-        raise HTTPException(status_code=403, detail="Not a participant in this conversation")
-
-
-class StartConversation(BaseModel):
-    other_user_id: str
-
-
-class MessageCreate(BaseModel):
-    type: Literal["text", "sticker"]
-    # Caption text for "text" messages, or the sticker/emoji itself
-    # (a plain unicode character, e.g. "🎉") for "sticker" messages —
-    # stickers are rendered client-side at large size rather than shipped
-    # as image assets, so no upload/storage is needed for them.
-    content: str
-
-
-@router.get("/users")
-def list_chat_users(current_user: dict = Depends(get_current_user)):
-    """Everyone the current user could start a conversation with."""
-    users = load_users()
-    return [_public_user(u) for u in users if u["id"] != current_user["id"]]
-
-
-@router.get("/conversations")
-def list_conversations(current_user: dict = Depends(get_current_user)):
-    conversations = _load_conversations()
-    users_by_id = {u["id"]: u for u in load_users()}
-    my_id = current_user["id"]
-
-    result = []
-    for convo in conversations:
-        if my_id not in convo["participant_ids"]:
-            continue
-        other_id = next((p for p in convo["participant_ids"] if p != my_id), my_id)
-        other_user = users_by_id.get(other_id)
-        messages = convo["messages"]
-        last_message = messages[-1] if messages else None
-        unread_count = sum(
-            1
-            for m in messages
-            if m["sender_id"] != my_id and my_id not in m.get("read_by", [])
-        )
-        result.append(
-            {
-                "id": convo["id"],
-                "other_user": _public_user(other_user) if other_user else None,
-                "last_message": last_message,
-                "unread_count": unread_count,
-                "updated_at": convo["updated_at"],
-            }
-        )
-    return sorted(result, key=lambda c: c["updated_at"], reverse=True)
-
-
-@router.post("/conversations", status_code=201)
-def start_conversation(
-    payload: StartConversation, current_user: dict = Depends(get_current_user)
-):
-    my_id = current_user["id"]
-    if payload.other_user_id == my_id:
-        raise HTTPException(status_code=400, detail="Can't start a conversation with yourself")
-
-    users_by_id = {u["id"]: u for u in load_users()}
-    if payload.other_user_id not in users_by_id:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    conversations = _load_conversations()
-    # Reuse an existing conversation between this pair rather than creating
-    # a duplicate every time someone taps "message" on the same person.
-    existing = next(
-        (
-            c
-            for c in conversations
-            if set(c["participant_ids"]) == {my_id, payload.other_user_id}
-        ),
-        None,
-    )
-    if existing is not None:
-        return existing
-
-    now = datetime.now(timezone.utc).isoformat()
-    convo = {
-        "id": str(uuid.uuid4()),
-        "participant_ids": [my_id, payload.other_user_id],
-        "messages": [],
-        "created_at": now,
-        "updated_at": now,
-    }
-    conversations.append(convo)
-    _save_conversations(conversations)
-    return convo
-
-
-@router.get("/conversations/{conversation_id}/messages")
-def get_messages(conversation_id: str, current_user: dict = Depends(get_current_user)):
-    conversations = _load_conversations()
-    convo = _find_conversation(conversations, conversation_id)
-    _require_participant(convo, current_user["id"])
-    return convo["messages"]
-
-
-@router.post("/conversations/{conversation_id}/messages", status_code=201)
-def send_message(
-    conversation_id: str,
-    payload: MessageCreate,
-    current_user: dict = Depends(get_current_user),
-):
-    conversations = _load_conversations()
-    convo = _find_conversation(conversations, conversation_id)
-    _require_participant(convo, current_user["id"])
-
-    message = {
-        "id": str(uuid.uuid4()),
-        "sender_id": current_user["id"],
-        "type": payload.type,
-        "text": payload.content if payload.type == "text" else None,
-        "sticker": payload.content if payload.type == "sticker" else None,
-        "audio_url": None,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "read_by": [current_user["id"]],
-    }
-    convo["messages"].append(message)
-    convo["updated_at"] = message["created_at"]
-    _save_conversations(conversations)
-    return message
-
-
-@router.post("/conversations/{conversation_id}/messages/audio", status_code=201)
-async def send_audio_message(
-    conversation_id: str,
-    audio: UploadFile = File(...),
-    current_user: dict = Depends(get_current_user),
-):
-    conversations = _load_conversations()
-    convo = _find_conversation(conversations, conversation_id)
-    _require_participant(convo, current_user["id"])
-
-    AUDIO_DIR.mkdir(parents=True, exist_ok=True)
-    extension = (
-        audio.filename.rsplit(".", 1)[-1].lower()
-        if audio.filename and "." in audio.filename
-        else "m4a"
-    )
-    filename = f"{uuid.uuid4().hex}.{extension}"
-    contents = await audio.read()
-    with open(AUDIO_DIR / filename, "wb") as f:
-        f.write(contents)
-
-    message = {
-        "id": str(uuid.uuid4()),
-        "sender_id": current_user["id"],
-        "type": "audio",
-        "text": None,
-        "sticker": None,
-        "audio_url": f"/audio/chat/{filename}",
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "read_by": [current_user["id"]],
-    }
-    convo["messages"].append(message)
-    convo["updated_at"] = message["created_at"]
-    _save_conversations(conversations)
-    return message
-
-
-@router.post("/conversations/{conversation_id}/read")
-def mark_read(conversation_id: str, current_user: dict = Depends(get_current_user)):
-    conversations = _load_conversations()
-    convo = _find_conversation(conversations, conversation_id)
-    _require_participant(convo, current_user["id"])
-
-    my_id = current_user["id"]
-    changed = False
-    for message in convo["messages"]:
-        if my_id not in message.setdefault("read_by", []):
-            message["read_by"].append(my_id)
-            changed = True
-    if changed:
-        _save_conversations(conversations)
-    return {"status": "ok"}
-
-
-# ---- Public community room: one shared thread everyone can post in ----
+# ---- Persistence helpers ----------------------------------------------------
 
 
 def _load_room() -> list:
-    """The room file holds just the message list — there's exactly one
-    room, so there's no need for the conversation-wrapper object (id,
-    participant_ids, etc.) that per-pair DMs use."""
     return _load(ROOM_FILE)
 
 
@@ -244,7 +67,47 @@ def _save_room(messages: list) -> None:
     _save(ROOM_FILE, messages)
 
 
-def _room_message(sender: dict, type_: str, **fields) -> dict:
+def _load_presence() -> dict:
+    data = _load(PRESENCE_FILE)
+    # _load is shared with the room's message list and defaults to `[]`
+    # when the file doesn't exist yet; presence needs a dict instead.
+    if isinstance(data, list):
+        return {}
+    return data
+
+
+def _save_presence(presence: dict) -> None:
+    _save(PRESENCE_FILE, presence)
+
+
+# ---- Message shape ---------------------------------------------------------
+
+
+def _reply_preview(parent: dict) -> dict:
+    """Small denormalized snapshot of a message being replied to — kept on
+    the reply itself so rendering the transcript doesn't need a second
+    lookup and so a soft-delete on the parent doesn't blank the preview
+    the reply was written against."""
+    if parent.get("deleted"):
+        excerpt = "(deleted message)"
+    elif parent.get("type") == "audio":
+        excerpt = "🎤 Voice message"
+    elif parent.get("type") == "image":
+        excerpt = "📷 Photo"
+    elif parent.get("type") == "sticker":
+        excerpt = parent.get("sticker") or ""
+    else:
+        text = parent.get("text") or ""
+        excerpt = text if len(text) <= 80 else f"{text[:77]}…"
+    return {
+        "id": parent["id"],
+        "sender_id": parent.get("sender_id"),
+        "sender_name": parent.get("sender_name"),
+        "excerpt": excerpt,
+    }
+
+
+def _new_message(sender: dict, type_: str, **fields) -> dict:
     return {
         "id": str(uuid.uuid4()),
         "sender_id": sender["id"],
@@ -254,13 +117,68 @@ def _room_message(sender: dict, type_: str, **fields) -> dict:
         "text": fields.get("text"),
         "sticker": fields.get("sticker"),
         "audio_url": fields.get("audio_url"),
+        "image_url": fields.get("image_url"),
+        "reply_to": fields.get("reply_to"),
+        "reactions": {},
+        "deleted": False,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
 
 
+def _find_by_id(messages: list, message_id: str) -> dict:
+    msg = next((m for m in messages if m["id"] == message_id), None)
+    if msg is None:
+        raise HTTPException(status_code=404, detail="Message not found")
+    return msg
+
+
+def _resolve_reply(messages: list, reply_to_id: Optional[str]) -> Optional[dict]:
+    if not reply_to_id:
+        return None
+    parent = next((m for m in messages if m["id"] == reply_to_id), None)
+    if parent is None:
+        # Silently drop an unknown reply_to id rather than 400ing — the
+        # message the client was replying to may have been deleted in the
+        # window between opening the reply UI and sending.
+        return None
+    return _reply_preview(parent)
+
+
+# ---- Image handling --------------------------------------------------------
+
+
+def _compress_image(contents: bytes) -> bytes:
+    img = Image.open(io.BytesIO(contents)).convert("RGB")
+    if img.width > _MAX_IMAGE_WIDTH:
+        ratio = _MAX_IMAGE_WIDTH / img.width
+        img = img.resize(
+            (_MAX_IMAGE_WIDTH, round(img.height * ratio)), Image.LANCZOS
+        )
+    buffer = io.BytesIO()
+    img.save(buffer, "JPEG", quality=80, optimize=True)
+    return buffer.getvalue()
+
+
+# ---- Payload models --------------------------------------------------------
+
+
+class MessageCreate(BaseModel):
+    type: Literal["text", "sticker"]
+    content: str
+    reply_to_id: Optional[str] = None
+
+
+class ReactionPayload(BaseModel):
+    # A single unicode emoji — the client validates non-emptiness before
+    # posting, but we defensively strip below too.
+    emoji: str
+
+
+# ---- Endpoints -------------------------------------------------------------
+
+
 @router.get("/room/messages")
 def get_room_messages(current_user: dict = Depends(get_current_user)):
-    """Every user is implicitly a member — no join/leave step needed."""
     return _load_room()
 
 
@@ -268,12 +186,18 @@ def get_room_messages(current_user: dict = Depends(get_current_user)):
 def send_room_message(
     payload: MessageCreate, current_user: dict = Depends(get_current_user)
 ):
+    text = payload.content.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Message can't be empty")
+
     messages = _load_room()
-    message = _room_message(
+    reply = _resolve_reply(messages, payload.reply_to_id)
+    message = _new_message(
         current_user,
         payload.type,
-        text=payload.content if payload.type == "text" else None,
-        sticker=payload.content if payload.type == "sticker" else None,
+        text=text if payload.type == "text" else None,
+        sticker=text if payload.type == "sticker" else None,
+        reply_to=reply,
     )
     messages.append(message)
     _save_room(messages)
@@ -283,6 +207,7 @@ def send_room_message(
 @router.post("/room/messages/audio", status_code=201)
 async def send_room_audio_message(
     audio: UploadFile = File(...),
+    reply_to_id: Optional[str] = Form(None),
     current_user: dict = Depends(get_current_user),
 ):
     ROOM_AUDIO_DIR.mkdir(parents=True, exist_ok=True)
@@ -297,9 +222,160 @@ async def send_room_audio_message(
         f.write(contents)
 
     messages = _load_room()
-    message = _room_message(
-        current_user, "audio", audio_url=f"/audio/chat_room/{filename}"
+    reply = _resolve_reply(messages, reply_to_id)
+    message = _new_message(
+        current_user,
+        "audio",
+        audio_url=f"/audio/chat_room/{filename}",
+        reply_to=reply,
     )
     messages.append(message)
     _save_room(messages)
     return message
+
+
+@router.post("/room/messages/image", status_code=201)
+async def send_room_image_message(
+    image: UploadFile = File(...),
+    caption: Optional[str] = Form(None),
+    reply_to_id: Optional[str] = Form(None),
+    current_user: dict = Depends(get_current_user),
+):
+    ROOM_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+    contents = await image.read()
+    extension = "jpg"
+    # Fall back to storing the file as-is if PIL can't decode it (some
+    # weird HEIC variants, animated GIFs…) rather than 500ing.
+    try:
+        contents = _compress_image(contents)
+    except Exception:
+        extension = (
+            image.filename.rsplit(".", 1)[-1].lower()
+            if image.filename and "." in image.filename
+            else "bin"
+        )
+    filename = f"{uuid.uuid4().hex}.{extension}"
+    with open(ROOM_IMAGE_DIR / filename, "wb") as f:
+        f.write(contents)
+
+    messages = _load_room()
+    reply = _resolve_reply(messages, reply_to_id)
+    trimmed_caption = (caption or "").strip() or None
+    message = _new_message(
+        current_user,
+        "image",
+        image_url=f"/images/chat_room/{filename}",
+        text=trimmed_caption,
+        reply_to=reply,
+    )
+    messages.append(message)
+    _save_room(messages)
+    return message
+
+
+@router.post("/room/messages/{message_id}/react")
+def toggle_reaction(
+    message_id: str,
+    payload: ReactionPayload,
+    current_user: dict = Depends(get_current_user),
+):
+    emoji = payload.emoji.strip()
+    if not emoji:
+        raise HTTPException(status_code=400, detail="Emoji can't be empty")
+
+    messages = _load_room()
+    msg = _find_by_id(messages, message_id)
+    if msg.get("deleted"):
+        raise HTTPException(
+            status_code=400, detail="Can't react to a deleted message"
+        )
+    reactions = msg.setdefault("reactions", {})
+    users_for_emoji = reactions.setdefault(emoji, [])
+    my_id = current_user["id"]
+    if my_id in users_for_emoji:
+        # Toggle off — a second tap on your own reaction removes it, like
+        # WhatsApp/Telegram/Slack.
+        users_for_emoji.remove(my_id)
+        if not users_for_emoji:
+            del reactions[emoji]
+    else:
+        users_for_emoji.append(my_id)
+    _save_room(messages)
+    return msg
+
+
+@router.delete("/room/messages/{message_id}")
+def delete_room_message(
+    message_id: str, current_user: dict = Depends(get_current_user)
+):
+    messages = _load_room()
+    msg = _find_by_id(messages, message_id)
+    is_admin = current_user.get("role") == "admin"
+    if msg["sender_id"] != current_user["id"] and not is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="You can only delete your own messages",
+        )
+    # Soft delete: the message stays in the log so ordering and replies
+    # that referenced it still render correctly, but the content is wiped
+    # and the client renders a "this message was deleted" tombstone.
+    msg["deleted"] = True
+    msg["text"] = None
+    msg["sticker"] = None
+    msg["audio_url"] = None
+    msg["image_url"] = None
+    msg["reactions"] = {}
+    _save_room(messages)
+    return msg
+
+
+# ---- Presence --------------------------------------------------------------
+
+
+@router.post("/room/heartbeat")
+def heartbeat(current_user: dict = Depends(get_current_user)):
+    """The room screen calls this every few seconds while open, so other
+    viewers can see who's currently active. Cheap: just stamps the
+    current time against the caller's id in a small dict on disk."""
+    presence = _load_presence()
+    presence[current_user["id"]] = datetime.now(timezone.utc).isoformat()
+    _save_presence(presence)
+    return {"status": "ok"}
+
+
+@router.get("/room/presence")
+def presence(current_user: dict = Depends(get_current_user)):
+    """Users seen in the last PRESENCE_WINDOW, with just enough info for
+    the header ("N active now" + a short avatar strip)."""
+    presence_data = _load_presence()
+    cutoff = datetime.now(timezone.utc) - PRESENCE_WINDOW
+    active_ids: set[str] = set()
+    stale_ids: list[str] = []
+    for user_id, stamp in presence_data.items():
+        try:
+            seen_at = datetime.fromisoformat(stamp)
+        except ValueError:
+            stale_ids.append(user_id)
+            continue
+        if seen_at >= cutoff:
+            active_ids.add(user_id)
+        else:
+            stale_ids.append(user_id)
+    # Opportunistically prune old entries so the presence file doesn't
+    # grow without bound as users come and go.
+    if stale_ids:
+        for user_id in stale_ids:
+            presence_data.pop(user_id, None)
+        _save_presence(presence_data)
+
+    users_by_id = {u["id"]: u for u in load_users()}
+    active_users = [
+        {
+            "id": u["id"],
+            "full_name": u["full_name"],
+            "avatar_url": u.get("avatar_url"),
+        }
+        for user_id in active_ids
+        if (u := users_by_id.get(user_id)) is not None
+    ]
+    return {"count": len(active_users), "users": active_users}

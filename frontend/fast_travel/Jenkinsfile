@@ -8,6 +8,17 @@
 // backend and left the Flutter web files untouched — that's why the
 // site kept showing an old build even after every "successful"
 // frontend build. The pipeline below actually builds Flutter web now.
+//
+// FIRST-TIME SETUP:
+//   Before the first successful run, execute the bootstrap script on
+//   the VPS once as a user with sudo:
+//
+//       sudo bash frontend/fast_travel/scripts/bootstrap-vps.sh
+//
+//   It installs unzip/xz-utils, grants the jenkins user passwordless
+//   sudo for apt-get, cleans stale root-owned build caches, and
+//   prepares the nginx doc root. After that this pipeline is
+//   self-healing across every subsequent build.
 
 pipeline {
     agent any
@@ -70,15 +81,12 @@ pipeline {
                         echo ""
                         echo "ERROR: Cannot install missing packages automatically."
                         echo "The Jenkins user lacks passwordless sudo, so this"
-                        echo "pipeline cannot self-heal. Run ONE of the following"
-                        echo "on the VPS as a user with sudo, then re-run the build:"
+                        echo "pipeline cannot self-heal. Run the one-time bootstrap"
+                        echo "on the VPS as a user with sudo:"
                         echo ""
-                        echo "  # Option 1 - one-time install (simplest):"
-                        echo "  sudo apt-get update && sudo apt-get install -y unzip xz-utils"
+                        echo "  sudo bash $WORKSPACE/frontend/fast_travel/scripts/bootstrap-vps.sh"
                         echo ""
-                        echo "  # Option 2 - let Jenkins install packages itself:"
-                        echo "  sudo sh -c \"echo 'jenkins ALL=(root) NOPASSWD: /usr/bin/apt-get' > /etc/sudoers.d/jenkins-apt\""
-                        echo "  sudo chmod 0440 /etc/sudoers.d/jenkins-apt"
+                        echo "Then re-run this build."
                         echo ""
                         exit 1
                     fi
@@ -134,9 +142,10 @@ pipeline {
                         else
                             echo ""
                             echo "ERROR: Cannot delete stale root-owned build artefacts."
-                            echo "Run this ONCE on the VPS as a user with sudo:"
+                            echo "Run the one-time bootstrap on the VPS to clean the"
+                            echo "workspace and enable auto-heal for future runs:"
                             echo ""
-                            echo "  sudo rm -rf $(pwd)/.dart_tool $(pwd)/build"
+                            echo "  sudo bash $WORKSPACE/frontend/fast_travel/scripts/bootstrap-vps.sh"
                             echo ""
                             echo "Then re-run this build."
                             exit 1
@@ -159,10 +168,10 @@ pipeline {
                     set -e
                     if [ ! -d "$WEB_DIR" ]; then
                         echo "Target directory $WEB_DIR does not exist."
-                        echo "Create it once on the VPS with:"
-                        echo "  sudo mkdir -p $WEB_DIR"
-                        echo "  sudo chown jenkins:www-data $WEB_DIR"
-                        echo "  sudo chmod g+ws $WEB_DIR"
+                        echo "Run the one-time bootstrap on the VPS to create it:"
+                        echo ""
+                        echo "  sudo bash $WORKSPACE/frontend/fast_travel/scripts/bootstrap-vps.sh"
+                        echo ""
                         exit 1
                     fi
                     # --delete removes stale files from a previous
@@ -173,9 +182,10 @@ pipeline {
 
                     # Best-effort ownership + group-read flags so nginx
                     # (running as www-data) can serve everything.
-                    # Ignored if the Jenkins user lacks permission — in
-                    # that case the doc root should already be set up so
-                    # files are readable regardless.
+                    # Ignored if the Jenkins user lacks permission -
+                    # in that case the doc root should already be set
+                    # up (via bootstrap-vps.sh) so files are readable
+                    # regardless.
                     chown -R jenkins:www-data "$WEB_DIR" 2>/dev/null || true
                     chmod -R g+r "$WEB_DIR" 2>/dev/null || true
                 '''

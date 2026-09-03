@@ -116,6 +116,18 @@ pipeline {
                     set -e
                     export PATH="$FLUTTER_HOME/bin:$PATH"
                     cd "$APP_DIR"
+
+                    # Wipe generated caches from previous builds before
+                    # `flutter pub get`. If an earlier build (or a manual
+                    # run) touched these as root, jenkins can't overwrite
+                    # the files inside — but it CAN delete them, because
+                    # the parent directory is a jenkins-owned git
+                    # checkout. Doing this every build keeps the
+                    # workspace hermetic and cheap (Flutter re-resolves
+                    # from the pub cache in ~/.pub-cache, which is
+                    # untouched).
+                    rm -rf .dart_tool build .flutter-plugins .flutter-plugins-dependencies
+
                     flutter pub get
                     # --release: minified + tree-shaken, smaller bundle
                     # for production. Icon tree-shaking sometimes trips

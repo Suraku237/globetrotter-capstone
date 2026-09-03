@@ -41,21 +41,47 @@ pipeline {
                 // and their absence is exactly the failure this stage
                 // guards against ("Missing \"unzip\" tool. Unable to
                 // extract Dart SDK.").
+                //
+                // Auto-install only works when the jenkins user has
+                // passwordless sudo for apt-get. If it doesn't, we
+                // fail fast with a clear one-time fix instead of the
+                // confusing "sudo: a password is required" traceback.
                 sh '''
                     set -e
                     need_install=""
                     command -v unzip >/dev/null 2>&1 || need_install="$need_install unzip"
                     command -v xz     >/dev/null 2>&1 || need_install="$need_install xz-utils"
 
-                    if [ -n "$need_install" ]; then
-                        echo "Installing missing packages:$need_install"
-                        if command -v sudo >/dev/null 2>&1; then
-                            sudo -n apt-get update -y
-                            sudo -n apt-get install -y $need_install
-                        else
-                            apt-get update -y
-                            apt-get install -y $need_install
-                        fi
+                    if [ -z "$need_install" ]; then
+                        echo "unzip and xz already installed — nothing to do."
+                        exit 0
+                    fi
+
+                    echo "Missing packages:$need_install"
+
+                    if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+                        echo "Passwordless sudo available — installing automatically."
+                        sudo -n apt-get update -y
+                        sudo -n apt-get install -y $need_install
+                    elif [ "$(id -u)" = "0" ]; then
+                        apt-get update -y
+                        apt-get install -y $need_install
+                    else
+                        echo ""
+                        echo "ERROR: Cannot install missing packages automatically."
+                        echo "The Jenkins user lacks passwordless sudo, so this"
+                        echo "pipeline cannot self-heal. Run ONE of the following"
+                        echo "on the VPS as a user with sudo, then re-run the build:"
+                        echo ""
+                        echo "  # Option 1 — one-time install (simplest):"
+                        echo "  sudo apt-get update && sudo apt-get install -y unzip xz-utils"
+                        echo ""
+                        echo "  # Option 2 — let Jenkins install packages itself:"
+                        echo "  echo 'jenkins ALL=(root) NOPASSWD: /usr/bin/apt-get' \\"
+                        echo "      | sudo tee /etc/sudoers.d/jenkins-apt"
+                        echo "  sudo chmod 0440 /etc/sudoers.d/jenkins-apt"
+                        echo ""
+                        exit 1
                     fi
 
                     unzip -v | head -1

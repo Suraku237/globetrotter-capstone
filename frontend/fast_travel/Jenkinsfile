@@ -32,6 +32,38 @@ pipeline {
             }
         }
 
+        stage('Install prerequisites') {
+            steps {
+                // Flutter's first-run bootstrap downloads the Dart SDK
+                // as a .zip and extracts it with `unzip`; some pub
+                // packages ship .tar.xz artifacts that need `xz-utils`.
+                // Neither is guaranteed to be present on a fresh VPS,
+                // and their absence is exactly the failure this stage
+                // guards against ("Missing \"unzip\" tool. Unable to
+                // extract Dart SDK.").
+                sh '''
+                    set -e
+                    need_install=""
+                    command -v unzip >/dev/null 2>&1 || need_install="$need_install unzip"
+                    command -v xz     >/dev/null 2>&1 || need_install="$need_install xz-utils"
+
+                    if [ -n "$need_install" ]; then
+                        echo "Installing missing packages:$need_install"
+                        if command -v sudo >/dev/null 2>&1; then
+                            sudo -n apt-get update -y
+                            sudo -n apt-get install -y $need_install
+                        else
+                            apt-get update -y
+                            apt-get install -y $need_install
+                        fi
+                    fi
+
+                    unzip -v | head -1
+                    xz --version | head -1
+                '''
+            }
+        }
+
         stage('Setup Flutter') {
             steps {
                 sh '''

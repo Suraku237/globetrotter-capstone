@@ -68,12 +68,12 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
-      // Auth screens provide their own photo treatment. Every other page
-      // uses an uncluttered white canvas.
-      scaffoldBackgroundColor: Colors.white,
+      // Transparent so the app-wide AppBackground photo shows through
+      // every screen (see main.dart's MaterialApp.builder).
+      scaffoldBackgroundColor: Colors.transparent,
       textTheme: AppText.textTheme(Brightness.light),
       appBarTheme: AppBarTheme(
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.transparent,
         foregroundColor: AppColors.ink,
         elevation: 0,
         scrolledUnderElevation: 0,

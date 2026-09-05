@@ -16,6 +16,7 @@ import 'Services/session_state.dart';
 import 'l10n/generated/app_localizations.dart';
 import 'theme/app_theme.dart';
 import 'widgets/adaptive_shell.dart';
+import 'widgets/app_background.dart';
 import 'widgets/logout_confirm.dart';
 
 void main() async {
@@ -67,16 +68,19 @@ class _GlobeTrotterAppState extends State<GlobeTrotterApp> {
           locale: _localeController.locale,
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          // Some established screens intentionally use transparent scaffolds.
-          // Keep their backdrop white now that the photo treatment is scoped
-          // to authentication only.
-          builder: (context, child) => ColoredBox(
-            color: Colors.white,
-            child: child ?? const SizedBox.shrink(),
+          // The Yaoundé cityscape sits behind every screen — login,
+          // discover, the whole app — with a soft off-white veil on top
+          // so text and cards stay readable. Screens keep their own
+          // Scaffold transparent (via the theme) so this shows through.
+          builder: (context, child) => Stack(
+            children: [
+              const Positioned.fill(child: AppBackground()),
+              if (child != null) child,
+            ],
           ),
           home: _restoringSession
               ? const Scaffold(
-                  backgroundColor: Colors.white,
+                  backgroundColor: Colors.transparent,
                   body: Center(
                     child: CircularProgressIndicator(color: AppColors.ochre),
                   ),

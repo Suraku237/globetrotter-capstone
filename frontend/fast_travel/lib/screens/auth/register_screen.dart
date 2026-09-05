@@ -7,7 +7,6 @@ import '../../Services/session_state.dart';
 import '../../l10n/generated/app_localizations.dart';
 import '../../models/models.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/auth_background.dart';
 
 class RegisterScreen extends StatefulWidget {
   final SessionState session;
@@ -223,36 +222,30 @@ class _RegisterScreenState extends State<RegisterScreen> {
       backgroundColor: Colors.transparent,
       extendBodyBehindAppBar: true,
       appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
-      body: Stack(
-        children: [
-          const Positioned.fill(child: AuthBackground()),
-          Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 420),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(22),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-                    child: Card(
-                      color: AppColors.sand.withValues(alpha: 0.35),
-                      child: Padding(
-                        padding: const EdgeInsets.all(32),
-                        child: _pendingRegistration == null
-                            ? _buildForm(l10n)
-                            : _pendingRegistration!.status ==
-                                    'pending_verification'
-                                ? _buildVerifyCode(l10n)
-                                : _buildAdminPending(l10n),
-                      ),
-                    ),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(22),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                child: Card(
+                  color: AppColors.sand.withValues(alpha: 0.35),
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: _pendingRegistration == null
+                        ? _buildForm(l10n)
+                        : _pendingRegistration!.status == 'pending_verification'
+                            ? _buildVerifyCode(l10n)
+                            : _buildAdminPending(l10n),
                   ),
                 ),
               ),
             ),
           ),
-        ],
+        ),
       ),
     );
   }

@@ -121,8 +121,11 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    // Transparent so the global AppBackground photo (see main.dart)
+    // shows through this screen — the hero card and bottom Suggest
+    // pill are gone because the same image is now behind everything.
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Colors.transparent,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
@@ -140,29 +143,29 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                 onSelect: _onCategorySelected,
               ),
               const SizedBox(height: 14),
-              // Hero card featuring the Yaoundé cityscape — matches the
-              // reference mockup: photo fills the card, location label
-              // sits in the bottom-left, and a "Suggest a destination"
-              // pill sits in the bottom-right so the action stays with
-              // the destination it applies to.
-              _HeroCard(
-                onSuggest: _openSuggestDestination,
-                suggestLabel: widget.isAdmin
-                    ? l10n.addDestination
-                    : l10n.suggestDestination,
-              ),
-              const SizedBox(height: 14),
               Expanded(child: _buildBody(l10n)),
               const SizedBox(height: 10),
-              // Bottom action row: Ask AI shortcut on the left, and
-              // Suggest a destination as the main CTA on the right.
-              _BottomActions(
-                isAdmin: widget.isAdmin,
-                onAskAi: _openAssistant,
-                onSuggest: _openSuggestDestination,
+              // Only the Ask AI shortcut lives in the bottom row now —
+              // the Suggest a destination action moved to a small FAB
+              // on the right so it stays reachable without dominating
+              // the layout.
+              Row(
+                children: [
+                  _AskAiButton(onTap: _openAssistant),
+                ],
               ),
             ],
           ),
+        ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'suggest_destination_fab',
+        onPressed: _openSuggestDestination,
+        backgroundColor: AppColors.ochre,
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.add_location_alt_rounded),
+        label: Text(
+          widget.isAdmin ? l10n.addDestination : l10n.suggestDestination,
         ),
       ),
     );
@@ -264,123 +267,6 @@ class _SearchBar extends StatelessWidget {
   }
 }
 
-class _HeroCard extends StatelessWidget {
-  final VoidCallback onSuggest;
-  final String suggestLabel;
-
-  const _HeroCard({required this.onSuggest, required this.suggestLabel});
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: SizedBox(
-        height: 200,
-        width: double.infinity,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            const Image(
-              image: AssetImage('assets/images/hero_yaounde.jpg'),
-              fit: BoxFit.cover,
-            ),
-            // Bottom-to-top gradient so the "Yaoundé, Cameroon" label
-            // stays legible over the busiest part of the photo without
-            // covering the sky above.
-            const DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.transparent,
-                    Color(0x00000000),
-                    Color(0x66000000),
-                  ],
-                  stops: [0.0, 0.55, 1.0],
-                ),
-              ),
-            ),
-            const Positioned(
-              left: 20,
-              bottom: 18,
-              child: Text(
-                'Yaoundé, Cameroon',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  shadows: [
-                    Shadow(
-                      offset: Offset(0, 1),
-                      blurRadius: 4,
-                      color: Color(0x99000000),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            Positioned(
-              right: 16,
-              bottom: 14,
-              child: _PillButton(
-                icon: Icons.add_location_alt_rounded,
-                label: suggestLabel,
-                onPressed: onSuggest,
-                background: AppColors.ochre,
-                foreground: Colors.white,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _BottomActions extends StatelessWidget {
-  final bool isAdmin;
-  final VoidCallback onAskAi;
-  final VoidCallback onSuggest;
-
-  const _BottomActions({
-    required this.isAdmin,
-    required this.onAskAi,
-    required this.onSuggest,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    return Row(
-      children: [
-        _AskAiButton(onTap: onAskAi),
-        const SizedBox(width: 12),
-        Expanded(
-          child: FilledButton.icon(
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.ochre,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(28),
-              ),
-              textStyle: const TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 15,
-              ),
-            ),
-            onPressed: onSuggest,
-            icon: const Icon(Icons.add_location_alt_rounded),
-            label: Text(
-                isAdmin ? l10n.addDestination : l10n.suggestDestination),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _AskAiButton extends StatelessWidget {
   final VoidCallback onTap;
 
@@ -420,57 +306,6 @@ class _AskAiButton extends StatelessWidget {
               fontSize: 15,
               letterSpacing: 0.6,
             ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PillButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onPressed;
-  final Color background;
-  final Color foreground;
-
-  const _PillButton({
-    required this.icon,
-    required this.label,
-    required this.onPressed,
-    required this.background,
-    required this.foreground,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: background,
-      borderRadius: BorderRadius.circular(24),
-      elevation: 2,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(24),
-        onTap: onPressed,
-        child: Padding(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 18, color: foreground),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  label,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: foreground,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
-            ],
           ),
         ),
       ),

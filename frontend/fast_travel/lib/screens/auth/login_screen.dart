@@ -5,7 +5,6 @@ import '../../Services/api_service.dart';
 import '../../Services/session_state.dart';
 import '../../l10n/generated/app_localizations.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/auth_background.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -82,47 +81,44 @@ class _LoginScreenState extends State<LoginScreen> {
     final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: Stack(
-        children: [
-          const Positioned.fill(child: AuthBackground()),
-          Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 420),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(22),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-                    child: Card(
-                      color: AppColors.sand.withValues(alpha: 0.35),
-                      child: Padding(
-                        padding: const EdgeInsets.all(32),
-                        child: Form(
-                          key: _formKey,
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Icon(
-                                Icons.travel_explore_rounded,
-                                color: AppColors.ochre,
-                                size: 40,
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                l10n.welcomeBack,
-                                style:
-                                    Theme.of(context).textTheme.displayMedium,
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                l10n.signInSubtitle,
-                                style: Theme.of(context).textTheme.bodyMedium,
-                              ),
-                              const SizedBox(height: 28),
-                              TextFormField(
-                                controller: _email,
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(22),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                child: Card(
+                  color: AppColors.sand.withValues(alpha: 0.35),
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(
+                            Icons.travel_explore_rounded,
+                            color: AppColors.ochre,
+                            size: 40,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            l10n.welcomeBack,
+                            style:
+                                Theme.of(context).textTheme.displayMedium,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            l10n.signInSubtitle,
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                          const SizedBox(height: 28),
+                          TextFormField(
+                            controller: _email,
                                 decoration:
                                     InputDecoration(labelText: l10n.emailLabel),
                                 keyboardType: TextInputType.emailAddress,
@@ -238,7 +234,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
           ),
-        ],
+        ),
       ),
     );
   }

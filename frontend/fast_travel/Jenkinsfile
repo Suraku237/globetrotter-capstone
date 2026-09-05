@@ -157,7 +157,23 @@ pipeline {
                     # for production. Icon tree-shaking sometimes trips
                     # up on the Cameroon flag emoji + Material Symbols
                     # combo, hence --no-tree-shake-icons.
-                    flutter build web --release --no-tree-shake-icons
+                    #
+                    # --pwa-strategy=none: the default "offline-first"
+                    # service worker was the reason every "successful"
+                    # deploy still showed the old UI in the browser.
+                    # With the default strategy, flutter_service_worker.js
+                    # installs itself on the first visit and then serves
+                    # the CACHED index.html + main.dart.js on every
+                    # subsequent load, downloading the new bundle only
+                    # in the background — so visitors keep booting the
+                    # previous build even though rsync happily wrote the
+                    # new one into /var/www/fasttravel-web. Building
+                    # with --pwa-strategy=none emits a service worker
+                    # that no longer caches the app shell (and takes
+                    # over from any previously-installed offline-first
+                    # SW), so the next page load actually hits the new
+                    # bundle on disk.
+                    flutter build web --release --no-tree-shake-icons --pwa-strategy=none
                 '''
             }
         }

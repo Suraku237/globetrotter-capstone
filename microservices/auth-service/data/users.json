@@ -6,7 +6,8 @@
     "role": "admin",
     "hashed_password": "$2b$12$aFHH/eC.fr7ohEFiJDVmMOy7uMwBiJlgAVRhAFLYakBlzBkFvQbtu",
     "preferences": [],
-    "created_at": "2026-08-05T04:04:29.604667+00:00"
+    "created_at": "2026-08-05T04:04:29.604667+00:00",
+    "username": "admin"
   },
   {
     "id": "24ab461f-de37-441c-81bf-e20dbdfb12a5",
@@ -15,7 +16,8 @@
     "role": "worker",
     "hashed_password": "$2b$12$bis.OFtqPT3gv4ChPT7j5OqnDPUFpxPcFOl9DUu8D7EmpSxrA7FKC",
     "preferences": [],
-    "created_at": "2026-08-05T04:04:29.851950+00:00"
+    "created_at": "2026-08-05T04:04:29.851950+00:00",
+    "username": "worker"
   },
   {
     "id": "a322830d-986b-42c3-8c8e-a638afd880bf",
@@ -24,6 +26,7 @@
     "role": "user",
     "hashed_password": "$2b$12$6eAlR5aJYPYmKtOyi2O6VelDyxjfdeChQd2Dhtt3iEHJKvlug4sI2",
     "preferences": [],
-    "created_at": "2026-08-05T04:04:30.103109+00:00"
+    "created_at": "2026-08-05T04:04:30.103109+00:00",
+    "username": "user"
   }
 ]

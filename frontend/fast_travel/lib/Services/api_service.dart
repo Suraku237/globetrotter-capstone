@@ -1,8 +1,6 @@
 // GlobeTrotter API client — typed, platform-aware, works unchanged on
 // mobile, desktop, and web builds of the same Flutter app.
 import 'dart:convert';
-import 'package:flutter/foundation.dart'
-    show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -127,6 +125,7 @@ class ApiService {
     required String email,
     required String password,
     required String fullName,
+    required String username,
     required String role,
   }) async {
     final res = await http.post(
@@ -136,6 +135,7 @@ class ApiService {
         'email': email,
         'password': password,
         'full_name': fullName,
+        'username': username,
         'role': role,
       }),
     );
@@ -156,9 +156,35 @@ class ApiService {
       'id': data['user_id'],
       'email': data['email'],
       'full_name': data['full_name'],
+      'username': data['username'],
       'role': data['role'],
       'avatar_url': data['avatar_url'],
     });
+  }
+
+  // Deliberately does NOT go through _handle() — that treats any 401 as
+  // "your saved login is dead, kick you back to the login screen", but a
+  // 401 from this endpoint only means the pending-registration session
+  // token expired. RegisterScreen surfaces that itself instead of tearing
+  // down whatever was on screen before.
+  Future<PendingAdminStatus> checkAdminRequestStatus({
+    required String pendingSessionToken,
+  }) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/admin-requests/status'),
+      headers: const {'Content-Type': 'application/json'},
+      body: jsonEncode({'pending_session_token': pendingSessionToken}),
+    );
+    if (res.statusCode != 200) {
+      String detail = res.body;
+      try {
+        final parsed = jsonDecode(res.body);
+        detail = parsed['detail']?.toString() ?? res.body;
+      } catch (_) {}
+      throw ApiException(detail, statusCode: res.statusCode);
+    }
+    final data = jsonDecode(res.body);
+    return PendingAdminStatus.fromJson(data as Map<String, dynamic>);
   }
 
   Future<AppUser> login(
@@ -174,6 +200,7 @@ class ApiService {
       'id': data['user_id'],
       'email': data['email'],
       'full_name': data['full_name'],
+      'username': data['username'],
       'role': data['role'],
       'avatar_url': data['avatar_url'],
     });
@@ -210,6 +237,7 @@ class ApiService {
         'id': data['user_id'] ?? '123',
         'email': data['email'] ?? 'mock@user.com',
         'full_name': data['full_name'] ?? 'Mock User',
+        'username': data['username'] ?? '',
         'role': 'user',
         'avatar_url': data['avatar_url'],
       });
@@ -514,6 +542,101 @@ class ApiService {
     );
     final data = await _handle(res);
     return RoomPresence.fromJson(data as Map<String, dynamic>);
+  }
+
+  // ---- Friends, direct messages, and private groups ----
+
+  Future<FriendsOverview> getFriendsOverview() async {
+    final res = await http.get(Uri.parse('$baseUrl/social/friends'),
+        headers: _headers);
+    final data = await _handle(res);
+    return FriendsOverview.fromJson(data as Map<String, dynamic>);
+  }
+
+  Future<void> sendFriendRequest(String username) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/social/friends/requests'),
+      headers: _headers,
+      body: jsonEncode({'username': username}),
+    );
+    await _handle(res, okStatus: 201);
+  }
+
+  Future<void> acceptFriendRequest(String requestId) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/social/friends/requests/$requestId/accept'),
+      headers: _headers,
+    );
+    await _handle(res);
+  }
+
+  Future<void> declineFriendRequest(String requestId) async {
+    final res = await http.delete(
+      Uri.parse('$baseUrl/social/friends/requests/$requestId'),
+      headers: _headers,
+    );
+    await _handle(res, okStatus: 204);
+  }
+
+  Future<List<SocialMessage>> getDirectMessages(String friendId) async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/social/friends/$friendId/messages'),
+      headers: _headers,
+    );
+    final data = await _handle(res) as List;
+    return data
+        .map((item) => SocialMessage.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<SocialMessage> sendDirectMessage(String friendId, String text) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/social/friends/$friendId/messages'),
+      headers: _headers,
+      body: jsonEncode({'text': text}),
+    );
+    final data = await _handle(res, okStatus: 201);
+    return SocialMessage.fromJson(data as Map<String, dynamic>);
+  }
+
+  Future<List<ChatGroup>> getGroups() async {
+    final res = await http.get(Uri.parse('$baseUrl/social/groups'), headers: _headers);
+    final data = await _handle(res) as List;
+    return data
+        .map((item) => ChatGroup.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<ChatGroup> createGroup(
+      {required String name, required List<String> memberIds}) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/social/groups'),
+      headers: _headers,
+      body: jsonEncode({'name': name, 'member_ids': memberIds}),
+    );
+    final data = await _handle(res, okStatus: 201);
+    return ChatGroup.fromJson(data as Map<String, dynamic>);
+  }
+
+  Future<List<SocialMessage>> getGroupMessages(String groupId) async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/social/groups/$groupId/messages'),
+      headers: _headers,
+    );
+    final data = await _handle(res) as List;
+    return data
+        .map((item) => SocialMessage.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<SocialMessage> sendGroupMessage(String groupId, String text) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/social/groups/$groupId/messages'),
+      headers: _headers,
+      body: jsonEncode({'text': text}),
+    );
+    final data = await _handle(res, okStatus: 201);
+    return SocialMessage.fromJson(data as Map<String, dynamic>);
   }
 
   // ---- Destination suggestions ----

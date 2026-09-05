@@ -4,11 +4,8 @@ import 'package:flutter/material.dart';
 import '../Services/api_service.dart';
 import '../theme/app_theme.dart';
 
-/// Full-bleed background photo behind every screen (see MaterialApp's
-/// `builder` in main.dart) — a single cover-fit image that always fills
-/// whatever size the window/screen currently is (BoxFit.cover inside
-/// Positioned.fill reflows on any resize, same as any other image), and
-/// crossfades to the next photo in the pool every 5 seconds.
+/// Full-bleed rotating photo background used only by login and registration.
+/// It fills its parent with cover-fit imagery and crossfades every 5 seconds.
 class AuthBackground extends StatefulWidget {
   const AuthBackground({super.key});
 

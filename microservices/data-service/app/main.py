@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from . import assistant, chat, destinations, itineraries, posts, recommendations, stats
+from . import assistant, chat, destinations, itineraries, posts, recommendations, social, stats
 from .models import DATA_DIR, get_gemini_api_key
 
 logger = logging.getLogger("uvicorn.error")
@@ -67,6 +67,7 @@ app.mount("/audio", StaticFiles(directory=str(audio_dir)), name="audio")
 
 app.include_router(assistant.router)
 app.include_router(chat.router)
+app.include_router(social.router)
 app.include_router(destinations.router)
 app.include_router(itineraries.router)
 app.include_router(posts.router)

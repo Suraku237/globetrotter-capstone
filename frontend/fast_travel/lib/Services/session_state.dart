@@ -57,12 +57,14 @@ class SessionState extends ChangeNotifier {
     String email,
     String password,
     String fullName, {
+    required String username,
     required String role,
   }) {
     return ApiService.instance.register(
       email: email,
       password: password,
       fullName: fullName,
+      username: username,
       role: role,
     );
   }
@@ -70,6 +72,20 @@ class SessionState extends ChangeNotifier {
   Future<AppUser> verifyEmail(String email, String code) async {
     final user =
         await ApiService.instance.verifyEmail(email: email, code: code);
+    currentUser = user;
+    notifyListeners();
+    return user;
+  }
+
+  /// Called by the register-screen poller as soon as the super admin
+  /// clicks the approval link. Skips re-entering the password by using
+  /// the fresh access token minted server-side, so the pending screen
+  /// can flip straight into the signed-in app.
+  Future<AppUser> applyAdminApproval({
+    required String accessToken,
+    required AppUser user,
+  }) async {
+    ApiService.instance.setToken(accessToken);
     currentUser = user;
     notifyListeners();
     return user;

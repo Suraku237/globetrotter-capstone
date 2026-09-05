@@ -24,11 +24,11 @@ class AdaptiveShell extends StatelessWidget {
   // already looks nothing like a full-bleed phone screen, so there's
   // no "TikTok look" to preserve there.
   final bool showAppBar;
-  // Called both by the phone AppBar's chat icon and the wide top nav
-  // bar's "Chat" item — chat is a pushed screen (like the admin review
+  // Called both by the phone AppBar's friends icon and the wide top nav
+  // bar's "Friends" item — it is a pushed screen (like the admin review
   // screen), not one of the indexed tabs in `destinations`, so it isn't
   // part of selectedIndex/onDestinationSelected.
-  final VoidCallback onOpenChat;
+  final VoidCallback onOpenFriends;
 
   // ✅ UPDATED: Added 4th destination: Map
   // Labels come from AppLocalizations at build time (see _destinations),
@@ -68,7 +68,7 @@ class AdaptiveShell extends StatelessWidget {
     this.avatarUrl,
     this.userName,
     this.showAppBar = true,
-    required this.onOpenChat,
+    required this.onOpenFriends,
   });
 
   Widget _profileIcon({required bool selected}) {
@@ -119,10 +119,10 @@ class AdaptiveShell extends StatelessWidget {
                 title: Text(title),
                 actions: [
                   IconButton(
-                    tooltip: 'Messages',
-                    icon: const Icon(Icons.chat_bubble_outline_rounded,
+                    tooltip: 'Friends',
+                    icon: const Icon(Icons.people_outline_rounded,
                         color: AppColors.inkSoft),
-                    onPressed: onOpenChat,
+                    onPressed: onOpenFriends,
                   ),
                   ...?actions,
                 ],
@@ -169,7 +169,7 @@ class AdaptiveShell extends StatelessWidget {
             destinations: destinations,
             selectedIndex: selectedIndex,
             onDestinationSelected: onDestinationSelected,
-            onOpenChat: onOpenChat,
+            onOpenFriends: onOpenFriends,
             profileLabel: l10n.navProfile,
             profileIndex: destinations.length,
             profileIcon: _profileIcon,
@@ -204,7 +204,7 @@ class _TopNavBar extends StatelessWidget {
   final List<({IconData icon, IconData selected, String label})> destinations;
   final int selectedIndex;
   final ValueChanged<int> onDestinationSelected;
-  final VoidCallback onOpenChat;
+  final VoidCallback onOpenFriends;
   final String profileLabel;
   final int profileIndex;
   final Widget Function({required bool selected}) profileIcon;
@@ -214,7 +214,7 @@ class _TopNavBar extends StatelessWidget {
     required this.destinations,
     required this.selectedIndex,
     required this.onDestinationSelected,
-    required this.onOpenChat,
+    required this.onOpenFriends,
     required this.profileLabel,
     required this.profileIndex,
     required this.profileIcon,
@@ -245,13 +245,13 @@ class _TopNavBar extends StatelessWidget {
                 ),
               ),
           _NavBarItem(
-            icon: Icons.chat_bubble_outline_rounded,
-            selectedIcon: Icons.chat_bubble_rounded,
-            label: 'Chat',
-            // Chat is a pushed screen, not a tab — it never shows as
+            icon: Icons.people_outline_rounded,
+            selectedIcon: Icons.people_rounded,
+            label: 'Friends',
+            // Friends is a pushed screen, not a tab — it never shows as
             // "active" in the bar the way Discover/Feed/etc. do.
             selected: false,
-            onTap: onOpenChat,
+            onTap: onOpenFriends,
           ),
           const Spacer(),
           ...?actions,

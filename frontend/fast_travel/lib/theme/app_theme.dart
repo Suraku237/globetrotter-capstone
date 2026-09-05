@@ -68,13 +68,12 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
-      // Transparent by default so the app-wide background photo (see
-      // AppBackground, layered in behind every screen via MaterialApp's
-      // builder) shows through instead of a solid page color.
-      scaffoldBackgroundColor: Colors.transparent,
+      // Auth screens provide their own photo treatment. Every other page
+      // uses an uncluttered white canvas.
+      scaffoldBackgroundColor: Colors.white,
       textTheme: AppText.textTheme(Brightness.light),
       appBarTheme: AppBarTheme(
-        backgroundColor: Colors.transparent,
+        backgroundColor: Colors.white,
         foregroundColor: AppColors.ink,
         elevation: 0,
         scrolledUnderElevation: 0,

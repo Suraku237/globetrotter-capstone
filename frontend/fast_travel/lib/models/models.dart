@@ -77,6 +77,7 @@ class AppUser {
   final String id;
   final String email;
   final String fullName;
+  final String username;
   final String role;
   final String? avatarUrl;
 
@@ -84,6 +85,7 @@ class AppUser {
     required this.id,
     required this.email,
     required this.fullName,
+    required this.username,
     required this.role,
     this.avatarUrl,
   });
@@ -92,6 +94,7 @@ class AppUser {
         id: (json['id'] ?? '').toString(),
         email: (json['email'] ?? '').toString(),
         fullName: (json['full_name'] ?? '').toString(),
+        username: (json['username'] ?? '').toString(),
         role: (json['role'] ?? 'user').toString(),
         avatarUrl: json['avatar_url'] as String?,
       );
@@ -107,6 +110,10 @@ class RegistrationResult {
   final String fullName;
   final String role;
   final String status;
+  // Short-lived token the client uses to poll /admin-requests/status
+  // while sitting on the "waiting for approval" screen. Only present when
+  // [status] is 'pending_admin_approval'.
+  final String? pendingSessionToken;
 
   RegistrationResult({
     required this.id,
@@ -114,6 +121,7 @@ class RegistrationResult {
     required this.fullName,
     required this.role,
     required this.status,
+    this.pendingSessionToken,
   });
 
   factory RegistrationResult.fromJson(Map<String, dynamic> json) =>
@@ -123,6 +131,166 @@ class RegistrationResult {
         fullName: (json['full_name'] ?? '').toString(),
         role: (json['role'] ?? 'user').toString(),
         status: (json['status'] ?? '').toString(),
+        pendingSessionToken: json['pending_session_token'] as String?,
+      );
+}
+
+// One poll of /admin-requests/status while an admin/worker signup is
+// waiting for the super admin to click approve/reject.
+enum PendingAdminStatusValue { pending, approved, rejected }
+
+class PendingAdminStatus {
+  final PendingAdminStatusValue status;
+  // Populated only when [status] is approved — the freshly minted access
+  // token and the user record are used to sign the applicant straight in.
+  final String? accessToken;
+  final AppUser? user;
+
+  const PendingAdminStatus({
+    required this.status,
+    this.accessToken,
+    this.user,
+  });
+
+  factory PendingAdminStatus.fromJson(Map<String, dynamic> json) {
+    final rawStatus = (json['status'] ?? '').toString();
+    switch (rawStatus) {
+      case 'approved':
+        return PendingAdminStatus(
+          status: PendingAdminStatusValue.approved,
+          accessToken: json['access_token'] as String?,
+          user: AppUser.fromJson({
+            'id': json['user_id'],
+            'email': json['email'],
+            'full_name': json['full_name'],
+            'username': json['username'],
+            'role': json['role'],
+            'avatar_url': json['avatar_url'],
+          }),
+        );
+      case 'rejected':
+        return const PendingAdminStatus(
+          status: PendingAdminStatusValue.rejected,
+        );
+      case 'pending':
+      default:
+        return const PendingAdminStatus(
+          status: PendingAdminStatusValue.pending,
+        );
+    }
+  }
+}
+
+class SocialUser {
+  final String id;
+  final String fullName;
+  final String username;
+  final String? avatarUrl;
+
+  const SocialUser({
+    required this.id,
+    required this.fullName,
+    required this.username,
+    this.avatarUrl,
+  });
+
+  factory SocialUser.fromJson(Map<String, dynamic> json) => SocialUser(
+        id: (json['id'] ?? '').toString(),
+        fullName: (json['full_name'] ?? '').toString(),
+        username: (json['username'] ?? '').toString(),
+        avatarUrl: json['avatar_url'] as String?,
+      );
+}
+
+class FriendRequest {
+  final String requestId;
+  final SocialUser user;
+  final String createdAt;
+
+  const FriendRequest({
+    required this.requestId,
+    required this.user,
+    required this.createdAt,
+  });
+
+  factory FriendRequest.fromJson(Map<String, dynamic> json) => FriendRequest(
+        requestId: (json['request_id'] ?? '').toString(),
+        user: SocialUser.fromJson(json['user'] as Map<String, dynamic>),
+        createdAt: (json['created_at'] ?? '').toString(),
+      );
+}
+
+class FriendsOverview {
+  final List<SocialUser> friends;
+  final List<FriendRequest> incomingRequests;
+  final List<FriendRequest> outgoingRequests;
+
+  const FriendsOverview({
+    required this.friends,
+    required this.incomingRequests,
+    required this.outgoingRequests,
+  });
+
+  factory FriendsOverview.fromJson(Map<String, dynamic> json) => FriendsOverview(
+        friends: (json['friends'] as List? ?? [])
+            .map((item) => SocialUser.fromJson(item as Map<String, dynamic>))
+            .toList(),
+        incomingRequests: (json['incoming_requests'] as List? ?? [])
+            .map((item) => FriendRequest.fromJson(item as Map<String, dynamic>))
+            .toList(),
+        outgoingRequests: (json['outgoing_requests'] as List? ?? [])
+            .map((item) => FriendRequest.fromJson(item as Map<String, dynamic>))
+            .toList(),
+      );
+}
+
+class SocialMessage {
+  final String id;
+  final String senderId;
+  final String senderName;
+  final String text;
+  final String createdAt;
+
+  const SocialMessage({
+    required this.id,
+    required this.senderId,
+    required this.senderName,
+    required this.text,
+    required this.createdAt,
+  });
+
+  factory SocialMessage.fromJson(Map<String, dynamic> json) => SocialMessage(
+        id: (json['id'] ?? '').toString(),
+        senderId: (json['sender_id'] ?? '').toString(),
+        senderName: (json['sender_name'] ?? '').toString(),
+        text: (json['text'] ?? '').toString(),
+        createdAt: (json['created_at'] ?? '').toString(),
+      );
+}
+
+class ChatGroup {
+  final String id;
+  final String name;
+  final String ownerId;
+  final List<SocialUser> members;
+  final String createdAt;
+
+  const ChatGroup({
+    required this.id,
+    required this.name,
+    required this.ownerId,
+    required this.members,
+    required this.createdAt,
+  });
+
+  factory ChatGroup.fromJson(Map<String, dynamic> json) => ChatGroup(
+        id: (json['id'] ?? '').toString(),
+        name: (json['name'] ?? '').toString(),
+        ownerId: (json['owner_id'] ?? '').toString(),
+        members: (json['members'] as List? ?? [])
+            .map((item) => SocialUser.fromJson(item as Map<String, dynamic>))
+            .toList(),
+        createdAt: (json['created_at'] ?? '').toString(),
       );
 }
 

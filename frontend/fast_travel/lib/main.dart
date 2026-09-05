@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:google_sign_in/google_sign_in.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
 import 'screens/admin/pending_destinations_screen.dart';
 import 'screens/assistant/assistant_screen.dart';
 import 'screens/auth/login_screen.dart';
-import 'screens/chat/community_room_screen.dart';
+import 'screens/friends/friends_screen.dart';
 import 'screens/feed/feed_screen.dart';
 import 'screens/home/discover_screen.dart';
 import 'screens/itineraries/itineraries_screen.dart';
@@ -18,7 +16,6 @@ import 'Services/session_state.dart';
 import 'l10n/generated/app_localizations.dart';
 import 'theme/app_theme.dart';
 import 'widgets/adaptive_shell.dart';
-import 'widgets/auth_background.dart';
 import 'widgets/logout_confirm.dart';
 
 void main() async {
@@ -70,21 +67,16 @@ class _GlobeTrotterAppState extends State<GlobeTrotterApp> {
           locale: _localeController.locale,
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          // A single background photo collage sits behind every screen in
-          // the app, MaterialApp-wide, so screens only need to make their
-          // own surfaces (Scaffold, Card, ...) transparent to reveal it —
-          // they don't each need their own copy of the background.
-          builder: (context, child) {
-            return Stack(
-              children: [
-                const Positioned.fill(child: AuthBackground()),
-                if (child != null) child,
-              ],
-            );
-          },
+          // Some established screens intentionally use transparent scaffolds.
+          // Keep their backdrop white now that the photo treatment is scoped
+          // to authentication only.
+          builder: (context, child) => ColoredBox(
+            color: Colors.white,
+            child: child ?? const SizedBox.shrink(),
+          ),
           home: _restoringSession
               ? const Scaffold(
-                  backgroundColor: Colors.transparent,
+                  backgroundColor: Colors.white,
                   body: Center(
                     child: CircularProgressIndicator(color: AppColors.ochre),
                   ),
@@ -268,11 +260,11 @@ class _HomeShellState extends State<_HomeShell> {
       onDestinationSelected: (i) => setState(() => _index = i),
       avatarUrl: widget.session.currentUser?.avatarUrl,
       userName: widget.session.currentUser?.fullName,
-      onOpenChat: () {
+      onOpenFriends: () {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => CommunityRoomScreen(session: widget.session),
+            builder: (context) => FriendsScreen(session: widget.session),
           ),
         );
       },

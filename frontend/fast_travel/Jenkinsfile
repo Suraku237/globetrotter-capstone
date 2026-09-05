@@ -28,11 +28,18 @@ pipeline {
         // reused on every subsequent build so we don't re-download
         // ~1 GB of Dart SDK each time.
         FLUTTER_HOME = "${env.HOME}/flutter-sdk"
-        // Nginx serves the Flutter web bundle from this directory (see
-        // /etc/nginx/sites-enabled/fasttravel-web on the VPS). rsync
-        // writes into it with --delete so old bundle files can't linger
-        // and confuse the browser's cache-busting logic.
-        WEB_DIR = '/var/www/fasttravel-web'
+        // Nginx serves the Flutter web bundle from this directory. The
+        // path must match the `root` directive of the
+        // fasttravel-web.duckdns.org server block in
+        // /etc/nginx/sites-enabled/fasttravel-web on the VPS — which is
+        // /var/www/fasttravel-app (yes, `-app`, not `-web`; the domain
+        // name and the doc-root name were never aligned). Historically
+        // WEB_DIR pointed at /var/www/fasttravel-web, which meant every
+        // rsync succeeded but wrote into a directory nginx never read,
+        // so the site kept serving whatever was in /var/www/fasttravel-app
+        // from the last manual deploy. rsync uses --delete so old bundle
+        // files can't linger and confuse browser cache-busting.
+        WEB_DIR = '/var/www/fasttravel-app'
         APP_DIR = 'frontend/fast_travel'
     }
 
@@ -40,68 +47,6 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
-            }
-        }
-
-        stage('Diagnose nginx (temporary)') {
-            // TEMPORARY: prints nginx's real doc root + mtime of the
-            // files it actually serves, so we can confirm whether
-            // WEB_DIR (/var/www/fasttravel-web) matches nginx's `root`
-            // directive for the fasttravel-web.duckdns.org server block.
-            // Remove this stage once the "old UI keeps loading" issue
-            // is fully resolved. Every command is read-only.
-            steps {
-                sh '''
-                    set +e
-                    echo "==================================================="
-                    echo "==> nginx server blocks matching fasttravel-web"
-                    echo "==================================================="
-                    # nginx -T prints the fully-resolved config. Config
-                    # files under /etc/nginx are world-readable, so this
-                    # works without sudo (only SSL private keys would need
-                    # elevation, and we do not print them).
-                    nginx -T 2>/dev/null \
-                        | awk '/server[[:space:]]*\\{/{block=""; capture=1} capture{block = block $0 ORS} /\\}/ && capture{if (block ~ /fasttravel-web/) print block; capture=0}'
-
-                    echo ""
-                    echo "==================================================="
-                    echo "==> mtimes on all candidate doc roots"
-                    echo "==================================================="
-                    for d in \
-                        /var/www/fasttravel-web \
-                        /var/www/html \
-                        /usr/share/nginx/html \
-                        /srv/fasttravel-web \
-                        /srv/www/fasttravel-web ; do
-                        if [ -d "$d" ]; then
-                            echo ""
-                            echo "--- $d ---"
-                            ls -lat "$d" | head -6
-                            if [ -f "$d/index.html" ]; then
-                                echo "index.html size: $(stat -c%s "$d/index.html") bytes"
-                                echo "index.html mtime: $(stat -c%y "$d/index.html")"
-                            fi
-                        fi
-                    done
-
-                    echo ""
-                    echo "==================================================="
-                    echo "==> Newest file mtime in WEB_DIR ($WEB_DIR)"
-                    echo "==================================================="
-                    if [ -d "$WEB_DIR" ]; then
-                        find "$WEB_DIR" -type f -printf '%T@ %p\\n' 2>/dev/null \
-                            | sort -n | tail -5
-                    fi
-
-                    echo ""
-                    echo "==================================================="
-                    echo "==> HTTP response headers from the live site"
-                    echo "==================================================="
-                    curl -sI https://fasttravel-web.duckdns.org/index.html \
-                        | grep -iE '^(Last-Modified|ETag|Content-Length|Server|Cache-Control):'
-                    # Read-only; no changes are made anywhere.
-                    exit 0
-                '''
             }
         }
 

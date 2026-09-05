@@ -547,8 +547,8 @@ class ApiService {
   // ---- Friends, direct messages, and private groups ----
 
   Future<FriendsOverview> getFriendsOverview() async {
-    final res = await http.get(Uri.parse('$baseUrl/social/friends'),
-        headers: _headers);
+    final res =
+        await http.get(Uri.parse('$baseUrl/social/friends'), headers: _headers);
     final data = await _handle(res);
     return FriendsOverview.fromJson(data as Map<String, dynamic>);
   }
@@ -589,18 +589,30 @@ class ApiService {
         .toList();
   }
 
-  Future<SocialMessage> sendDirectMessage(String friendId, String text) async {
+  Future<SocialMessage> sendDirectMessage(
+    String friendId, {
+    String? text,
+    String? stickerId,
+    String? voiceUrl,
+    int? voiceDurationMs,
+  }) async {
     final res = await http.post(
       Uri.parse('$baseUrl/social/friends/$friendId/messages'),
       headers: _headers,
-      body: jsonEncode({'text': text}),
+      body: jsonEncode(_composeMessageBody(
+        text: text,
+        stickerId: stickerId,
+        voiceUrl: voiceUrl,
+        voiceDurationMs: voiceDurationMs,
+      )),
     );
     final data = await _handle(res, okStatus: 201);
     return SocialMessage.fromJson(data as Map<String, dynamic>);
   }
 
   Future<List<ChatGroup>> getGroups() async {
-    final res = await http.get(Uri.parse('$baseUrl/social/groups'), headers: _headers);
+    final res =
+        await http.get(Uri.parse('$baseUrl/social/groups'), headers: _headers);
     final data = await _handle(res) as List;
     return data
         .map((item) => ChatGroup.fromJson(item as Map<String, dynamic>))
@@ -629,14 +641,81 @@ class ApiService {
         .toList();
   }
 
-  Future<SocialMessage> sendGroupMessage(String groupId, String text) async {
+  Future<SocialMessage> sendGroupMessage(
+    String groupId, {
+    String? text,
+    String? stickerId,
+    String? voiceUrl,
+    int? voiceDurationMs,
+  }) async {
     final res = await http.post(
       Uri.parse('$baseUrl/social/groups/$groupId/messages'),
       headers: _headers,
-      body: jsonEncode({'text': text}),
+      body: jsonEncode(_composeMessageBody(
+        text: text,
+        stickerId: stickerId,
+        voiceUrl: voiceUrl,
+        voiceDurationMs: voiceDurationMs,
+      )),
     );
     final data = await _handle(res, okStatus: 201);
     return SocialMessage.fromJson(data as Map<String, dynamic>);
+  }
+
+  Map<String, dynamic> _composeMessageBody({
+    String? text,
+    String? stickerId,
+    String? voiceUrl,
+    int? voiceDurationMs,
+  }) {
+    if (stickerId != null) {
+      return {'type': 'sticker', 'sticker_id': stickerId};
+    }
+    if (voiceUrl != null) {
+      return {
+        'type': 'voice',
+        'voice_url': voiceUrl,
+        'voice_duration_ms': voiceDurationMs,
+      };
+    }
+    return {'type': 'text', 'text': text ?? ''};
+  }
+
+  Future<List<ChatSticker>> getStickers() async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/social/stickers'),
+      headers: _headers,
+    );
+    final data = await _handle(res) as List;
+    return data
+        .map((item) => ChatSticker.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  // Streams the recorded audio to /social/voice-messages as multipart form
+  // data. The Authorization header is added manually because [_headers]
+  // sets Content-Type to application/json — leaving that on a multipart
+  // request would break the boundary parsing on the server.
+  Future<UploadedVoiceMessage> uploadVoiceMessage({
+    required List<int> bytes,
+    required String filename,
+    required int durationMs,
+    String? contentType,
+  }) async {
+    final uri = Uri.parse('$baseUrl/social/voice-messages');
+    final request = http.MultipartRequest('POST', uri);
+    final auth = _bearerHeader();
+    if (auth != null) request.headers['Authorization'] = auth;
+    request.fields['duration_ms'] = durationMs.toString();
+    request.files.add(http.MultipartFile.fromBytes(
+      'file',
+      bytes,
+      filename: filename,
+    ));
+    final streamed = await request.send();
+    final res = await http.Response.fromStream(streamed);
+    final data = await _handle(res, okStatus: 201);
+    return UploadedVoiceMessage.fromJson(data as Map<String, dynamic>);
   }
 
   // ---- Destination suggestions ----
@@ -764,7 +843,8 @@ class ApiService {
   Stream<String> streamAssistant({required String message}) async* {
     final client = http.Client();
     try {
-      final request = http.Request('POST', Uri.parse('$baseUrl/assistant/chat/stream'));
+      final request =
+          http.Request('POST', Uri.parse('$baseUrl/assistant/chat/stream'));
       request.headers['Content-Type'] = 'application/json';
       final auth = _bearerHeader();
       if (auth != null) request.headers['Authorization'] = auth;

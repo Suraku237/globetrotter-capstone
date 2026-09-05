@@ -1,11 +1,16 @@
 import 'dart:async';
+import 'dart:typed_data';
 
+import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:record/record.dart';
 
 import '../../Services/api_service.dart';
 import '../../Services/session_state.dart';
 import '../../models/models.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/voice_bytes.dart';
 
 class FriendsScreen extends StatefulWidget {
   final SessionState session;
@@ -462,6 +467,19 @@ class _ConversationScreenState extends State<ConversationScreen> {
   bool _sending = false;
   String? _error;
 
+  // Sticker + emoji picker state — only one of these is open at a time
+  // so the composer stays usable and the keyboard has room to appear.
+  _PickerPanel _openPicker = _PickerPanel.none;
+  List<ChatSticker>? _stickers;
+  bool _loadingStickers = false;
+
+  // Voice recorder / uploader state.
+  final AudioRecorder _recorder = AudioRecorder();
+  bool _recording = false;
+  bool _uploadingVoice = false;
+  Duration _recordingElapsed = Duration.zero;
+  Timer? _recordingTicker;
+
   @override
   void initState() {
     super.initState();
@@ -475,6 +493,14 @@ class _ConversationScreenState extends State<ConversationScreen> {
   @override
   void dispose() {
     _poller?.cancel();
+    _recordingTicker?.cancel();
+    // Best-effort — if we're mid-recording when the screen closes,
+    // discard the take rather than leaving the mic engaged.
+    _recorder.stop().then((path) async {
+      await _recorder.dispose();
+    }).catchError((_) async {
+      await _recorder.dispose();
+    });
     _composer.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -517,9 +543,10 @@ class _ConversationScreenState extends State<ConversationScreen> {
     setState(() => _sending = true);
     try {
       final message = widget.isGroup
-          ? await ApiService.instance.sendGroupMessage(widget.group!.id, text)
+          ? await ApiService.instance
+              .sendGroupMessage(widget.group!.id, text: text)
           : await ApiService.instance
-              .sendDirectMessage(widget.friend!.id, text);
+              .sendDirectMessage(widget.friend!.id, text: text);
       if (!mounted) return;
       setState(() => _messages = [..._messages, message]);
       _scrollToBottom();
@@ -530,6 +557,199 @@ class _ConversationScreenState extends State<ConversationScreen> {
       }
     } finally {
       if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  Future<void> _sendSticker(ChatSticker sticker) async {
+    if (_sending) return;
+    setState(() {
+      _sending = true;
+      _openPicker = _PickerPanel.none;
+    });
+    try {
+      final message = widget.isGroup
+          ? await ApiService.instance
+              .sendGroupMessage(widget.group!.id, stickerId: sticker.id)
+          : await ApiService.instance
+              .sendDirectMessage(widget.friend!.id, stickerId: sticker.id);
+      if (!mounted) return;
+      setState(() => _messages = [..._messages, message]);
+      _scrollToBottom();
+    } on ApiException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  Future<void> _togglePicker(_PickerPanel panel) async {
+    // Any open picker hides the on-screen keyboard so the picker gets
+    // full height — otherwise the picker collides with the keyboard on
+    // mobile and the user sees neither properly.
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _openPicker = _openPicker == panel ? _PickerPanel.none : panel;
+    });
+    if (_openPicker == _PickerPanel.stickers &&
+        _stickers == null &&
+        !_loadingStickers) {
+      setState(() => _loadingStickers = true);
+      try {
+        final stickers = await ApiService.instance.getStickers();
+        if (mounted) setState(() => _stickers = stickers);
+      } on ApiException catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(error.message)));
+        }
+      } finally {
+        if (mounted) setState(() => _loadingStickers = false);
+      }
+    }
+  }
+
+  void _insertEmoji(String emoji) {
+    // Insert at the current selection so the caret lands after the
+    // emoji rather than jumping to the end of the field.
+    final value = _composer.value;
+    final selection = value.selection.isValid
+        ? value.selection
+        : TextSelection.collapsed(offset: value.text.length);
+    final newText =
+        value.text.replaceRange(selection.start, selection.end, emoji);
+    _composer.value = value.copyWith(
+      text: newText,
+      selection:
+          TextSelection.collapsed(offset: selection.start + emoji.length),
+    );
+  }
+
+  Future<void> _startRecording() async {
+    if (_recording || _uploadingVoice) return;
+    try {
+      final hasPermission = await _recorder.hasPermission();
+      if (!hasPermission) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Microphone permission is required.')),
+        );
+        return;
+      }
+      setState(() {
+        _openPicker = _PickerPanel.none;
+        _recordingElapsed = Duration.zero;
+      });
+
+      // AAC in an MP4 container plays back on every platform Flutter
+      // targets without an extra codec plugin. Web falls back to
+      // whatever the browser can record via the same package — the
+      // container is transparent to us here.
+      const config = RecordConfig(encoder: AudioEncoder.aacLc);
+      if (kIsWeb) {
+        await _recorder.start(config, path: '');
+      } else {
+        // A path is required on native platforms — a stable name under
+        // the app's temp area is picked automatically by the plugin
+        // when using record 5.x with an explicit temp path.
+        await _recorder.start(config,
+            path: 'voice_${DateTime.now().millisecondsSinceEpoch}.m4a');
+      }
+
+      setState(() => _recording = true);
+      _recordingTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (!mounted) return;
+        setState(() => _recordingElapsed += const Duration(seconds: 1));
+      });
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not start recording: $error')),
+      );
+    }
+  }
+
+  Future<void> _cancelRecording() async {
+    _recordingTicker?.cancel();
+    _recordingTicker = null;
+    try {
+      await _recorder.stop();
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() {
+      _recording = false;
+      _recordingElapsed = Duration.zero;
+    });
+  }
+
+  Future<void> _stopAndSendRecording() async {
+    if (!_recording) return;
+    _recordingTicker?.cancel();
+    _recordingTicker = null;
+    setState(() {
+      _recording = false;
+      _uploadingVoice = true;
+    });
+
+    try {
+      final path = await _recorder.stop();
+      if (path == null || path.isEmpty) {
+        throw Exception('Recording was empty');
+      }
+
+      final Uint8List bytes = await readVoiceBytes(path);
+      String filename;
+      if (kIsWeb) {
+        filename = 'voice.webm';
+      } else {
+        filename = path.split(RegExp(r'[\\/]')).last;
+        if (!filename.contains('.')) filename = '$filename.m4a';
+      }
+
+      final durationMs = _recordingElapsed.inMilliseconds > 0
+          ? _recordingElapsed.inMilliseconds
+          : 1000;
+
+      final uploaded = await ApiService.instance.uploadVoiceMessage(
+        bytes: bytes,
+        filename: filename,
+        durationMs: durationMs,
+      );
+
+      final message = widget.isGroup
+          ? await ApiService.instance.sendGroupMessage(
+              widget.group!.id,
+              voiceUrl: uploaded.url,
+              voiceDurationMs: uploaded.durationMs,
+            )
+          : await ApiService.instance.sendDirectMessage(
+              widget.friend!.id,
+              voiceUrl: uploaded.url,
+              voiceDurationMs: uploaded.durationMs,
+            );
+      if (!mounted) return;
+      setState(() => _messages = [..._messages, message]);
+      _scrollToBottom();
+    } on ApiException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not send voice message: $error')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _uploadingVoice = false;
+          _recordingElapsed = Duration.zero;
+        });
+      }
     }
   }
 
@@ -570,62 +790,360 @@ class _ConversationScreenState extends State<ConversationScreen> {
                             mine: message.senderId ==
                                 widget.session.currentUser?.id,
                             showSender: widget.isGroup,
+                            stickers: _stickers,
                           );
                         },
                       ),
           ),
+          if (_openPicker == _PickerPanel.emoji) _emojiPanel(),
+          if (_openPicker == _PickerPanel.stickers) _stickerPanel(),
           SafeArea(
             top: false,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _composer,
-                      minLines: 1,
-                      maxLines: 5,
-                      textCapitalization: TextCapitalization.sentences,
-                      onSubmitted: (_) => _send(),
-                      decoration: const InputDecoration(
-                        hintText: 'Write a message',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton.filled(
-                    tooltip: 'Send message',
-                    onPressed: _sending ? null : _send,
-                    icon: const Icon(Icons.send_rounded),
-                  ),
-                ],
-              ),
+              padding: const EdgeInsets.fromLTRB(8, 8, 8, 12),
+              child: _recording ? _recordingBar() : _composerBar(),
             ),
           ),
         ],
       ),
     );
   }
+
+  Widget _composerBar() {
+    final canSendText = !_sending && !_uploadingVoice;
+    return Row(
+      children: [
+        IconButton(
+          tooltip: 'Emoji',
+          onPressed:
+              canSendText ? () => _togglePicker(_PickerPanel.emoji) : null,
+          icon: Icon(
+            Icons.emoji_emotions_outlined,
+            color: _openPicker == _PickerPanel.emoji ? AppColors.ochre : null,
+          ),
+        ),
+        IconButton(
+          tooltip: 'Sticker',
+          onPressed:
+              canSendText ? () => _togglePicker(_PickerPanel.stickers) : null,
+          icon: Icon(
+            Icons.sticky_note_2_outlined,
+            color:
+                _openPicker == _PickerPanel.stickers ? AppColors.ochre : null,
+          ),
+        ),
+        Expanded(
+          child: TextField(
+            controller: _composer,
+            minLines: 1,
+            maxLines: 5,
+            textCapitalization: TextCapitalization.sentences,
+            onTap: () => setState(() => _openPicker = _PickerPanel.none),
+            onSubmitted: (_) => _send(),
+            decoration: const InputDecoration(
+              hintText: 'Write a message',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+          ),
+        ),
+        const SizedBox(width: 6),
+        // Toggle between the send button (when there's text to send) and
+        // the mic button (when the composer is empty) — matches the
+        // pattern people already know from WhatsApp/Telegram, so the
+        // control moves out of the way instead of adding a fourth icon.
+        ValueListenableBuilder<TextEditingValue>(
+          valueListenable: _composer,
+          builder: (context, value, _) {
+            final hasText = value.text.trim().isNotEmpty;
+            if (hasText) {
+              return IconButton.filled(
+                tooltip: 'Send message',
+                onPressed: canSendText ? _send : null,
+                icon: const Icon(Icons.send_rounded),
+              );
+            }
+            return IconButton.filled(
+              tooltip: 'Record voice message',
+              onPressed: _uploadingVoice ? null : _startRecording,
+              icon: _uploadingVoice
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.mic_rounded),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _recordingBar() {
+    // Compact but expressive recording bar — matches the messaging apps
+    // people already know: cancel on the left, elapsed time in the
+    // middle (with a red pulse dot for "I really am recording"), and
+    // stop-and-send on the right.
+    final minutes = _recordingElapsed.inMinutes.remainder(60);
+    final seconds = _recordingElapsed.inSeconds.remainder(60);
+    final elapsed =
+        '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+    return Row(
+      children: [
+        IconButton(
+          tooltip: 'Cancel recording',
+          onPressed: _cancelRecording,
+          icon: const Icon(Icons.delete_outline_rounded),
+        ),
+        Expanded(
+          child: Row(
+            children: [
+              const _PulsingDot(color: Colors.redAccent),
+              const SizedBox(width: 8),
+              Text('Recording  $elapsed',
+                  style: Theme.of(context).textTheme.bodyMedium),
+            ],
+          ),
+        ),
+        IconButton.filled(
+          tooltip: 'Stop and send',
+          onPressed: _stopAndSendRecording,
+          icon: const Icon(Icons.send_rounded),
+        ),
+      ],
+    );
+  }
+
+  Widget _emojiPanel() {
+    // Small curated list — plenty to add colour to a message without
+    // pulling a heavyweight emoji-picker dependency. The pickers on
+    // real phones can still insert any emoji through the keyboard.
+    const emojis = <String>[
+      '\u{1F600}',
+      '\u{1F602}',
+      '\u{1F60D}',
+      '\u{1F609}',
+      '\u{1F914}',
+      '\u{1F60E}',
+      '\u{1F607}',
+      '\u{1F929}',
+      '\u{1F631}',
+      '\u{1F622}',
+      '\u{1F44D}',
+      '\u{1F44F}',
+      '\u{1F64C}',
+      '\u{1F64F}',
+      '\u{1F91D}',
+      '\u{2764}\u{FE0F}',
+      '\u{1F525}',
+      '\u{2728}',
+      '\u{1F389}',
+      '\u{1F4AF}',
+      '\u{2600}\u{FE0F}',
+      '\u{1F308}',
+      '\u{1F30D}',
+      '\u{2708}\u{FE0F}',
+      '\u{1F3D6}\u{FE0F}',
+      '\u{1F4F8}',
+      '\u{1F37D}\u{FE0F}',
+      '\u{2615}',
+      '\u{1F37A}',
+      '\u{1F382}',
+      '\u{1F31F}',
+      '\u{2705}',
+    ];
+    return Container(
+      color: AppColors.sand.withValues(alpha: 0.35),
+      constraints: const BoxConstraints(maxHeight: 220),
+      child: GridView.count(
+        crossAxisCount: 8,
+        padding: const EdgeInsets.all(8),
+        children: emojis
+            .map(
+              (e) => InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () => _insertEmoji(e),
+                child: Center(
+                  child: Text(e, style: const TextStyle(fontSize: 26)),
+                ),
+              ),
+            )
+            .toList(),
+      ),
+    );
+  }
+
+  Widget _stickerPanel() {
+    return Container(
+      color: AppColors.sand.withValues(alpha: 0.35),
+      constraints: const BoxConstraints(maxHeight: 240),
+      child: _loadingStickers
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.ochre),
+            )
+          : (_stickers == null || _stickers!.isEmpty)
+              ? const Center(
+                  child: Text('No stickers available.'),
+                )
+              : GridView.count(
+                  crossAxisCount: 4,
+                  padding: const EdgeInsets.all(8),
+                  children: _stickers!
+                      .map(
+                        (sticker) => InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: _sending ? null : () => _sendSticker(sticker),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(sticker.emoji,
+                                  style: const TextStyle(fontSize: 40)),
+                              const SizedBox(height: 2),
+                              Text(sticker.label,
+                                  style: Theme.of(context).textTheme.bodySmall),
+                            ],
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
+    );
+  }
 }
 
-class _MessageBubble extends StatelessWidget {
+enum _PickerPanel { none, emoji, stickers }
+
+class _PulsingDot extends StatefulWidget {
+  final Color color;
+  const _PulsingDot({required this.color});
+
+  @override
+  State<_PulsingDot> createState() => _PulsingDotState();
+}
+
+class _PulsingDotState extends State<_PulsingDot>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: Tween<double>(begin: 0.3, end: 1.0).animate(_controller),
+      child: Container(
+        width: 10,
+        height: 10,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: widget.color,
+        ),
+      ),
+    );
+  }
+}
+
+class _MessageBubble extends StatefulWidget {
   final SocialMessage message;
   final bool mine;
   final bool showSender;
+  final List<ChatSticker>? stickers;
 
   const _MessageBubble({
     required this.message,
     required this.mine,
     required this.showSender,
+    required this.stickers,
   });
 
   @override
+  State<_MessageBubble> createState() => _MessageBubbleState();
+}
+
+class _MessageBubbleState extends State<_MessageBubble> {
+  AudioPlayer? _player;
+  bool _playing = false;
+  Duration _position = Duration.zero;
+  Duration _duration = Duration.zero;
+  StreamSubscription<PlayerState>? _stateSub;
+  StreamSubscription<Duration>? _positionSub;
+  StreamSubscription<Duration>? _durationSub;
+
+  @override
+  void dispose() {
+    _stateSub?.cancel();
+    _positionSub?.cancel();
+    _durationSub?.cancel();
+    _player?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _ensurePlayer() async {
+    if (_player != null) return;
+    final player = AudioPlayer();
+    _stateSub = player.onPlayerStateChanged.listen((state) {
+      if (!mounted) return;
+      setState(() => _playing = state == PlayerState.playing);
+    });
+    _positionSub = player.onPositionChanged.listen((pos) {
+      if (!mounted) return;
+      setState(() => _position = pos);
+    });
+    _durationSub = player.onDurationChanged.listen((dur) {
+      if (!mounted) return;
+      setState(() => _duration = dur);
+    });
+    _player = player;
+  }
+
+  Future<void> _toggleVoice(String voiceUrl) async {
+    await _ensurePlayer();
+    final player = _player!;
+    if (_playing) {
+      await player.pause();
+      return;
+    }
+    final absoluteUrl = ApiService.resolveUrl(voiceUrl);
+    await player.play(UrlSource(absoluteUrl));
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final color = mine ? AppColors.ochre : AppColors.sand;
-    final textColor = mine ? Colors.white : AppColors.ink;
+    final message = widget.message;
+    // Sticker messages are rendered without a bubble background — the
+    // sticker itself is the visual — matching how big platforms handle
+    // one-shot reactions.
+    if (message.type == 'sticker') return _buildSticker(context, message);
+
+    final color = widget.mine ? AppColors.ochre : AppColors.sand;
+    final textColor = widget.mine ? Colors.white : AppColors.ink;
+
+    Widget content;
+    if (message.type == 'voice' && (message.voiceUrl ?? '').isNotEmpty) {
+      content = _voiceContent(textColor, message);
+    } else {
+      content = Text(message.text, style: TextStyle(color: textColor));
+    }
+
     return Align(
-      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+      alignment: widget.mine ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         constraints: const BoxConstraints(maxWidth: 480),
         margin: const EdgeInsets.only(bottom: 8),
@@ -637,17 +1155,98 @@ class _MessageBubble extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (showSender && !mine)
+            if (widget.showSender && !widget.mine)
               Text(message.senderName,
                   style: TextStyle(
                       color: textColor.withValues(alpha: 0.75),
                       fontSize: 12,
                       fontWeight: FontWeight.w700)),
-            Text(message.text, style: TextStyle(color: textColor)),
+            content,
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildSticker(BuildContext context, SocialMessage message) {
+    // Server-side catalog is authoritative — fall back to a neutral
+    // question mark if the client hasn't loaded stickers yet or a new
+    // sticker id shipped after this build.
+    final sticker = widget.stickers?.firstWhere(
+      (item) => item.id == message.stickerId,
+      orElse: () => const ChatSticker(id: '?', emoji: '\u2753', label: ''),
+    );
+    return Align(
+      alignment: widget.mine ? Alignment.centerRight : Alignment.centerLeft,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Column(
+          crossAxisAlignment:
+              widget.mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          children: [
+            if (widget.showSender && !widget.mine)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: Text(
+                  message.senderName,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+            Text(
+              sticker?.emoji ?? '\u2753',
+              style: const TextStyle(fontSize: 64),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _voiceContent(Color textColor, SocialMessage message) {
+    final total = _duration.inMilliseconds > 0
+        ? _duration
+        : Duration(milliseconds: message.voiceDurationMs ?? 0);
+    final progress = total.inMilliseconds == 0
+        ? 0.0
+        : (_position.inMilliseconds / total.inMilliseconds).clamp(0.0, 1.0);
+    final label = _formatDuration(total.inMilliseconds > 0
+        ? (_playing ? _position : total)
+        : Duration(milliseconds: message.voiceDurationMs ?? 0));
+    return SizedBox(
+      width: 220,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            onPressed: () => _toggleVoice(message.voiceUrl!),
+            icon: Icon(
+              _playing ? Icons.pause_circle_filled : Icons.play_circle_filled,
+              color: textColor,
+              size: 32,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: LinearProgressIndicator(
+              value: progress,
+              backgroundColor: textColor.withValues(alpha: 0.25),
+              color: textColor,
+              minHeight: 3,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(label, style: TextStyle(color: textColor, fontSize: 12)),
+        ],
+      ),
+    );
+  }
+
+  String _formatDuration(Duration d) {
+    final m = d.inMinutes.remainder(60);
+    final s = d.inSeconds.remainder(60);
+    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
 }
 

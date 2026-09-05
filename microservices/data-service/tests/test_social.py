@@ -71,3 +71,110 @@ def test_group_requires_friends_and_all_members_can_message(social_store):
         group["id"], social.TextMessageCreate(text="Welcome!"), current_user=bob
     )
     assert social.get_group_messages(group["id"], current_user=alice) == [sent]
+
+
+def _accept(alice, bob):
+    request = social.send_friend_request(
+        social.FriendRequestCreate(username="bob"), current_user=alice
+    )
+    social.accept_friend_request(request["request_id"], current_user=bob)
+
+
+def test_sticker_message_is_stored_with_sticker_id(social_store):
+    alice, bob = social_store
+    _accept(alice, bob)
+
+    sent = social.send_direct_message(
+        "bob",
+        social.TextMessageCreate(type="sticker", sticker_id="party"),
+        current_user=alice,
+    )
+
+    assert sent["type"] == "sticker"
+    assert sent["sticker_id"] == "party"
+    # Fallback text is present for older clients / notifications.
+    assert sent["text"].startswith("[sticker:")
+
+
+def test_unknown_sticker_is_rejected(social_store):
+    alice, bob = social_store
+    _accept(alice, bob)
+
+    with pytest.raises(HTTPException, match="Unknown sticker"):
+        social.send_direct_message(
+            "bob",
+            social.TextMessageCreate(type="sticker", sticker_id="not-a-real-sticker"),
+            current_user=alice,
+        )
+
+
+def test_voice_message_requires_our_own_audio_url(social_store):
+    alice, bob = social_store
+    _accept(alice, bob)
+
+    with pytest.raises(HTTPException, match="Invalid voice message URL"):
+        social.send_direct_message(
+            "bob",
+            social.TextMessageCreate(
+                type="voice",
+                voice_url="https://evil.example.com/audio.mp3",
+                voice_duration_ms=1500,
+            ),
+            current_user=alice,
+        )
+
+
+def test_voice_message_stores_url_and_duration(social_store):
+    alice, bob = social_store
+    _accept(alice, bob)
+
+    sent = social.send_direct_message(
+        "bob",
+        social.TextMessageCreate(
+            type="voice",
+            voice_url="/audio/voice/alice_1.m4a",
+            voice_duration_ms=2500,
+        ),
+        current_user=alice,
+    )
+
+    assert sent["type"] == "voice"
+    assert sent["voice_url"] == "/audio/voice/alice_1.m4a"
+    assert sent["voice_duration_ms"] == 2500
+
+
+def test_voice_duration_must_be_positive_and_capped(social_store):
+    alice, bob = social_store
+    _accept(alice, bob)
+
+    with pytest.raises(HTTPException, match="Invalid voice message duration"):
+        social.send_direct_message(
+            "bob",
+            social.TextMessageCreate(
+                type="voice",
+                voice_url="/audio/voice/x.m4a",
+                voice_duration_ms=0,
+            ),
+            current_user=alice,
+        )
+    with pytest.raises(HTTPException, match="Invalid voice message duration"):
+        social.send_direct_message(
+            "bob",
+            social.TextMessageCreate(
+                type="voice",
+                voice_url="/audio/voice/x.m4a",
+                voice_duration_ms=social.MAX_VOICE_DURATION_MS + 1,
+            ),
+            current_user=alice,
+        )
+
+
+def test_stickers_catalogue_is_non_empty_and_ids_are_unique(social_store):
+    alice, _ = social_store
+    result = social.list_stickers(current_user=alice)
+    assert len(result) > 0
+    ids = [item["id"] for item in result]
+    assert len(ids) == len(set(ids))
+    # Every entry needs the fields the client relies on.
+    for item in result:
+        assert item["id"] and item["emoji"] and item["label"]

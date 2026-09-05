@@ -3,8 +3,9 @@
 import threading
 import uuid
 from datetime import datetime, timezone
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from .models import DATA_DIR, _load, _save, load_users
@@ -15,6 +16,40 @@ router = APIRouter(prefix="/social", tags=["social"])
 FRIENDSHIPS_FILE = DATA_DIR / "friendships.json"
 DIRECT_THREADS_FILE = DATA_DIR / "direct_threads.json"
 GROUPS_FILE = DATA_DIR / "chat_groups.json"
+# Voice-message uploads land under DATA_DIR/audio/voice, which is served
+# publicly at /audio/voice/<uuid>.<ext> by the /audio StaticFiles mount in
+# main.py — matches how avatars and post photos are already served.
+VOICE_DIR = DATA_DIR / "audio" / "voice"
+VOICE_DIR.mkdir(parents=True, exist_ok=True)
+
+# Kept tight so the JSON message store doesn't grow unbounded from a
+# single accidentally-uploaded long recording, and so users can't push
+# multi-megabyte files through a chat channel.
+MAX_VOICE_BYTES = 5 * 1024 * 1024  # 5 MB
+MAX_VOICE_DURATION_MS = 5 * 60 * 1000  # 5 minutes
+
+# A curated catalogue of "stickers" — the client renders each as a large
+# emoji tile. Keeping the catalogue on the server means new stickers only
+# need one place changed and older clients still see something sensible
+# (unknown ids fall back to a generic label on the client).
+STICKERS: list[dict] = [
+    {"id": "wave", "emoji": "\U0001F44B", "label": "Hi!"},
+    {"id": "thumbs_up", "emoji": "\U0001F44D", "label": "Nice!"},
+    {"id": "clap", "emoji": "\U0001F44F", "label": "Bravo"},
+    {"id": "heart", "emoji": "\u2764\ufe0f", "label": "Love"},
+    {"id": "fire", "emoji": "\U0001F525", "label": "Fire"},
+    {"id": "laugh", "emoji": "\U0001F602", "label": "Haha"},
+    {"id": "party", "emoji": "\U0001F389", "label": "Party!"},
+    {"id": "star", "emoji": "\U0001F929", "label": "Star!"},
+    {"id": "sad", "emoji": "\U0001F622", "label": "Sad"},
+    {"id": "surprise", "emoji": "\U0001F62E", "label": "Wow"},
+    {"id": "plane", "emoji": "\u2708\ufe0f", "label": "Bon voyage"},
+    {"id": "beach", "emoji": "\U0001F3D6\ufe0f", "label": "Vacation"},
+]
+_STICKER_IDS = {sticker["id"] for sticker in STICKERS}
+
+# Serializes writes to the JSON stores below — matches the single-process
+# assumption the friends feature already runs under.
 _social_lock = threading.Lock()
 
 
@@ -28,7 +63,15 @@ class GroupCreate(BaseModel):
 
 
 class TextMessageCreate(BaseModel):
-    text: str
+    # Kept as the whole payload rather than adding new fields to a single
+    # model so an old (text-only) client hitting the endpoint with
+    # {"text": ...} still validates cleanly. Extra fields cover stickers
+    # and voice notes; type defaults to "text" for backwards compatibility.
+    text: str = ""
+    type: str = "text"
+    sticker_id: Optional[str] = None
+    voice_url: Optional[str] = None
+    voice_duration_ms: Optional[int] = None
 
 
 def _load_list(path) -> list:
@@ -73,19 +116,61 @@ def _require_friendship(friendships: list, first_id: str, second_id: str) -> Non
         )
 
 
-def _message(sender: dict, text: str) -> dict:
-    cleaned = text.strip()
-    if not cleaned:
-        raise HTTPException(status_code=400, detail="Message cannot be empty")
-    if len(cleaned) > 4000:
-        raise HTTPException(status_code=400, detail="Message must be at most 4000 characters")
-    return {
+def _validate_voice_url(voice_url: str) -> str:
+    # Reject anything not pointing at our own voice-upload directory so a
+    # crafted message can't smuggle an arbitrary URL through as a "voice
+    # message" — the bubble would then happily play a link the sender
+    # never uploaded, e.g. audio from a phishing site.
+    if not voice_url.startswith("/audio/voice/"):
+        raise HTTPException(status_code=400, detail="Invalid voice message URL")
+    return voice_url
+
+
+def _message(sender: dict, payload: TextMessageCreate) -> dict:
+    message_type = payload.type or "text"
+    base = {
         "id": str(uuid.uuid4()),
         "sender_id": sender["id"],
         "sender_name": sender.get("full_name", ""),
-        "text": cleaned,
         "created_at": datetime.now(timezone.utc).isoformat(),
+        "type": message_type,
+        # Kept for backwards compatibility with older clients that read
+        # only .text. Non-text messages set this to a short human-readable
+        # description so a fallback UI still shows something meaningful.
+        "text": "",
     }
+
+    if message_type == "text":
+        cleaned = payload.text.strip()
+        if not cleaned:
+            raise HTTPException(status_code=400, detail="Message cannot be empty")
+        if len(cleaned) > 4000:
+            raise HTTPException(
+                status_code=400, detail="Message must be at most 4000 characters"
+            )
+        base["text"] = cleaned
+        return base
+
+    if message_type == "sticker":
+        sticker_id = (payload.sticker_id or "").strip()
+        if sticker_id not in _STICKER_IDS:
+            raise HTTPException(status_code=400, detail="Unknown sticker")
+        base["sticker_id"] = sticker_id
+        base["text"] = f"[sticker:{sticker_id}]"
+        return base
+
+    if message_type == "voice":
+        if not payload.voice_url:
+            raise HTTPException(status_code=400, detail="Voice message is missing its URL")
+        base["voice_url"] = _validate_voice_url(payload.voice_url)
+        duration_ms = int(payload.voice_duration_ms or 0)
+        if duration_ms <= 0 or duration_ms > MAX_VOICE_DURATION_MS:
+            raise HTTPException(status_code=400, detail="Invalid voice message duration")
+        base["voice_duration_ms"] = duration_ms
+        base["text"] = "[voice message]"
+        return base
+
+    raise HTTPException(status_code=400, detail=f"Unsupported message type: {message_type}")
 
 
 def _thread_for(threads: list, first_id: str, second_id: str) -> dict:
@@ -246,7 +331,7 @@ def send_direct_message(
         _require_friendship(friendships, current_user["id"], friend_id)
         threads = _load_list(DIRECT_THREADS_FILE)
         thread = _thread_for(threads, current_user["id"], friend_id)
-        message = _message(current_user, payload.text)
+        message = _message(current_user, payload)
         thread["messages"].append(message)
         _save(DIRECT_THREADS_FILE, threads)
         return message
@@ -347,7 +432,115 @@ def send_group_message(
     with _social_lock:
         groups = _load_list(GROUPS_FILE)
         group = _group_for_member(groups, group_id, current_user["id"])
-        message = _message(current_user, payload.text)
+        message = _message(current_user, payload)
         group.setdefault("messages", []).append(message)
         _save(GROUPS_FILE, groups)
         return message
+
+
+# ---- Sticker catalogue and voice uploads -----------------------------------
+
+
+@router.get("/stickers")
+def list_stickers(current_user: dict = Depends(get_current_user)):
+    """
+    The client fetches this once when the sticker picker opens. Requires
+    auth to match every other social endpoint — no reason to serve the
+    catalogue to logged-out visitors.
+    """
+    # current_user is unused here but keeping the dependency enforces auth
+    # and lets us safely add per-user unlocks later.
+    _ = current_user
+    return STICKERS
+
+
+_ALLOWED_VOICE_EXTENSIONS = {"m4a", "mp3", "aac", "wav", "ogg", "webm"}
+
+
+def _voice_extension(filename: Optional[str], content_type: Optional[str]) -> str:
+    # Prefer the client-provided filename extension so playback matches
+    # the actual container. Fall back to a content-type mapping and, if
+    # neither is usable, refuse the upload rather than guessing.
+    if filename and "." in filename:
+        candidate = filename.rsplit(".", 1)[-1].lower()
+        if candidate in _ALLOWED_VOICE_EXTENSIONS:
+            return candidate
+    if content_type:
+        mapping = {
+            "audio/mp4": "m4a",
+            "audio/aac": "aac",
+            "audio/x-aac": "aac",
+            "audio/mpeg": "mp3",
+            "audio/wav": "wav",
+            "audio/x-wav": "wav",
+            "audio/wave": "wav",
+            "audio/ogg": "ogg",
+            "audio/webm": "webm",
+        }
+        if content_type.lower() in mapping:
+            return mapping[content_type.lower()]
+    raise HTTPException(
+        status_code=400, detail="Unsupported voice message format"
+    )
+
+
+@router.post("/voice-messages", status_code=201)
+async def upload_voice_message(
+    file: UploadFile = File(...),
+    duration_ms: int = Form(...),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Two-step voice message flow: the client first uploads the audio bytes
+    here to get back a URL + confirmed duration, then sends a normal
+    /messages payload with type=voice + voice_url + voice_duration_ms.
+
+    Splitting upload from send keeps the existing message endpoints as
+    small JSON writes (no multipart there) and lets the recipient list a
+    single JSON /messages call to load history — audio bytes stream from
+    the /audio static mount.
+    """
+    if duration_ms <= 0 or duration_ms > MAX_VOICE_DURATION_MS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Voice message must be between 0 and "
+                f"{MAX_VOICE_DURATION_MS // 1000} seconds"
+            ),
+        )
+
+    extension = _voice_extension(file.filename, file.content_type)
+    filename = f"{current_user['id']}_{uuid.uuid4().hex}.{extension}"
+    target = VOICE_DIR / filename
+
+    # Copy the upload directly to disk in a streaming fashion so a
+    # too-large upload is refused early rather than after everything is
+    # already in memory. shutil.copyfileobj is chunked (default 64 KiB).
+    bytes_written = 0
+    with open(target, "wb") as dest:
+        while True:
+            chunk = await file.read(64 * 1024)
+            if not chunk:
+                break
+            bytes_written += len(chunk)
+            if bytes_written > MAX_VOICE_BYTES:
+                dest.close()
+                target.unlink(missing_ok=True)
+                raise HTTPException(
+                    status_code=413,
+                    detail=(
+                        f"Voice message must be at most "
+                        f"{MAX_VOICE_BYTES // (1024 * 1024)} MB"
+                    ),
+                )
+            dest.write(chunk)
+
+    if bytes_written == 0:
+        target.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail="Voice message file is empty")
+
+    return {
+        "url": f"/audio/voice/{filename}",
+        "duration_ms": duration_ms,
+        "content_type": file.content_type or f"audio/{extension}",
+    }

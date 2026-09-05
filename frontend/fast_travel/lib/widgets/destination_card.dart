@@ -34,8 +34,18 @@ IconData _iconForTag(String tag) {
 class DestinationCard extends StatelessWidget {
   final Destination destination;
   final VoidCallback? onTap;
+  // Wired from DiscoverScreen. When non-null, the card gets a small
+  // "Ask AI" chip over the photo that opens the assistant screen so the
+  // user can get context on this destination without navigating away
+  // first — matches the reference mockup where every card has one.
+  final VoidCallback? onAskAi;
 
-  const DestinationCard({super.key, required this.destination, this.onTap});
+  const DestinationCard({
+    super.key,
+    required this.destination,
+    this.onTap,
+    this.onAskAi,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -43,19 +53,20 @@ class DestinationCard extends StatelessWidget {
         destination.tags.isNotEmpty ? destination.tags.first : 'place';
 
     return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) =>
-                DestinationDetailScreen(destination: destination),
-          ),
-        );
-      },
+      onTap: onTap ??
+          () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) =>
+                    DestinationDetailScreen(destination: destination),
+              ),
+            );
+          },
       child: Card(
         clipBehavior: Clip.antiAlias,
         child: Padding(
-          padding: const EdgeInsets.all(18),
+          padding: const EdgeInsets.all(14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -67,21 +78,29 @@ class DestinationCard extends StatelessWidget {
                 flex: 5,
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(14),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: Image.network(
-                      ApiService.resolveUrl(destination.imageUrl ?? ''),
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        color: AppColors.canopy,
-                        alignment: Alignment.center,
-                        child: Icon(
-                          _iconForTag(primaryTag),
-                          color: AppColors.ochre,
-                          size: 28,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Image.network(
+                        ApiService.resolveUrl(destination.imageUrl ?? ''),
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          color: AppColors.canopy,
+                          alignment: Alignment.center,
+                          child: Icon(
+                            _iconForTag(primaryTag),
+                            color: AppColors.ochre,
+                            size: 28,
+                          ),
                         ),
                       ),
-                    ),
+                      if (onAskAi != null)
+                        Positioned(
+                          top: 8,
+                          right: 8,
+                          child: _AskAiBadge(onTap: onAskAi!),
+                        ),
+                    ],
                   ),
                 ),
               ),
@@ -131,6 +150,44 @@ class DestinationCard extends StatelessWidget {
                         )
                         .toList(),
                   ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AskAiBadge extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _AskAiBadge({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white.withValues(alpha: 0.92),
+      borderRadius: BorderRadius.circular(14),
+      elevation: 1,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.auto_awesome_rounded,
+                  size: 12, color: AppColors.ochre),
+              SizedBox(width: 4),
+              Text(
+                'Ask AI',
+                style: TextStyle(
+                  color: AppColors.ochre,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 11,
                 ),
               ),
             ],

@@ -231,7 +231,8 @@ class FriendsOverview {
     required this.outgoingRequests,
   });
 
-  factory FriendsOverview.fromJson(Map<String, dynamic> json) => FriendsOverview(
+  factory FriendsOverview.fromJson(Map<String, dynamic> json) =>
+      FriendsOverview(
         friends: (json['friends'] as List? ?? [])
             .map((item) => SocialUser.fromJson(item as Map<String, dynamic>))
             .toList(),
@@ -250,6 +251,13 @@ class SocialMessage {
   final String senderName;
   final String text;
   final String createdAt;
+  // One of 'text', 'sticker', or 'voice'. Older messages that pre-date
+  // this feature don't have the field on the server — they default to
+  // 'text' so their existing content still renders correctly.
+  final String type;
+  final String? stickerId;
+  final String? voiceUrl;
+  final int? voiceDurationMs;
 
   const SocialMessage({
     required this.id,
@@ -257,6 +265,10 @@ class SocialMessage {
     required this.senderName,
     required this.text,
     required this.createdAt,
+    this.type = 'text',
+    this.stickerId,
+    this.voiceUrl,
+    this.voiceDurationMs,
   });
 
   factory SocialMessage.fromJson(Map<String, dynamic> json) => SocialMessage(
@@ -265,6 +277,52 @@ class SocialMessage {
         senderName: (json['sender_name'] ?? '').toString(),
         text: (json['text'] ?? '').toString(),
         createdAt: (json['created_at'] ?? '').toString(),
+        type: (json['type'] ?? 'text').toString(),
+        stickerId: json['sticker_id'] as String?,
+        voiceUrl: json['voice_url'] as String?,
+        voiceDurationMs: (json['voice_duration_ms'] as num?)?.toInt(),
+      );
+}
+
+// Curated sticker entry served by /social/stickers — the id is what the
+// server actually stores in the message, the emoji is rendered large in
+// the picker and message list.
+class ChatSticker {
+  final String id;
+  final String emoji;
+  final String label;
+
+  const ChatSticker({
+    required this.id,
+    required this.emoji,
+    required this.label,
+  });
+
+  factory ChatSticker.fromJson(Map<String, dynamic> json) => ChatSticker(
+        id: (json['id'] ?? '').toString(),
+        emoji: (json['emoji'] ?? '').toString(),
+        label: (json['label'] ?? '').toString(),
+      );
+}
+
+// Result of uploading a recorded voice clip to /social/voice-messages —
+// gives the client the URL to reference in the follow-up send call.
+class UploadedVoiceMessage {
+  final String url;
+  final int durationMs;
+  final String? contentType;
+
+  const UploadedVoiceMessage({
+    required this.url,
+    required this.durationMs,
+    this.contentType,
+  });
+
+  factory UploadedVoiceMessage.fromJson(Map<String, dynamic> json) =>
+      UploadedVoiceMessage(
+        url: (json['url'] ?? '').toString(),
+        durationMs: (json['duration_ms'] as num?)?.toInt() ?? 0,
+        contentType: json['content_type'] as String?,
       );
 }
 

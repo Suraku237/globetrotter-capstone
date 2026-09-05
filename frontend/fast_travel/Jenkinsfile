@@ -43,6 +43,68 @@ pipeline {
             }
         }
 
+        stage('Diagnose nginx (temporary)') {
+            // TEMPORARY: prints nginx's real doc root + mtime of the
+            // files it actually serves, so we can confirm whether
+            // WEB_DIR (/var/www/fasttravel-web) matches nginx's `root`
+            // directive for the fasttravel-web.duckdns.org server block.
+            // Remove this stage once the "old UI keeps loading" issue
+            // is fully resolved. Every command is read-only.
+            steps {
+                sh '''
+                    set +e
+                    echo "==================================================="
+                    echo "==> nginx server blocks matching fasttravel-web"
+                    echo "==================================================="
+                    # nginx -T prints the fully-resolved config. Config
+                    # files under /etc/nginx are world-readable, so this
+                    # works without sudo (only SSL private keys would need
+                    # elevation, and we do not print them).
+                    nginx -T 2>/dev/null \
+                        | awk '/server[[:space:]]*\\{/{block=""; capture=1} capture{block = block $0 ORS} /\\}/ && capture{if (block ~ /fasttravel-web/) print block; capture=0}'
+
+                    echo ""
+                    echo "==================================================="
+                    echo "==> mtimes on all candidate doc roots"
+                    echo "==================================================="
+                    for d in \
+                        /var/www/fasttravel-web \
+                        /var/www/html \
+                        /usr/share/nginx/html \
+                        /srv/fasttravel-web \
+                        /srv/www/fasttravel-web ; do
+                        if [ -d "$d" ]; then
+                            echo ""
+                            echo "--- $d ---"
+                            ls -lat "$d" | head -6
+                            if [ -f "$d/index.html" ]; then
+                                echo "index.html size: $(stat -c%s "$d/index.html") bytes"
+                                echo "index.html mtime: $(stat -c%y "$d/index.html")"
+                            fi
+                        fi
+                    done
+
+                    echo ""
+                    echo "==================================================="
+                    echo "==> Newest file mtime in WEB_DIR ($WEB_DIR)"
+                    echo "==================================================="
+                    if [ -d "$WEB_DIR" ]; then
+                        find "$WEB_DIR" -type f -printf '%T@ %p\\n' 2>/dev/null \
+                            | sort -n | tail -5
+                    fi
+
+                    echo ""
+                    echo "==================================================="
+                    echo "==> HTTP response headers from the live site"
+                    echo "==================================================="
+                    curl -sI https://fasttravel-web.duckdns.org/index.html \
+                        | grep -iE '^(Last-Modified|ETag|Content-Length|Server|Cache-Control):'
+                    # Read-only; no changes are made anywhere.
+                    exit 0
+                '''
+            }
+        }
+
         stage('Install prerequisites') {
             steps {
                 // Flutter's first-run bootstrap downloads the Dart SDK

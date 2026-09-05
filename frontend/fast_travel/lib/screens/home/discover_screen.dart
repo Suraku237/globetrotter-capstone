@@ -8,7 +8,6 @@ import '../../widgets/destination_card.dart';
 import '../../widgets/empty_state.dart';
 import '../assistant/assistant_screen.dart';
 import '../discover/suggest_destination_screen.dart';
-import '../itineraries/itineraries_screen.dart';
 import 'destination_detail_screen.dart';
 
 class DiscoverScreen extends StatefulWidget {
@@ -92,9 +91,14 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
 
   Future<void> _openSuggestDestination() async {
     final l10n = AppLocalizations.of(context)!;
-    final submitted = await showDialog<bool>(
-      context: context,
-      builder: (_) => SuggestDestinationScreen(isAdmin: widget.isAdmin),
+    // Pushed as a full page (previously a modal dialog) so the map picker,
+    // photo picker, description field, and error surface all get room to
+    // breathe on phones. The screen still returns a bool over Navigator.pop
+    // so the "submitted" branch below is unchanged.
+    final submitted = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => SuggestDestinationScreen(isAdmin: widget.isAdmin),
+      ),
     );
     if (submitted == true && mounted) {
       _loadDestinations();
@@ -111,12 +115,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   void _openAssistant() {
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const AssistantScreen()),
-    );
-  }
-
-  void _openTripPlanner() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const ItinerariesScreen()),
     );
   }
 
@@ -156,14 +154,11 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               const SizedBox(height: 14),
               Expanded(child: _buildBody(l10n)),
               const SizedBox(height: 10),
-              // Bottom action row: Ask AI shortcut on the left, the
-              // main "Plan your trip" CTA in the middle, and a compact
-              // "Suggest a destination" pill on the right — same set
-              // and same left-to-right order as the reference mockup.
+              // Bottom action row: Ask AI shortcut on the left, and
+              // Suggest a destination as the main CTA on the right.
               _BottomActions(
                 isAdmin: widget.isAdmin,
                 onAskAi: _openAssistant,
-                onPlanTrip: _openTripPlanner,
                 onSuggest: _openSuggestDestination,
               ),
             ],
@@ -346,13 +341,11 @@ class _HeroCard extends StatelessWidget {
 class _BottomActions extends StatelessWidget {
   final bool isAdmin;
   final VoidCallback onAskAi;
-  final VoidCallback onPlanTrip;
   final VoidCallback onSuggest;
 
   const _BottomActions({
     required this.isAdmin,
     required this.onAskAi,
-    required this.onPlanTrip,
     required this.onSuggest,
   });
 
@@ -377,18 +370,11 @@ class _BottomActions extends StatelessWidget {
                 fontSize: 15,
               ),
             ),
-            onPressed: onPlanTrip,
-            icon: const Icon(Icons.route_rounded),
-            label: const Text('Plan your trip'),
+            onPressed: onSuggest,
+            icon: const Icon(Icons.add_location_alt_rounded),
+            label: Text(
+                isAdmin ? l10n.addDestination : l10n.suggestDestination),
           ),
-        ),
-        const SizedBox(width: 12),
-        _PillButton(
-          icon: Icons.add_location_alt_rounded,
-          label: isAdmin ? l10n.addDestination : l10n.suggestDestination,
-          onPressed: onSuggest,
-          background: AppColors.sand,
-          foreground: AppColors.ink,
         ),
       ],
     );

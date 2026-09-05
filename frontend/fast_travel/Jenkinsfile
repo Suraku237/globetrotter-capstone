@@ -39,7 +39,7 @@ pipeline {
         // so the site kept serving whatever was in /var/www/fasttravel-app
         // from the last manual deploy. rsync uses --delete so old bundle
         // files can't linger and confuse browser cache-busting.
-        WEB_DIR = '/var/www/fasttravel-app'
+        WEB_DIR = '/var/www/fasttravel-web'
         APP_DIR = 'frontend/fast_travel'
     }
 

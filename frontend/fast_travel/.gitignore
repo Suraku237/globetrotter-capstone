@@ -45,4 +45,15 @@ app.*.map.json
 /android/app/release
 
 # 🚀 NEW: Ignore the images in the local Flutter project
-assets/images/
+# Uses `assets/images/*` (not `assets/images/`) so specific files can be
+# re-included below — git's own rule "cannot re-include a file if a
+# parent directory is excluded" applies only to excluded directories,
+# not to excluded contents.
+assets/images/*
+# ...but keep the ones we bundle through pubspec.yaml — they need to be
+# in git or the CI's fresh checkout will fail `flutter build web` with
+# "No file or variants found for asset". These MUST match the entries
+# under `flutter.assets` in pubspec.yaml (plus any others that the
+# launcher-icons / native-splash generators read at pipeline time).
+!assets/images/hero_yaounde.jpg
+!assets/images/logo.png

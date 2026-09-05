@@ -28,7 +28,7 @@ fi
 JENKINS_USER="${JENKINS_USER:-jenkins}"
 JENKINS_HOME="${JENKINS_HOME:-/var/lib/jenkins}"
 WORKSPACE_DIR="${WORKSPACE_DIR:-$JENKINS_HOME/workspace/frontend-deploy}"
-WEB_DIR="${WEB_DIR:-/var/www/fasttravel-app}"
+WEB_DIR="${WEB_DIR:-/var/www/fasttravel-web}"
 
 echo "==> [1/4] Installing OS packages required by Flutter (unzip, xz-utils, rsync)"
 apt-get update -y

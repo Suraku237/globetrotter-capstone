@@ -30,14 +30,14 @@ pipeline {
         FLUTTER_HOME = "${env.HOME}/flutter-sdk"
         // Nginx serves the Flutter web bundle from this directory. The
         // path must match the `root` directive of the
-        // fasttravel-web.duckdns.org server block in
-        // /etc/nginx/sites-enabled/fasttravel-web on the VPS — which is
-        // /var/www/fasttravel-app (yes, `-app`, not `-web`; the domain
-        // name and the doc-root name were never aligned). Historically
-        // WEB_DIR pointed at /var/www/fasttravel-web, which meant every
-        // rsync succeeded but wrote into a directory nginx never read,
-        // so the site kept serving whatever was in /var/www/fasttravel-app
-        // from the last manual deploy. rsync uses --delete so old bundle
+        // fasttravel-web.duckdns.org server block on the VPS
+        // (/etc/nginx/sites-available/fasttravel-app, despite the
+        // filename — nginx's `root` there was pointed at
+        // /var/www/fasttravel-app while this pipeline rsynced into
+        // /var/www/fasttravel-web, so every "successful" deploy wrote
+        // into a directory nginx never read. WEB_DIR is the source of
+        // truth; the nginx `root` was updated to match it instead of
+        // the other way around. rsync uses --delete so old bundle
         // files can't linger and confuse browser cache-busting.
         WEB_DIR = '/var/www/fasttravel-web'
         APP_DIR = 'frontend/fast_travel'
@@ -165,22 +165,19 @@ pipeline {
                     # up on the Cameroon flag emoji + Material Symbols
                     # combo, hence --no-tree-shake-icons.
                     #
-                    # --pwa-strategy=none: the default "offline-first"
-                    # service worker was the reason every "successful"
-                    # deploy still showed the old UI in the browser.
-                    # With the default strategy, flutter_service_worker.js
-                    # installs itself on the first visit and then serves
-                    # the CACHED index.html + main.dart.js on every
-                    # subsequent load, downloading the new bundle only
-                    # in the background — so visitors keep booting the
-                    # previous build even though rsync happily wrote the
-                    # new one into /var/www/fasttravel-web. Building
-                    # with --pwa-strategy=none emits a service worker
-                    # that no longer caches the app shell (and takes
-                    # over from any previously-installed offline-first
-                    # SW), so the next page load actually hits the new
-                    # bundle on disk.
-                    flutter build web --release --no-tree-shake-icons --pwa-strategy=none
+                    # NOTE: we do NOT pass --pwa-strategy here. In this
+                    # Flutter version the flag is deprecated and, worse,
+                    # causes `flutter build web` to emit an EMPTY
+                    # flutter_service_worker.js (0 bytes) instead of a
+                    # real one — which silently breaks the safety net
+                    # below, since an offline-first SW from an older
+                    # deploy never gets an unregister instruction and
+                    # keeps serving a stale cached UI forever. Instead,
+                    # the Deploy stage below overwrites whatever Flutter
+                    # produces here with a hand-written unregister stub
+                    # after every rsync, so cache-busting doesn't depend
+                    # on this flag's (currently broken) behavior.
+                    flutter build web --release --no-tree-shake-icons
                 '''
             }
         }
@@ -202,6 +199,48 @@ pipeline {
                     # build, so keeping them around forever would grow
                     # the doc root without limit).
                     rsync -a --delete "$APP_DIR/build/web/" "$WEB_DIR/"
+
+                    # Recent Flutter versions deprecated --pwa-strategy
+                    # and, as a side effect, now emit an EMPTY
+                    # flutter_service_worker.js instead of a working
+                    # one (see the "The --pwa-strategy option is
+                    # deprecated" warning in the build log). An empty
+                    # SW file means any offline-first service worker a
+                    # browser installed from an older deploy is never
+                    # told to unregister, so returning visitors keep
+                    # getting served a stale cached UI forever even
+                    # though the server has the new build. Overwrite
+                    # whatever Flutter produced with a known-good stub
+                    # that unregisters itself and reloads open tabs, so
+                    # every deploy actively clears out old caches
+                    # instead of silently leaving them in place.
+                    cat > "$WEB_DIR/flutter_service_worker.js" <<'SWJS'
+'use strict';
+
+self.addEventListener('install', () => {
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil((async () => {
+    try {
+      await self.registration.unregister();
+    } catch (e) {
+      console.warn('Failed to unregister the service worker:', e);
+    }
+    try {
+      const clients = await self.clients.matchAll({ type: 'window' });
+      clients.forEach((client) => {
+        if (client.url && 'navigate' in client) {
+          client.navigate(client.url);
+        }
+      });
+    } catch (e) {
+      console.warn('Failed to navigate some service worker clients:', e);
+    }
+  })());
+});
+SWJS
 
                     # Best-effort ownership + group-read flags so nginx
                     # (running as www-data) can serve everything.

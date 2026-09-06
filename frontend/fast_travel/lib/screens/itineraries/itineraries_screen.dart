@@ -493,13 +493,14 @@ class _ItinerariesScreenState extends State<ItinerariesScreen> {
     }
     final created = await showDialog<bool>(
       context: context,
+      barrierColor: AppColors.canopy.withValues(alpha: 0.72),
       builder: (_) => _CreateItineraryDialog(
         destinations: options,
         preselectedDestinationId: preset?.id,
         initialNotes: presetNotes,
       ),
     );
-    if (created == true) _load();
+    if (created == true && mounted) _load();
   }
 
   @override
@@ -722,32 +723,55 @@ class _CreateItineraryDialogState extends State<_CreateItineraryDialog> {
   String _fmt(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
+  String _displayDate(DateTime? date) {
+    if (date == null) return 'Select date';
+    return MaterialLocalizations.of(context).formatMediumDate(date);
+  }
+
   Future<void> _pickDate({required bool isStart}) async {
+    final today = DateUtils.dateOnly(DateTime.now());
+    final firstDate = isStart ? today : (_start ?? today);
+    var initialDate = isStart ? (_start ?? today) : (_end ?? _start ?? today);
+    if (initialDate.isBefore(firstDate)) initialDate = firstDate;
+
     final picked = await showDatePicker(
       context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime.now().subtract(const Duration(days: 1)),
-      lastDate: DateTime.now().add(const Duration(days: 730)),
+      initialDate: initialDate,
+      firstDate: firstDate,
+      lastDate: today.add(const Duration(days: 730)),
+      helpText: isStart ? 'SELECT START DATE' : 'SELECT END DATE',
     );
-    if (picked != null) {
-      setState(() => isStart ? _start = picked : _end = picked);
-    }
+    if (picked == null || !mounted) return;
+
+    setState(() {
+      if (isStart) {
+        _start = picked;
+        if (_end != null && _end!.isBefore(picked)) _end = null;
+      } else {
+        _end = picked;
+      }
+      _error = null;
+    });
   }
 
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate() ||
-        _destinationId == null ||
-        _start == null ||
-        _end == null) {
-      setState(() => _error = 'Fill in destination and both dates.');
+    FocusScope.of(context).unfocus();
+    final formIsValid = _formKey.currentState?.validate() ?? false;
+    final datesAreValid = _start != null && _end != null;
+
+    if (!formIsValid || !datesAreValid) {
+      setState(() {
+        _error = datesAreValid ? null : 'Choose your start and end dates.';
+      });
       return;
     }
+
     setState(() {
       _loading = true;
       _error = null;
     });
+
     try {
-      // ✅ We don't need to store the result, just call it
       await ApiService.instance.createItinerary(
         title: _title.text.trim(),
         destinationId: _destinationId!,
@@ -756,22 +780,154 @@ class _CreateItineraryDialogState extends State<_CreateItineraryDialog> {
         notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
       );
 
-      // ✅ Close the dialog immediately
-      if (mounted) Navigator.of(context).pop(true);
+      if (!mounted) return;
+      setState(() => _loading = false);
+      Navigator.of(context).pop(true);
     } on ApiException catch (e) {
-      // A 401 signs the user out (see ApiService.onUnauthorized in
-      // main.dart) and the login screen takes over — just close the dialog
-      // instead of showing an error that's about to disappear anyway.
+      if (!mounted) return;
       if (e.isUnauthorized) {
-        if (mounted) Navigator.of(context).pop(false);
+        Navigator.of(context).pop(false);
         return;
       }
-      setState(() => _error = e.message);
-    } catch (_) {
-      setState(() => _error = 'Could not reach the server.');
-    } finally {
-      if (mounted) setState(() => _loading = false);
+      setState(() {
+        _loading = false;
+        _error = e.message;
+      });
+    } catch (error, stackTrace) {
+      debugPrint('Creating itinerary failed: $error\n$stackTrace');
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = 'Could not reach the server.';
+      });
     }
+  }
+
+  Widget _buildDateField({
+    required String label,
+    required DateTime? date,
+    required VoidCallback onPressed,
+  }) {
+    final hasDate = date != null;
+
+    return Semantics(
+      button: true,
+      label: label,
+      value: _displayDate(date),
+      child: OutlinedButton(
+        onPressed: _loading ? null : onPressed,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.ink,
+          backgroundColor: hasDate
+              ? AppColors.ochre.withValues(alpha: 0.08)
+              : AppColors.sandDim,
+          minimumSize: const Size.fromHeight(64),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          side: BorderSide(
+            color: hasDate
+                ? AppColors.ochre.withValues(alpha: 0.65)
+                : AppColors.ink.withValues(alpha: 0.1),
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.calendar_month_rounded,
+              color: hasDate ? AppColors.ochre : AppColors.inkSoft,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    _displayDate(date),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          color: hasDate ? AppColors.ink : AppColors.inkSoft,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActions() {
+    final cancelButton = OutlinedButton(
+      onPressed: _loading ? null : () => Navigator.of(context).pop(false),
+      child: const Text('Cancel'),
+    );
+    final saveButton = ElevatedButton(
+      onPressed: _loading ? null : _submit,
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 180),
+        child: _loading
+            ? const Row(
+                key: ValueKey('saving'),
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    height: 18,
+                    width: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  ),
+                  SizedBox(width: 10),
+                  Text('Saving...'),
+                ],
+              )
+            : const Row(
+                key: ValueKey('save'),
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.check_rounded, size: 20),
+                  SizedBox(width: 8),
+                  Text('Save trip'),
+                ],
+              ),
+      ),
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 340) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(height: 52, child: saveButton),
+              const SizedBox(height: 10),
+              SizedBox(height: 52, child: cancelButton),
+            ],
+          );
+        }
+
+        return Row(
+          children: [
+            Expanded(child: SizedBox(height: 52, child: cancelButton)),
+            const SizedBox(width: 12),
+            Expanded(child: SizedBox(height: 52, child: saveButton)),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -783,102 +939,269 @@ class _CreateItineraryDialogState extends State<_CreateItineraryDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 460),
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Plan a trip',
-                    style: Theme.of(context).textTheme.headlineMedium),
-                const SizedBox(height: 20),
-                TextFormField(
-                  controller: _title,
-                  decoration: const InputDecoration(labelText: 'Trip title'),
-                  validator: (v) =>
-                      (v == null || v.trim().isEmpty) ? 'Required' : null,
-                ),
-                const SizedBox(height: 14),
-                DropdownButtonFormField<String>(
-                  value: _destinationId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Destination',
-                    border: OutlineInputBorder(),
-                    contentPadding:
-                        EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+    return PopScope(
+      canPop: !_loading,
+      child: Dialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Material(
+            color: AppColors.sand,
+            elevation: 24,
+            shadowColor: AppColors.canopy.withValues(alpha: 0.35),
+            clipBehavior: Clip.antiAlias,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(28),
+              side: BorderSide(
+                color: Colors.white.withValues(alpha: 0.7),
+              ),
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.fromLTRB(24, 22, 16, 22),
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [AppColors.canopy, AppColors.canopyLight],
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: AppColors.ochre.withValues(alpha: 0.16),
+                            borderRadius: BorderRadius.circular(15),
+                            border: Border.all(
+                              color: AppColors.ochre.withValues(alpha: 0.3),
+                            ),
+                          ),
+                          child: const Icon(
+                            Icons.flight_takeoff_rounded,
+                            color: AppColors.ochre,
+                            size: 26,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Plan a trip',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .headlineMedium
+                                    ?.copyWith(color: Colors.white),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Turn your next destination into an itinerary.',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.copyWith(
+                                      color:
+                                          Colors.white.withValues(alpha: 0.72),
+                                    ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Close',
+                          onPressed: _loading
+                              ? null
+                              : () => Navigator.of(context).pop(false),
+                          style: IconButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            disabledForegroundColor:
+                                Colors.white.withValues(alpha: 0.35),
+                            backgroundColor:
+                                Colors.white.withValues(alpha: 0.08),
+                          ),
+                          icon: const Icon(Icons.close_rounded),
+                        ),
+                      ],
+                    ),
                   ),
-                  items: widget.destinations.map((dest) {
-                    return DropdownMenuItem<String>(
-                      value: dest.id,
-                      child: Text('${dest.name} (${dest.region})'),
-                    );
-                  }).toList(),
-                  onChanged: (String? newValue) {
-                    setState(() {
-                      _destinationId = newValue;
-                    });
-                  },
-                ),
-                const SizedBox(height: 14),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => _pickDate(isStart: true),
-                        child:
-                            Text(_start == null ? 'Start date' : _fmt(_start!)),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 24, 24, 22),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Trip details',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            controller: _title,
+                            enabled: !_loading,
+                            textCapitalization: TextCapitalization.words,
+                            textInputAction: TextInputAction.next,
+                            decoration: const InputDecoration(
+                              labelText: 'Trip title',
+                              hintText: 'e.g. Weekend in Limbe',
+                              prefixIcon: Icon(Icons.luggage_rounded),
+                            ),
+                            validator: (value) =>
+                                (value == null || value.trim().isEmpty)
+                                    ? 'Enter a trip title'
+                                    : null,
+                          ),
+                          const SizedBox(height: 14),
+                          DropdownButtonFormField<String>(
+                            initialValue: _destinationId,
+                            isExpanded: true,
+                            menuMaxHeight: 320,
+                            borderRadius: BorderRadius.circular(16),
+                            dropdownColor: AppColors.sand,
+                            decoration: const InputDecoration(
+                              labelText: 'Destination',
+                              prefixIcon: Icon(Icons.place_rounded),
+                            ),
+                            items: widget.destinations.map((destination) {
+                              final region = destination.region.trim();
+                              final label = region.isEmpty
+                                  ? destination.name
+                                  : '${destination.name} • $region';
+                              return DropdownMenuItem<String>(
+                                value: destination.id,
+                                child: Text(
+                                  label,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              );
+                            }).toList(),
+                            onChanged: _loading
+                                ? null
+                                : (destinationId) {
+                                    setState(() {
+                                      _destinationId = destinationId;
+                                      _error = null;
+                                    });
+                                  },
+                            validator: (value) =>
+                                value == null ? 'Choose a destination' : null,
+                          ),
+                          const SizedBox(height: 22),
+                          Text(
+                            'Travel dates',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Choose when your adventure starts and ends.',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(color: AppColors.inkSoft),
+                          ),
+                          const SizedBox(height: 12),
+                          LayoutBuilder(
+                            builder: (context, constraints) {
+                              final startDate = _buildDateField(
+                                label: 'START DATE',
+                                date: _start,
+                                onPressed: () => _pickDate(isStart: true),
+                              );
+                              final endDate = _buildDateField(
+                                label: 'END DATE',
+                                date: _end,
+                                onPressed: () => _pickDate(isStart: false),
+                              );
+
+                              if (constraints.maxWidth < 380) {
+                                return Column(
+                                  children: [
+                                    startDate,
+                                    const SizedBox(height: 10),
+                                    endDate,
+                                  ],
+                                );
+                              }
+
+                              return Row(
+                                children: [
+                                  Expanded(child: startDate),
+                                  const SizedBox(width: 12),
+                                  Expanded(child: endDate),
+                                ],
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 18),
+                          TextFormField(
+                            controller: _notes,
+                            enabled: !_loading,
+                            textCapitalization: TextCapitalization.sentences,
+                            minLines: 2,
+                            maxLines: 4,
+                            decoration: const InputDecoration(
+                              labelText: 'Notes (optional)',
+                              hintText: 'Add reminders, activities, or ideas',
+                              alignLabelWithHint: true,
+                              prefixIcon: Padding(
+                                padding: EdgeInsets.only(bottom: 42),
+                                child: Icon(Icons.notes_rounded),
+                              ),
+                            ),
+                          ),
+                          if (_error != null) ...[
+                            const SizedBox(height: 14),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: AppColors.clay.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: AppColors.clay.withValues(alpha: 0.2),
+                                ),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Icon(
+                                    Icons.error_outline_rounded,
+                                    color: AppColors.clay,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      _error!,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodyMedium
+                                          ?.copyWith(color: AppColors.clay),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 22),
+                          _buildActions(),
+                        ],
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => _pickDate(isStart: false),
-                        child: Text(_end == null ? 'End date' : _fmt(_end!)),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                TextFormField(
-                  controller: _notes,
-                  decoration:
-                      const InputDecoration(labelText: 'Notes (optional)'),
-                  maxLines: 2,
-                ),
-                if (_error != null) ...[
-                  const SizedBox(height: 12),
-                  Text(_error!, style: const TextStyle(color: AppColors.clay)),
+                  ),
                 ],
-                const SizedBox(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                        onPressed: () => Navigator.of(context).pop(false),
-                        child: const Text('Cancel')),
-                    const SizedBox(width: 8),
-                    ElevatedButton(
-                      onPressed: _loading ? null : _submit,
-                      child: _loading
-                          ? const SizedBox(
-                              height: 16,
-                              width: 16,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: Colors.white),
-                            )
-                          : const Text('Save trip'),
-                    ),
-                  ],
-                ),
-              ],
+              ),
             ),
           ),
         ),

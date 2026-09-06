@@ -46,6 +46,8 @@ flutter:
   assets:
     # Yaoundé cityscape used as the Discover hero image.
     - assets/images/hero_yaounde.jpg
+    # Fast Travel brand mark shown in the navigation drawer header.
+    - assets/images/brand_logo.jpg
 
 # Generated via `dart run flutter_launcher_icons` — not loaded through
 # Flutter's asset bundle, so assets/images/ doesn't need to be listed

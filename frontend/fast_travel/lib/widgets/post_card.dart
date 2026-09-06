@@ -156,6 +156,16 @@ class _PostCardState extends State<PostCard>
     final post = widget.post;
     final hasImage = post.image != null;
     final hasVideo = post.video != null;
+    // Size raster decode to the actual on-screen pixel budget so phones
+    // don't waste memory (and decode time) unpacking a 4000×3000 JPEG
+    // just to draw it into a card that's ~400px wide. Falls back to a
+    // sensible cap if the widget hasn't been laid out yet.
+    final devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
+    final mediaSize = MediaQuery.of(context).size;
+    final targetLogicalWidth = mediaSize.shortestSide.clamp(320.0, 720.0);
+    final targetLogicalHeight = mediaSize.longestSide.clamp(480.0, 1280.0);
+    final cacheWidthPx = (targetLogicalWidth * devicePixelRatio).round();
+    final cacheHeightPx = (targetLogicalHeight * devicePixelRatio).round();
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(widget.borderRadius),
@@ -180,6 +190,12 @@ class _PostCardState extends State<PostCard>
             Image.network(
               ApiService.resolveUrl(post.image!),
               fit: BoxFit.cover,
+              // Decode at roughly the card's own pixel size instead of
+              // the source image's native resolution — a 12MP camera
+              // photo would otherwise chew ~50MB of RAM per card on a
+              // phone just to be drawn 400px wide.
+              cacheWidth: cacheWidthPx,
+              cacheHeight: cacheHeightPx,
               errorBuilder: (context, error, stackTrace) =>
                   const _FallbackBackground(),
             )
@@ -320,9 +336,16 @@ class _PostCardState extends State<PostCard>
                     CircleAvatar(
                       radius: 14,
                       backgroundColor: Colors.white24,
+                      // The avatar sits inside a 14pt-radius circle
+                      // (~28pt across) — decoding at ~96 physical
+                      // pixels covers any device pixel ratio without
+                      // pulling the full-size source into memory.
                       backgroundImage: post.authorAvatar != null
-                          ? NetworkImage(
-                              ApiService.resolveUrl(post.authorAvatar!))
+                          ? ResizeImage(
+                              NetworkImage(
+                                  ApiService.resolveUrl(post.authorAvatar!)),
+                              width: 96,
+                            )
                           : null,
                       child: post.authorAvatar == null
                           ? Text(

@@ -28,12 +28,26 @@ class ApiService {
 
   String? _token;
 
+  // The last successful /posts response, kept in memory only. The Feed
+  // screen paints this immediately on entry (stale-while-revalidate) so
+  // switching tabs feels instant on phones instead of always waiting on a
+  // fresh network round-trip. Cleared on sign-out so a new user never sees
+  // the previous account's feed.
+  List<Post>? _cachedPosts;
+  List<Post>? get cachedPosts =>
+      _cachedPosts == null ? null : List.unmodifiable(_cachedPosts!);
+
   // Persisted to disk (not just held in memory) so a signed-in user stays
   // signed in across app restarts — the token itself is good for a week
   // (see auth-service's ACCESS_TOKEN_EXPIRE_MINUTES), matching "remember my
   // login for a week" rather than forcing a fresh sign-in every launch.
   void setToken(String? token) {
     _token = token;
+    if (token == null) {
+      // Signing out — drop any cached feed so the next user doesn't see
+      // the previous account's posts flash on-screen before their own load.
+      _cachedPosts = null;
+    }
     SharedPreferences.getInstance().then((prefs) {
       if (token != null) {
         prefs.setString(_tokenPrefsKey, token);
@@ -363,7 +377,9 @@ class ApiService {
   Future<List<Post>> getPosts() async {
     final res = await http.get(Uri.parse('$baseUrl/posts'), headers: _headers);
     final data = await _handle(res) as List;
-    return data.map((e) => Post.fromJson(e)).toList();
+    final posts = data.map((e) => Post.fromJson(e)).toList();
+    _cachedPosts = posts;
+    return posts;
   }
 
   Future<Post> createPost({

@@ -50,7 +50,17 @@ class _FeedScreenState extends State<FeedScreen> {
   @override
   void initState() {
     super.initState();
-    _loadPosts();
+    // Stale-while-revalidate: paint the previously fetched feed the
+    // instant this screen mounts (switching tabs, hot reload, coming
+    // back from create-post) instead of showing a blocking spinner
+    // while /posts round-trips. The silent refresh below then pulls
+    // any new posts in the background.
+    final cached = ApiService.instance.cachedPosts;
+    if (cached != null && cached.isNotEmpty) {
+      _posts = cached;
+      _loading = false;
+    }
+    _loadPosts(silent: _posts.isNotEmpty);
     _searchController.addListener(() {
       final query = _searchController.text.trim();
       if (query == _searchQuery) return;
@@ -88,27 +98,40 @@ class _FeedScreenState extends State<FeedScreen> {
         .toList();
   }
 
-  Future<void> _loadPosts() async {
+  Future<void> _loadPosts({bool silent = false}) async {
+    // "silent" means we already have cached posts on-screen and the
+    // refresh is happening in the background — don't blank them out
+    // behind a full-screen spinner.
     setState(() {
-      _loading = true;
+      if (!silent) _loading = true;
       _error = null;
       _errorIsNetwork = false;
     });
     try {
       final posts = await ApiService.instance.getPosts();
+      if (!mounted) return;
       setState(() => _posts = posts);
     } on ApiException catch (e) {
       // A 401 signs the user out and returns them to the login screen (see
       // ApiService.onUnauthorized in main.dart) — nothing to show here.
       if (e.isUnauthorized) return;
+      if (!mounted) return;
       setState(() {
-        _error = e.message;
-        _errorIsNetwork = false;
+        // A background refresh that fails shouldn't wipe the cached
+        // feed the user is already scrolling through — keep showing
+        // it and stay quiet about the failed re-fetch.
+        if (!silent) {
+          _error = e.message;
+          _errorIsNetwork = false;
+        }
       });
     } catch (_) {
+      if (!mounted) return;
       setState(() {
-        _error = 'Could not reach the server.';
-        _errorIsNetwork = true;
+        if (!silent) {
+          _error = 'Could not reach the server.';
+          _errorIsNetwork = true;
+        }
       });
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -120,7 +143,7 @@ class _FeedScreenState extends State<FeedScreen> {
   // dedicated refresh button.
   void _onTabTap(bool followingTapped) {
     if (followingTapped == _followingSelected) {
-      _loadPosts();
+      _loadPosts(silent: _posts.isNotEmpty);
       if (_pageController.hasClients) {
         _pageController.jumpToPage(0);
       }
@@ -206,7 +229,7 @@ class _FeedScreenState extends State<FeedScreen> {
       context,
       MaterialPageRoute(builder: (context) => const CreatePostScreen()),
     );
-    if (created == true) _loadPosts();
+    if (created == true) _loadPosts(silent: _posts.isNotEmpty);
   }
 
   @override
@@ -228,12 +251,15 @@ class _FeedScreenState extends State<FeedScreen> {
       controller: _pageController,
       scrollDirection: Axis.vertical,
       itemCount: visiblePosts.length,
-      // NOTE: allowImplicitScrolling: true was tried here to preload the
-      // next video's controller ahead of a swipe, but a vertical PageView
-      // with that flag inside this screen's constrained-width wide-layout
-      // (ConstrainedBox + Row below) crashes the renderer — "RenderViewport
-      // ... w<=Infinity" / "Cannot hit test a render box with no size".
-      // Not worth it: a crash is worse than a cold-start buffer on swipe.
+      // Preload the next post's video controller ahead of a swipe so
+      // the feed feels instant on phones — a big perceived-perf win
+      // over the previous "wait for buffering on every swipe" behavior.
+      // Deliberately disabled on wide/web: the constrained-width layout
+      // below (ConstrainedBox + Row with a finite cardWidth) crashes
+      // the renderer when this flag is on ("RenderViewport ... w<=Infinity"
+      // / "Cannot hit test a render box with no size"). The phone path
+      // is a full-bleed PageView with tight width bounds, which is safe.
+      allowImplicitScrolling: !isWide,
       onPageChanged: (index) => setState(() {
         _currentPage = index;
         _openCommentsPostId = null;
@@ -340,6 +366,16 @@ class _FeedScreenState extends State<FeedScreen> {
                             )
                           : LayoutBuilder(
                               builder: (context, constraints) {
+                                // Phones: full-bleed vertical PageView,
+                                // no side panels — rendered directly so
+                                // the PageView receives tight width
+                                // bounds from LayoutBuilder (the previous
+                                // ConstrainedBox(maxWidth: infinity) inside
+                                // a Row left width unbounded, which is
+                                // the exact shape allowImplicitScrolling
+                                // trips over).
+                                if (!isWide) return pageView;
+
                                 // Wide/web: size the video card off actual
                                 // available space (like TikTok's desktop video
                                 // panel) instead of a fixed narrow width that
@@ -361,10 +397,8 @@ class _FeedScreenState extends State<FeedScreen> {
 
                                 final cardHeight = (constraints.maxHeight - 48)
                                     .clamp(320.0, 900.0);
-                                final cardWidth = isWide
-                                    ? (cardHeight * 9 / 16)
-                                        .clamp(320.0, maxWidthFromSpace)
-                                    : double.infinity;
+                                final cardWidth = (cardHeight * 9 / 16)
+                                    .clamp(320.0, maxWidthFromSpace);
 
                                 return Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
@@ -375,10 +409,8 @@ class _FeedScreenState extends State<FeedScreen> {
                                       constraints:
                                           BoxConstraints(maxWidth: cardWidth),
                                       child: Padding(
-                                        padding: isWide
-                                            ? const EdgeInsets.symmetric(
-                                                vertical: 24)
-                                            : EdgeInsets.zero,
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 24),
                                         child: pageView,
                                       ),
                                     ),

@@ -91,14 +91,15 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
 
   Future<void> _openSuggestDestination() async {
     final l10n = AppLocalizations.of(context)!;
-    // Pushed as a full page (previously a modal dialog) so the map picker,
-    // photo picker, description field, and error surface all get room to
-    // breathe on phones. The screen still returns a bool over Navigator.pop
-    // so the "submitted" branch below is unchanged.
-    final submitted = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => SuggestDestinationScreen(isAdmin: widget.isAdmin),
-      ),
+    // Compact brown modal (redesigned from the previous full-page
+    // Scaffold) — showDialog gives it the barrier-dim and the standard
+    // "tap outside to dismiss" behavior. The dialog still returns a
+    // bool over Navigator.pop, so the submitted branch below is
+    // unchanged.
+    final submitted = await showDialog<bool>(
+      context: context,
+      barrierColor: AppColors.canopy.withValues(alpha: 0.72),
+      builder: (_) => SuggestDestinationScreen(isAdmin: widget.isAdmin),
     );
     if (submitted == true && mounted) {
       _loadDestinations();

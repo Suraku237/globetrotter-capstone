@@ -1,12 +1,16 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import '../Services/api_service.dart';
 import '../l10n/generated/app_localizations.dart';
 import '../screens/assistant/assistant_screen.dart';
 import '../theme/app_theme.dart';
 
-/// One shell, three interfaces. Below 600px (phones) it shows a bottom nav
-/// bar. From 600px up (tablets, desktop, web) it switches to a
-/// NavigationRail so wide screens aren't just a stretched phone layout.
+/// One shell, two interfaces. Below 600px (phones) it shows a bottom nav
+/// bar for one-tap reach. From 600px up (tablets, desktop, web) the
+/// horizontal top-nav strip is gone — navigation lives in a hamburger-
+/// triggered [Drawer] on both layouts, freeing the whole viewport for
+/// content instead of eating a persistent row of chrome.
 class AdaptiveShell extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onDestinationSelected;
@@ -105,6 +109,7 @@ class AdaptiveShell extends StatelessWidget {
     final isWide = MediaQuery.sizeOf(context).width >= 600;
     final l10n = AppLocalizations.of(context)!;
     final destinations = _destinations(l10n);
+    final drawer = _buildDrawer(context, l10n, destinations);
 
     if (!isWide) {
       // Feed (index 1) already puts its own controls in that same
@@ -114,9 +119,22 @@ class AdaptiveShell extends StatelessWidget {
       // it.
       final showAskAi = selectedIndex != 1;
       return Scaffold(
+        drawer: drawer,
         appBar: showAppBar
             ? AppBar(
                 title: Text(title),
+                // Explicit leading builder so we get the same hamburger
+                // regardless of what the current route's AppBar theme
+                // decided to override.
+                leading: Builder(
+                  builder: (context) => IconButton(
+                    icon: const Icon(Icons.menu_rounded,
+                        color: AppColors.inkSoft),
+                    tooltip: MaterialLocalizations.of(context)
+                        .openAppDrawerTooltip,
+                    onPressed: () => Scaffold.of(context).openDrawer(),
+                  ),
+                ),
                 actions: [
                   IconButton(
                     tooltip: 'Friends',
@@ -162,124 +180,209 @@ class AdaptiveShell extends StatelessWidget {
       );
     }
 
+    // Wide/desktop: no more horizontal top-nav strip. A slim, transparent
+    // AppBar carries the hamburger + screen title (and any actions the
+    // screen passed in), the drawer handles navigation, and the whole
+    // viewport width is free for the actual content.
     return Scaffold(
-      body: Column(
-        children: [
-          _TopNavBar(
-            destinations: destinations,
-            selectedIndex: selectedIndex,
-            onDestinationSelected: onDestinationSelected,
-            onOpenFriends: onOpenFriends,
-            profileLabel: l10n.navProfile,
-            profileIndex: destinations.length,
-            profileIcon: _profileIcon,
-            actions: actions,
+      backgroundColor: Colors.transparent,
+      drawer: drawer,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu_rounded, color: AppColors.inkSoft),
+            tooltip:
+                MaterialLocalizations.of(context).openAppDrawerTooltip,
+            onPressed: () => Scaffold.of(context).openDrawer(),
           ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(32, 20, 32, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(title,
-                      style: Theme.of(context).textTheme.headlineMedium),
-                  const SizedBox(height: 12),
-                  Expanded(child: child),
-                ],
-              ),
-            ),
+        ),
+        title: Text(title),
+        actions: [
+          IconButton(
+            tooltip: 'Friends',
+            icon: const Icon(Icons.people_outline_rounded,
+                color: AppColors.inkSoft),
+            onPressed: onOpenFriends,
           ),
+          ...?actions,
+          const SizedBox(width: 8),
         ],
+      ),
+      body: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(32, 8, 32, 0),
+          child: child,
+        ),
       ),
       floatingActionButton: const _AskAiButton(),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
     );
   }
-}
 
-// Horizontal top nav bar for the wide/web layout — icon + label per item,
-// a short underline beneath whichever one is active. Replaces the old
-// left-hand NavigationRail with the more familiar top-bar pattern.
-class _TopNavBar extends StatelessWidget {
-  final List<({IconData icon, IconData selected, String label})> destinations;
-  final int selectedIndex;
-  final ValueChanged<int> onDestinationSelected;
-  final VoidCallback onOpenFriends;
-  final String profileLabel;
-  final int profileIndex;
-  final Widget Function({required bool selected}) profileIcon;
-  final List<Widget>? actions;
-
-  const _TopNavBar({
-    required this.destinations,
-    required this.selectedIndex,
-    required this.onDestinationSelected,
-    required this.onOpenFriends,
-    required this.profileLabel,
-    required this.profileIndex,
-    required this.profileIcon,
-    required this.actions,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 64,
-      padding: const EdgeInsets.symmetric(horizontal: 32),
-      decoration: const BoxDecoration(
-        color: AppColors.sand,
-        border: Border(bottom: BorderSide(color: Color(0x1A16181D))),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.travel_explore_rounded,
-              color: AppColors.ochre, size: 26),
-          const SizedBox(width: 32),
-          ...destinations.asMap().entries.map(
-                (entry) => _NavBarItem(
-                  icon: entry.value.icon,
-                  selectedIcon: entry.value.selected,
-                  label: entry.value.label,
-                  selected: entry.key == selectedIndex,
-                  onTap: () => onDestinationSelected(entry.key),
+  /// The hamburger-triggered navigation panel shared by both layouts.
+  ///
+  /// Styled after the reference mockup: a dark, blurred translucent
+  /// panel that lets the Yaoundé backdrop show through, a GlobeTrotter
+  /// wordmark at the top, and one row per app section. Selected item
+  /// gets a soft filled bar; the currently selected screen dismisses
+  /// the drawer without re-navigating (matches how Material drawers are
+  /// expected to behave when the tap target is already active).
+  Widget _buildDrawer(
+    BuildContext context,
+    AppLocalizations l10n,
+    List<({IconData icon, IconData selected, String label})> destinations,
+  ) {
+    final profileIndex = destinations.length;
+    return Drawer(
+      width: 280,
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      child: ClipRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+          child: Container(
+            decoration: BoxDecoration(
+              color: AppColors.canopy.withValues(alpha: 0.68),
+              border: Border(
+                right: BorderSide(
+                  color: Colors.white.withValues(alpha: 0.08),
                 ),
               ),
-          _NavBarItem(
-            icon: Icons.people_outline_rounded,
-            selectedIcon: Icons.people_rounded,
-            label: 'Friends',
-            // Friends is a pushed screen, not a tab — it never shows as
-            // "active" in the bar the way Discover/Feed/etc. do.
-            selected: false,
-            onTap: onOpenFriends,
+            ),
+            child: SafeArea(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+                    child: Row(
+                      children: [
+                        // Fast Travel brand mark. Landscape aspect (~2:1) so
+                        // it's sized by height and lets width follow — no
+                        // square-cropping. cacheHeight keeps decode cost low
+                        // even if the source is a high-res JPEG. errorBuilder
+                        // falls back to the classic globe if the asset ever
+                        // fails to load (missing bundle, stale build, etc.)
+                        // so the drawer header never renders as broken.
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: Image.asset(
+                            'assets/images/brand_logo.jpg',
+                            height: 32,
+                            fit: BoxFit.contain,
+                            cacheHeight: 96,
+                            filterQuality: FilterQuality.medium,
+                            errorBuilder: (context, error, stackTrace) =>
+                                const Icon(
+                              Icons.travel_explore_rounded,
+                              color: AppColors.ochre,
+                              size: 24,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        const Text(
+                          'GlobeTrotter',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Divider(
+                    height: 1,
+                    thickness: 1,
+                    color: Colors.white.withValues(alpha: 0.1),
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: ListView(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      children: [
+                        for (int i = 0; i < destinations.length; i++)
+                          _DrawerItem(
+                            icon: destinations[i].icon,
+                            selectedIcon: destinations[i].selected,
+                            label: destinations[i].label,
+                            selected: selectedIndex == i,
+                            onTap: () {
+                              Navigator.of(context).pop();
+                              if (selectedIndex != i) {
+                                onDestinationSelected(i);
+                              }
+                            },
+                          ),
+                        _DrawerItem(
+                          icon: Icons.account_circle_outlined,
+                          selectedIcon: Icons.account_circle_rounded,
+                          label: l10n.navProfile,
+                          selected: selectedIndex == profileIndex,
+                          onTap: () {
+                            Navigator.of(context).pop();
+                            if (selectedIndex != profileIndex) {
+                              onDestinationSelected(profileIndex);
+                            }
+                          },
+                        ),
+                        _DrawerItem(
+                          icon: Icons.people_outline_rounded,
+                          selectedIcon: Icons.people_rounded,
+                          label: 'Friends',
+                          selected: false,
+                          onTap: () {
+                            Navigator.of(context).pop();
+                            onOpenFriends();
+                          },
+                        ),
+                        _DrawerItem(
+                          icon: Icons.forum_outlined,
+                          selectedIcon: Icons.forum_rounded,
+                          label: 'Assistant',
+                          selected: false,
+                          onTap: () {
+                            Navigator.of(context).pop();
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const AssistantScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
-          const Spacer(),
-          ...?actions,
-          _NavBarItem(
-            icon: null,
-            customIcon: profileIcon(selected: selectedIndex == profileIndex),
-            label: profileLabel,
-            selected: selectedIndex == profileIndex,
-            onTap: () => onDestinationSelected(profileIndex),
-          ),
-        ],
+        ),
       ),
     );
   }
 }
 
-class _NavBarItem extends StatelessWidget {
-  final IconData? icon;
-  final IconData? selectedIcon;
-  final Widget? customIcon;
+// One row inside the app-navigation Drawer — icon, label, and (when it
+// represents the currently selected tab) a soft ochre background pill.
+// Style mirrors the reference mockup: white text on the translucent
+// dark panel, a filled highlight behind the active row.
+class _DrawerItem extends StatelessWidget {
+  final IconData icon;
+  final IconData selectedIcon;
   final String label;
   final bool selected;
   final VoidCallback onTap;
 
-  const _NavBarItem({
-    this.icon,
-    this.selectedIcon,
-    this.customIcon,
+  const _DrawerItem({
+    required this.icon,
+    required this.selectedIcon,
     required this.label,
     required this.selected,
     required this.onTap,
@@ -287,41 +390,43 @@ class _NavBarItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? AppColors.ochre : AppColors.inkSoft;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        child: IntrinsicWidth(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 10),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  customIcon ??
-                      Icon(selected ? (selectedIcon ?? icon) : icon,
-                          size: 20, color: color),
-                  const SizedBox(width: 8),
-                  Text(
+    final foreground =
+        selected ? Colors.white : Colors.white.withValues(alpha: 0.82);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+      child: Material(
+        color: selected
+            ? Colors.white.withValues(alpha: 0.14)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onTap,
+          child: Padding(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            child: Row(
+              children: [
+                Icon(
+                  selected ? selectedIcon : icon,
+                  size: 22,
+                  color: foreground,
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(
                     label,
                     style: TextStyle(
-                      color: selected ? AppColors.ink : AppColors.inkSoft,
-                      fontWeight: selected ? FontWeight.bold : FontWeight.w600,
+                      color: foreground,
                       fontSize: 15,
+                      fontWeight:
+                          selected ? FontWeight.w700 : FontWeight.w600,
                     ),
+                    overflow: TextOverflow.ellipsis,
                   ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Container(
-                height: 2,
-                width: double.infinity,
-                color: selected ? AppColors.ochre : Colors.transparent,
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

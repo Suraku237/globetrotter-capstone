@@ -32,8 +32,20 @@ services:
     environment:
       JWT_SECRET: ${JWT_SECRET}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      LIVEKIT_URL: ${LIVEKIT_URL:-}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/fcm-service-account.json
+      CALLS_PUBLIC_APP_URL: ${CALLS_PUBLIC_APP_URL:-https://fasttravel-web.duckdns.org}
+      APNS_KEY_ID: ${APNS_KEY_ID:-}
+      APNS_TEAM_ID: ${APNS_TEAM_ID:-}
+      APNS_VOIP_TOPIC: ${APNS_VOIP_TOPIC:-}
+      APNS_KEY_FILE: /run/secrets/apns/AuthKey.p8
+      APNS_ENVIRONMENT: ${APNS_ENVIRONMENT:-production}
     volumes:
       - ./shared/data:/app/data
+      - ./firebase-service-account.json:/run/secrets/fcm-service-account.json:ro
+      - ./secrets/apns:/run/secrets/apns:ro
     restart: unless-stopped
 
   api-gateway:

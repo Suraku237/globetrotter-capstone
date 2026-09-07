@@ -27,7 +27,17 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Fast Travel uses the microphone so you can talk to the AI travel assistant.</string>
+	<string>Fast Travel uses the microphone so you can talk to the AI travel assistant, record voice messages, and make calls.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Fast Travel uses the camera to show your self-view during video calls with friends.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Fast Travel uses Bluetooth audio devices during calls you accept.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>voip</string>
+		<string>remote-notification</string>
+		<string>audio</string>
+	</array>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Fast Travel uses speech recognition to turn what you say to the AI travel assistant into text.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
@@ -47,8 +57,6 @@
 					<string>flutter</string>
 					<key>UISceneDelegateClassName</key>
 					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
-					<key>UISceneStoryboardFile</key>
-					<string>Main</string>
 				</dict>
 			</array>
 		</dict>
@@ -57,8 +65,6 @@
 	<true/>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
-	<key>UIMainStoryboardFile</key>
-	<string>Main</string>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

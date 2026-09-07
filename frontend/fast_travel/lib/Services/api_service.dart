@@ -1,11 +1,13 @@
 // GlobeTrotter API client — typed, platform-aware, works unchanged on
 // mobile, desktop, and web builds of the same Flutter app.
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/models.dart';
+import '../models/call_models.dart';
 
 class ApiException implements Exception {
   final String message;
@@ -58,6 +60,95 @@ class ApiService {
   }
 
   bool get isAuthenticated => _token != null;
+
+  Future<dynamic> _callRequest(String path,
+      {String method = 'GET', Map<String, dynamic>? body}) async {
+    final request = http.Request(method, Uri.parse('$baseUrl/social/$path'));
+    request.headers.addAll(_headers);
+    if (body != null) request.body = jsonEncode(body);
+    final client = http.Client();
+    try {
+      final response = await client
+          .send(request)
+          .then(http.Response.fromStream)
+          .timeout(const Duration(seconds: 20));
+      return await _handle(response);
+    } on TimeoutException {
+      throw ApiException('The call server timed out. Check your connection.');
+    } on http.ClientException {
+      throw ApiException(
+          'Cannot reach the call server. Check your connection.');
+    } finally {
+      client.close();
+    }
+  }
+
+  Future<CallSession> createCall({
+    required CallKind kind,
+    required String targetType,
+    required String targetId,
+  }) async =>
+      CallSession.fromJson(
+        await _callRequest('calls', method: 'POST', body: {
+          'kind': kind.name,
+          'target_type': targetType,
+          'target_id': targetId,
+        }) as Map<String, dynamic>,
+      );
+
+  Future<List<CallSession>> getIncomingCalls() async {
+    final data = await _callRequest('calls/incoming') as List;
+    return data
+        .map((item) => CallSession.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<CallSession> getCall(String id) async => CallSession.fromJson(
+        await _callRequest('calls/${Uri.encodeComponent(id)}')
+            as Map<String, dynamic>,
+      );
+
+  Future<CallConnection> connectCall(String id, {required bool accept}) async =>
+      CallConnection.fromJson(
+        await _callRequest(
+          'calls/${Uri.encodeComponent(id)}/${accept ? 'accept' : 'token'}',
+          method: 'POST',
+        ) as Map<String, dynamic>,
+      );
+
+  Future<CallSession> updateCall(String id, String action) async {
+    if (!const {'decline', 'leave', 'heartbeat'}.contains(action)) {
+      throw ArgumentError.value(action, 'action', 'Unsupported call action');
+    }
+    return CallSession.fromJson(
+      await _callRequest('calls/${Uri.encodeComponent(id)}/$action',
+          method: 'POST') as Map<String, dynamic>,
+    );
+  }
+
+  Future<void> registerCallDevice({
+    required String token,
+    required String platform,
+    required String kind,
+  }) async {
+    await _callRequest('call-devices', method: 'POST', body: {
+      'token': token,
+      'platform': platform,
+      'kind': kind,
+    });
+  }
+
+  Future<void> unregisterCallDevice({
+    required String token,
+    required String platform,
+    required String kind,
+  }) async {
+    await _callRequest('call-devices', method: 'DELETE', body: {
+      'token': token,
+      'platform': platform,
+      'kind': kind,
+    });
+  }
 
   // Called once at app startup, before anything else touches ApiService —
   // returns the token saved from a previous session, if any, without
@@ -127,9 +218,20 @@ class ApiService {
   // if the token's expired or otherwise rejected, this throws (401) same as
   // any other call, and the caller falls back to the login screen.
   Future<AppUser> fetchCurrentUser() async {
-    final res = await http.get(Uri.parse('$baseUrl/me'), headers: _headers);
-    final data = await _handle(res);
-    return AppUser.fromJson(data as Map<String, dynamic>);
+    final token = _token;
+    final client = http.Client();
+    try {
+      final res = await client
+          .get(Uri.parse('$baseUrl/me'), headers: _headers)
+          .timeout(const Duration(seconds: 10));
+      if (_token != token) throw ApiException('The sign-in session changed.');
+      final data = await _handle(res);
+      return AppUser.fromJson(data as Map<String, dynamic>);
+    } finally {
+      // A headless startup timeout must also close the request, so a late 401
+      // cannot sign out an account that subsequently signed in.
+      client.close();
+    }
   }
 
   // Registering no longer signs you in — see RegistrationResult.status for

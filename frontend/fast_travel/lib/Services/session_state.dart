@@ -9,6 +9,7 @@ import 'api_service.dart';
 /// state-management package before it's actually needed.
 class SessionState extends ChangeNotifier {
   AppUser? currentUser;
+  Future<void> Function()? beforeSignOut;
 
   bool get isSignedIn => currentUser != null;
 
@@ -28,7 +29,8 @@ class SessionState extends ChangeNotifier {
     if (token == null) return false;
     ApiService.instance.setToken(token);
     try {
-      currentUser = await ApiService.instance.fetchCurrentUser();
+      currentUser = await ApiService.instance.fetchCurrentUser()
+          .timeout(const Duration(seconds: 12));
       notifyListeners();
       return true;
     } catch (_) {
@@ -155,7 +157,8 @@ class SessionState extends ChangeNotifier {
     }
   }
 
-  void signOut() {
+  Future<void> signOut() async {
+    await beforeSignOut?.call();
     ApiService.instance.setToken(null);
     _googleSignIn.signOut();
     currentUser = null;

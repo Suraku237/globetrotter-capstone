@@ -1,12 +1,13 @@
 import logging
 import os
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from . import assistant, chat, destinations, itineraries, posts, recommendations, social, stats
+from . import assistant, calls, chat, destinations, itineraries, posts, recommendations, social, stats
 from .models import DATA_DIR, get_gemini_api_key
 
 logger = logging.getLogger("uvicorn.error")
@@ -31,9 +32,17 @@ async def lifespan(app: FastAPI):
             "Set it in microservices/.env, then recreate the data-service "
             "container so the new value takes effect."
         )
-    yield
-    # No shutdown work needed today — file writes are synchronous and
-    # everything else uses per-request httpx clients.
+    stop = threading.Event()
+    worker = threading.Thread(target=calls.maintenance_loop, args=(stop,), daemon=True)
+    leases = threading.Thread(target=calls.lease_loop, args=(stop,), daemon=True)
+    worker.start()
+    leases.start()
+    try:
+        yield
+    finally:
+        stop.set()
+        worker.join(timeout=10)
+        leases.join(timeout=10)
 
 
 app = FastAPI(
@@ -68,6 +77,7 @@ app.mount("/audio", StaticFiles(directory=str(audio_dir)), name="audio")
 app.include_router(assistant.router)
 app.include_router(chat.router)
 app.include_router(social.router)
+app.include_router(calls.router)
 app.include_router(destinations.router)
 app.include_router(itineraries.router)
 app.include_router(posts.router)

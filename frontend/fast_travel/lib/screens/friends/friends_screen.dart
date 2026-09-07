@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:record/record.dart';
 
 import '../../Services/api_service.dart';
@@ -11,6 +12,8 @@ import '../../Services/session_state.dart';
 import '../../models/models.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/voice_bytes.dart';
+import '../../Services/call_coordinator.dart';
+import '../../models/call_models.dart';
 
 class FriendsScreen extends StatefulWidget {
   final SessionState session;
@@ -264,6 +267,11 @@ class _FriendsScreenState extends State<FriendsScreen>
         title: const Text('Friends'),
         actions: [
           IconButton(
+            tooltip: 'Enable call notifications',
+            onPressed: CallCoordinator.instance.enableNotifications,
+            icon: const Icon(Icons.notifications_active_outlined),
+          ),
+          IconButton(
             tooltip: 'Create group',
             onPressed: _createGroup,
             icon: const Icon(Icons.group_add_rounded),
@@ -479,11 +487,13 @@ class _ConversationScreenState extends State<ConversationScreen> {
   bool _uploadingVoice = false;
   Duration _recordingElapsed = Duration.zero;
   Timer? _recordingTicker;
+  Future<void>? _startingRecording;
 
   @override
   void initState() {
     super.initState();
     _load(initial: true);
+    CallCoordinator.instance.beforeConnect = _releaseMicrophoneForCall;
     _poller = Timer.periodic(
       const Duration(seconds: 4),
       (_) => _load(),
@@ -492,18 +502,26 @@ class _ConversationScreenState extends State<ConversationScreen> {
 
   @override
   void dispose() {
+    if (CallCoordinator.instance.beforeConnect == _releaseMicrophoneForCall) {
+      CallCoordinator.instance.beforeConnect = null;
+    }
     _poller?.cancel();
     _recordingTicker?.cancel();
-    // Best-effort — if we're mid-recording when the screen closes,
-    // discard the take rather than leaving the mic engaged.
-    _recorder.stop().then((path) async {
-      await _recorder.dispose();
-    }).catchError((_) async {
-      await _recorder.dispose();
-    });
+    unawaited(_disposeRecorder());
     _composer.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  Future<void> _disposeRecorder() async {
+    await _startingRecording;
+    try {
+      await _recorder.stop();
+    } on PlatformException catch (error) {
+      debugPrint('Unable to stop voice recorder during cleanup: ${error.code}');
+    } finally {
+      await _recorder.dispose();
+    }
   }
 
   Future<void> _load({bool initial = false}) async {
@@ -627,10 +645,23 @@ class _ConversationScreenState extends State<ConversationScreen> {
     );
   }
 
-  Future<void> _startRecording() async {
+  Future<void> _startRecording() {
+    return _startingRecording ??=
+        _startRecordingImpl().whenComplete(() => _startingRecording = null);
+  }
+
+  Future<void> _startRecordingImpl() async {
     if (_recording || _uploadingVoice) return;
+    if (CallCoordinator.instance.isInCall) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Finish the call before recording a message.')),
+      );
+      return;
+    }
     try {
       final hasPermission = await _recorder.hasPermission();
+      if (!mounted || CallCoordinator.instance.isInCall) return;
       if (!hasPermission) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -658,6 +689,10 @@ class _ConversationScreenState extends State<ConversationScreen> {
             path: 'voice_${DateTime.now().millisecondsSinceEpoch}.m4a');
       }
 
+      if (!mounted || CallCoordinator.instance.isInCall) {
+        await _recorder.stop();
+        return;
+      }
       setState(() => _recording = true);
       _recordingTicker = Timer.periodic(const Duration(seconds: 1), (_) {
         if (!mounted) return;
@@ -682,6 +717,28 @@ class _ConversationScreenState extends State<ConversationScreen> {
       _recording = false;
       _recordingElapsed = Duration.zero;
     });
+  }
+
+  Future<void> _releaseMicrophoneForCall() async {
+    await _startingRecording;
+    if (!_recording) return;
+    _recordingTicker?.cancel();
+    _recordingTicker = null;
+    try {
+      await _recorder.stop();
+    } on PlatformException catch (error) {
+      throw ApiException(
+          'Cannot release the microphone: ${error.message ?? error.code}');
+    }
+    if (!mounted) return;
+    setState(() {
+      _recording = false;
+      _recordingElapsed = Duration.zero;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+          content: Text('Voice recording stopped to answer the call.')),
+    );
   }
 
   Future<void> _stopAndSendRecording() async {
@@ -753,60 +810,263 @@ class _ConversationScreenState extends State<ConversationScreen> {
     }
   }
 
+  // Resolves the avatar for whoever sent a given message. Direct chats
+  // only ever have two participants so it's a straight either/or; group
+  // chats look the sender up in the member list. Falls back to null
+  // (initials avatar) for a member who has since left the group.
+  SocialUser? _senderProfile(SocialMessage message, {required bool mine}) {
+    if (mine) {
+      final me = widget.session.currentUser;
+      if (me == null) return null;
+      return SocialUser(
+        id: me.id,
+        fullName: me.fullName,
+        username: me.username,
+        avatarUrl: me.avatarUrl,
+      );
+    }
+    if (!widget.isGroup) return widget.friend;
+    for (final member in widget.group!.members) {
+      if (member.id == message.senderId) return member;
+    }
+    return null;
+  }
+
+  Future<void> _startCall(CallKind kind) async {
+    if (_recording || _uploadingVoice) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Finish your voice message before calling.')),
+      );
+      return;
+    }
+    await CallCoordinator.instance.startCall(
+      kind: kind,
+      targetType: widget.isGroup ? 'group' : 'direct',
+      targetId: widget.isGroup ? widget.group!.id : widget.friend!.id,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final title = widget.isGroup ? widget.group!.name : widget.friend!.fullName;
     final subtitle = widget.isGroup
         ? '${widget.group!.members.length} members'
         : '@${widget.friend!.username}';
+    final myId = widget.session.currentUser?.id;
+
     return Scaffold(
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
-          title: Text(title),
-          bottom: PreferredSize(
-            preferredSize: const Size.fromHeight(20),
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child:
-                  Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+        titleSpacing: 0,
+        backgroundColor: AppColors.canopy.withValues(alpha: 0.92),
+        foregroundColor: Colors.white,
+        title: Row(
+          children: [
+            _ConversationAvatar(
+              avatarUrl: widget.isGroup ? null : widget.friend!.avatarUrl,
+              name: title,
+              radius: 18,
+              isGroup: widget.isGroup,
             ),
-          )),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.65),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            tooltip: 'Voice call',
+            onPressed: () => _startCall(CallKind.voice),
+            icon: const Icon(Icons.call_rounded),
+          ),
+          IconButton(
+            tooltip: 'Video call',
+            onPressed: () => _startCall(CallKind.video),
+            icon: const Icon(Icons.videocam_rounded),
+          ),
+          const SizedBox(width: 4),
+        ],
+      ),
       body: Column(
         children: [
           Expanded(
-            child: _loading
-                ? const Center(
-                    child: CircularProgressIndicator(color: AppColors.ochre))
-                : _error != null
-                    ? _FailureState(
-                        message: _error!, onRetry: () => _load(initial: true))
-                    : ListView.builder(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _messages.length,
-                        itemBuilder: (_, index) {
-                          final message = _messages[index];
-                          return _MessageBubble(
-                            message: message,
-                            mine: message.senderId ==
-                                widget.session.currentUser?.id,
-                            showSender: widget.isGroup,
-                            stickers: _stickers,
-                          );
-                        },
-                      ),
+            // The global AppBackground photo shows through this screen,
+            // which left bare bubbles floating unreadably over the
+            // cityscape. A soft dark veil restores contrast for the
+            // message column while keeping the backdrop visible.
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    AppColors.canopy.withValues(alpha: 0.82),
+                    AppColors.canopy.withValues(alpha: 0.72),
+                    AppColors.canopy.withValues(alpha: 0.86),
+                  ],
+                ),
+              ),
+              child: _loading
+                  ? const Center(
+                      child: CircularProgressIndicator(color: AppColors.ochre))
+                  : _error != null
+                      ? _FailureState(
+                          message: _error!, onRetry: () => _load(initial: true))
+                      : _messages.isEmpty
+                          ? _emptyConversation(title)
+                          : _messageList(myId),
+            ),
           ),
           if (_openPicker == _PickerPanel.emoji) _emojiPanel(),
           if (_openPicker == _PickerPanel.stickers) _stickerPanel(),
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(8, 8, 8, 12),
-              child: _recording ? _recordingBar() : _composerBar(),
+          Container(
+            color: AppColors.sand,
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(8, 8, 8, 12),
+                child: _recording ? _recordingBar() : _composerBar(),
+              ),
             ),
           ),
         ],
       ),
     );
+  }
+
+  Widget _messageList(String? myId) {
+    return ListView.builder(
+      controller: _scrollController,
+      padding: const EdgeInsets.fromLTRB(12, 16, 12, 16),
+      itemCount: _messages.length,
+      itemBuilder: (_, index) {
+        final message = _messages[index];
+        final mine = message.senderId == myId;
+        final previous = index == 0 ? null : _messages[index - 1];
+        final next =
+            index == _messages.length - 1 ? null : _messages[index + 1];
+
+        // Only the last message of a run carries the avatar, and only the
+        // first carries the sender name — the classic messaging-app
+        // grouping that stops a burst of replies looking like a column
+        // of disconnected cards.
+        final isRunStart =
+            previous == null || previous.senderId != message.senderId;
+        final isRunEnd = next == null || next.senderId != message.senderId;
+
+        return Column(
+          children: [
+            if (_needsDateSeparator(previous, message))
+              _DateSeparator(label: _dayLabel(message.createdAt)),
+            _MessageBubble(
+              message: message,
+              mine: mine,
+              showSender: widget.isGroup && isRunStart && !mine,
+              showAvatar: isRunEnd,
+              isRunEnd: isRunEnd,
+              sender: _senderProfile(message, mine: mine),
+              stickers: _stickers,
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _emptyConversation(String title) {
+    final first = title.split(' ').first;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppColors.ochre.withValues(alpha: 0.16),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.waving_hand_rounded,
+                  color: AppColors.ochre, size: 34),
+            ),
+            const SizedBox(height: 18),
+            Text(
+              widget.isGroup ? 'Say hello to the group' : 'Say hello to $first',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Messages, voice notes and stickers all live here. '
+              'Tap the call buttons above to ring them instead.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.7),
+                fontSize: 13,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  bool _needsDateSeparator(SocialMessage? previous, SocialMessage current) {
+    final currentDay = _dayKey(current.createdAt);
+    if (currentDay == null) return false;
+    if (previous == null) return true;
+    return _dayKey(previous.createdAt) != currentDay;
+  }
+
+  String? _dayKey(String iso) {
+    final parsed = DateTime.tryParse(iso)?.toLocal();
+    if (parsed == null) return null;
+    return '${parsed.year}-${parsed.month}-${parsed.day}';
+  }
+
+  String _dayLabel(String iso) {
+    final parsed = DateTime.tryParse(iso)?.toLocal();
+    if (parsed == null) return '';
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final that = DateTime(parsed.year, parsed.month, parsed.day);
+    final diff = today.difference(that).inDays;
+    if (diff == 0) return 'Today';
+    if (diff == 1) return 'Yesterday';
+    return MaterialLocalizations.of(context).formatMediumDate(parsed);
   }
 
   Widget _composerBar() {
@@ -1064,12 +1324,21 @@ class _MessageBubble extends StatefulWidget {
   final SocialMessage message;
   final bool mine;
   final bool showSender;
+  // Only the final message in a run from one person carries an avatar,
+  // so a burst of replies reads as one block instead of a stack of
+  // repeated faces.
+  final bool showAvatar;
+  final bool isRunEnd;
+  final SocialUser? sender;
   final List<ChatSticker>? stickers;
 
   const _MessageBubble({
     required this.message,
     required this.mine,
     required this.showSender,
+    required this.showAvatar,
+    required this.isRunEnd,
+    required this.sender,
     required this.stickers,
   });
 
@@ -1139,33 +1408,90 @@ class _MessageBubbleState extends State<_MessageBubble> {
     if (message.type == 'voice' && (message.voiceUrl ?? '').isNotEmpty) {
       content = _voiceContent(textColor, message);
     } else {
-      content = Text(message.text, style: TextStyle(color: textColor));
+      content = Text(
+        message.text,
+        style: TextStyle(color: textColor, height: 1.32),
+      );
     }
 
-    return Align(
-      alignment: widget.mine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 480),
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(14),
+    final bubble = Container(
+      constraints: const BoxConstraints(maxWidth: 420),
+      padding: const EdgeInsets.fromLTRB(13, 9, 13, 7),
+      decoration: BoxDecoration(
+        color: color,
+        // The corner nearest the avatar is squared off on the last
+        // message of a run, giving the group a "tail" pointing at whoever
+        // sent it.
+        borderRadius: BorderRadius.only(
+          topLeft: const Radius.circular(16),
+          topRight: const Radius.circular(16),
+          bottomLeft: Radius.circular(
+            !widget.mine && widget.isRunEnd ? 4 : 16,
+          ),
+          bottomRight: Radius.circular(
+            widget.mine && widget.isRunEnd ? 4 : 16,
+          ),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (widget.showSender && !widget.mine)
-              Text(message.senderName,
-                  style: TextStyle(
-                      color: textColor.withValues(alpha: 0.75),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700)),
-            content,
-          ],
-        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.16),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (widget.showSender)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 3),
+              child: Text(
+                message.senderName,
+                style: TextStyle(
+                  color: widget.mine
+                      ? textColor.withValues(alpha: 0.85)
+                      : AppColors.ochre,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          content,
+          const SizedBox(height: 3),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              _formatClock(message.createdAt),
+              style: TextStyle(
+                color: textColor.withValues(alpha: 0.62),
+                fontSize: 10.5,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
       ),
     );
+
+    return _AvatarRow(
+      mine: widget.mine,
+      showAvatar: widget.showAvatar,
+      isRunEnd: widget.isRunEnd,
+      sender: widget.sender,
+      fallbackName: message.senderName,
+      child: bubble,
+    );
+  }
+
+  // "14:32" in the viewer's own locale/timezone. Falls back to an empty
+  // string for the handful of legacy rows whose timestamp won't parse,
+  // rather than printing a raw ISO string in the corner of the bubble.
+  String _formatClock(String iso) {
+    final parsed = DateTime.tryParse(iso)?.toLocal();
+    if (parsed == null) return '';
+    return TimeOfDay.fromDateTime(parsed).format(context);
   }
 
   Widget _buildSticker(BuildContext context, SocialMessage message) {
@@ -1176,28 +1502,42 @@ class _MessageBubbleState extends State<_MessageBubble> {
       (item) => item.id == message.stickerId,
       orElse: () => const ChatSticker(id: '?', emoji: '\u2753', label: ''),
     );
-    return Align(
-      alignment: widget.mine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Column(
-          crossAxisAlignment:
-              widget.mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-          children: [
-            if (widget.showSender && !widget.mine)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 2),
-                child: Text(
-                  message.senderName,
-                  style: Theme.of(context).textTheme.bodySmall,
+    return _AvatarRow(
+      mine: widget.mine,
+      showAvatar: widget.showAvatar,
+      isRunEnd: widget.isRunEnd,
+      sender: widget.sender,
+      fallbackName: message.senderName,
+      child: Column(
+        crossAxisAlignment:
+            widget.mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (widget.showSender)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 2),
+              child: Text(
+                message.senderName,
+                style: const TextStyle(
+                  color: AppColors.ochre,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
-            Text(
-              sticker?.emoji ?? '\u2753',
-              style: const TextStyle(fontSize: 64),
             ),
-          ],
-        ),
+          Text(
+            sticker?.emoji ?? '\u2753',
+            style: const TextStyle(fontSize: 64),
+          ),
+          Text(
+            _formatClock(message.createdAt),
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.6),
+              fontSize: 10.5,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1247,6 +1587,150 @@ class _MessageBubbleState extends State<_MessageBubble> {
     final m = d.inMinutes.remainder(60);
     final s = d.inSeconds.remainder(60);
     return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+  }
+}
+
+// Lays a message out beside the sender's profile picture: avatar on the
+// left for incoming, on the right for outgoing. When a message isn't the
+// last of a run the avatar slot is held open with empty space so every
+// bubble in that run stays aligned with the one carrying the face.
+class _AvatarRow extends StatelessWidget {
+  static const double _avatarRadius = 14;
+
+  final bool mine;
+  final bool showAvatar;
+  final bool isRunEnd;
+  final SocialUser? sender;
+  final String fallbackName;
+  final Widget child;
+
+  const _AvatarRow({
+    required this.mine,
+    required this.showAvatar,
+    required this.isRunEnd,
+    required this.sender,
+    required this.fallbackName,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final slot = showAvatar
+        ? _ConversationAvatar(
+            avatarUrl: sender?.avatarUrl,
+            name: sender?.fullName.isNotEmpty == true
+                ? sender!.fullName
+                : fallbackName,
+            radius: _avatarRadius,
+            isGroup: false,
+          )
+        : const SizedBox(width: _avatarRadius * 2);
+
+    return Padding(
+      // Tighter spacing inside a run, looser between different speakers,
+      // so the conversation has a natural rhythm.
+      padding: EdgeInsets.only(bottom: isRunEnd ? 12 : 3),
+      child: Row(
+        mainAxisAlignment:
+            mine ? MainAxisAlignment.end : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (!mine) ...[
+            slot,
+            const SizedBox(width: 8),
+          ],
+          Flexible(child: child),
+          if (mine) ...[
+            const SizedBox(width: 8),
+            slot,
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// Profile picture used in the conversation header and beside each
+// message. Groups get an icon instead of initials since a group has no
+// single face to show.
+class _ConversationAvatar extends StatelessWidget {
+  final String? avatarUrl;
+  final String name;
+  final double radius;
+  final bool isGroup;
+
+  const _ConversationAvatar({
+    required this.avatarUrl,
+    required this.name,
+    required this.radius,
+    required this.isGroup,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final trimmed = name.trim();
+    final initial = trimmed.isEmpty ? '?' : trimmed[0].toUpperCase();
+    final hasImage = avatarUrl != null && avatarUrl!.isNotEmpty;
+
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: AppColors.ochre.withValues(alpha: 0.28),
+      // Decode at roughly the drawn size — these repeat down the whole
+      // message list, so full-resolution avatars would be pure waste.
+      backgroundImage: hasImage
+          ? ResizeImage(
+              NetworkImage(ApiService.resolveUrl(avatarUrl!)),
+              width: (radius * 4).round(),
+            )
+          : null,
+      child: hasImage
+          ? null
+          : isGroup
+              ? Icon(Icons.groups_rounded,
+                  color: Colors.white, size: radius * 1.1)
+              : Text(
+                  initial,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                    fontSize: radius * 0.85,
+                  ),
+                ),
+    );
+  }
+}
+
+// "Today" / "Yesterday" / "12 Mar 2026" chip that breaks the message
+// list into days.
+class _DateSeparator extends StatelessWidget {
+  final String label;
+
+  const _DateSeparator({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    if (label.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.32),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.82),
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

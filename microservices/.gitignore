@@ -1,11 +1,14 @@
 # Secrets
 .env
 firebase-service-account.json
+secrets/
+*.p8
 
 # Python
 venv/
 __pycache__/
 *.pyc
+.pytest-calls/
 
 # Data (JSON "database" files — don't commit user data)
 data/*.json

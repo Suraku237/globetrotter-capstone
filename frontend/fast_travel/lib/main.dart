@@ -1,4 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'screens/admin/pending_destinations_screen.dart';
@@ -11,6 +15,8 @@ import 'screens/itineraries/itineraries_screen.dart';
 import 'screens/home/map_screen.dart'; // ✅ This imports ExploreMapScreen
 import 'screens/profile/profile_screen.dart';
 import 'Services/api_service.dart';
+import 'Services/call_coordinator.dart';
+import 'Services/call_push_service.dart';
 import 'Services/locale_controller.dart';
 import 'Services/session_state.dart';
 import 'l10n/generated/app_localizations.dart';
@@ -21,22 +27,93 @@ import 'widgets/logout_confirm.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  final nativeScene = !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+  const appChannel = MethodChannel('globetrotter/app_runtime');
+  var uiRequested = !nativeScene;
+  var ready = false;
+  var mountedApp = false;
+  late final SessionState session;
+  late final CallCoordinator calls;
+  late final Future<bool> restoration;
+  final navigatorKey = GlobalKey<NavigatorState>();
+  final messengerKey = GlobalKey<ScaffoldMessengerState>();
+  void mountUi() {
+    if (!ready || !uiRequested) return;
+    if (!mountedApp) {
+      mountedApp = true;
+      runApp(GlobeTrotterApp(
+        session: session,
+        calls: calls,
+        navigatorKey: navigatorKey,
+        messengerKey: messengerKey,
+        restoration: restoration,
+      ));
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) => calls.setUiAvailable(true));
+      WidgetsBinding.instance.scheduleFrame();
+    }
+  }
+  if (nativeScene) {
+    appChannel.setMethodCallHandler((call) async {
+      if (call.method == 'uiStateChanged') {
+        uiRequested = call.arguments == true;
+        if (ready && !uiRequested) calls.setUiAvailable(false);
+        mountUi();
+      }
+    });
+  }
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  runApp(const GlobeTrotterApp());
+  await initializeCallPushBackground();
+  session = SessionState();
+  calls = CallCoordinator(
+    session: session,
+    navigatorKey: navigatorKey,
+    messengerKey: messengerKey,
+    uiAvailable: false,
+  );
+  CallCoordinator.instance = calls;
+  session.beforeSignOut = calls.signOut;
+  ApiService.instance.onUnauthorized = session.signOut;
+  // Neither runtime initialization nor session restoration waits for a frame.
+  await calls.initialize();
+  restoration = session.tryRestoreSession().then((restored) async {
+    if (!restored) await calls.signOut();
+    return restored;
+  });
+  ready = true;
+  if (nativeScene) {
+    uiRequested = await appChannel.invokeMethod<bool>('isUiAttached') ?? false;
+  }
+  mountUi();
 }
 
 class GlobeTrotterApp extends StatefulWidget {
-  const GlobeTrotterApp({super.key});
+  const GlobeTrotterApp({
+    super.key,
+    required this.session,
+    required this.calls,
+    required this.navigatorKey,
+    required this.messengerKey,
+    required this.restoration,
+  });
+  final SessionState session;
+  final CallCoordinator calls;
+  final GlobalKey<NavigatorState> navigatorKey;
+  final GlobalKey<ScaffoldMessengerState> messengerKey;
+  final Future<bool> restoration;
 
   @override
   State<GlobeTrotterApp> createState() => _GlobeTrotterAppState();
 }
 
 class _GlobeTrotterAppState extends State<GlobeTrotterApp> {
-  final _session = SessionState();
+  SessionState get _session => widget.session;
   final _localeController = LocaleController();
+  GlobalKey<NavigatorState> get _navigatorKey => widget.navigatorKey;
+  GlobalKey<ScaffoldMessengerState> get _messengerKey => widget.messengerKey;
+  CallCoordinator get _calls => widget.calls;
   // True only while checking for a saved sign-in from a previous launch —
   // see SessionState.tryRestoreSession. Kept separate from "signed out" so
   // the login screen doesn't flash for a moment before a valid saved
@@ -46,14 +123,25 @@ class _GlobeTrotterAppState extends State<GlobeTrotterApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _calls.setUiAvailable(true);
+    });
     // A rejected token (expired, or otherwise invalid) should always drop
     // the user back on the login screen instead of leaving screens stuck
     // showing a stale "can't reach server" error.
     ApiService.instance.onUnauthorized = _session.signOut;
     _localeController.load();
-    _session.tryRestoreSession().then((_) {
+    widget.restoration.then((_) {
       if (mounted) setState(() => _restoringSession = false);
     });
+  }
+
+  @override
+  void dispose() {
+    ApiService.instance.onUnauthorized = null;
+    _session.beforeSignOut = null;
+    unawaited(_calls.dispose());
+    super.dispose();
   }
 
   @override
@@ -62,6 +150,8 @@ class _GlobeTrotterAppState extends State<GlobeTrotterApp> {
       animation: _localeController,
       builder: (context, _) {
         return MaterialApp(
+          navigatorKey: _navigatorKey,
+          scaffoldMessengerKey: _messengerKey,
           title: 'GlobeTrotter',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.light(),

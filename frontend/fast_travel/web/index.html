@@ -89,6 +89,73 @@
   </picture>
   <div id="flutter_target"></div>
   <script>
+    let callPushWorkerRegistration = Promise.resolve(null);
+    if ('serviceWorker' in navigator && window.isSecureContext) {
+      callPushWorkerRegistration = navigator.serviceWorker.register('./firebase-messaging-sw.js', {
+        scope: './firebase-cloud-messaging-push-scope'
+      }).catch(() => {
+        console.warn('Call notification service worker is unavailable.');
+        return null;
+      });
+    }
+    window.globetrotterCallPush = {
+      async setEnabled(enabled) {
+        const registration = await callPushWorkerRegistration;
+        if (!registration) {
+          if (enabled) throw new Error('Call notification worker unavailable');
+          return;
+        }
+        const worker = registration.active || registration.waiting || registration.installing;
+        if (!worker) throw new Error('Call notification worker unavailable');
+        if (worker.state !== 'activated') {
+          await new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => reject(new Error('Call worker activation timed out')), 5000);
+            worker.addEventListener('statechange', () => {
+              if (worker.state === 'activated') { clearTimeout(timeout); resolve(); }
+              if (worker.state === 'redundant') { clearTimeout(timeout); reject(new Error('Call worker failed')); }
+            });
+          });
+        }
+        await new Promise((resolve, reject) => {
+          const channel = new MessageChannel();
+          const timeout = setTimeout(() => { channel.port1.close(); reject(new Error('Call worker update timed out')); }, 5000);
+          channel.port1.onmessage = event => {
+            clearTimeout(timeout);
+            channel.port1.close();
+            if (event.data?.ok) resolve();
+            else reject(new Error('Call worker update failed'));
+          };
+          const currentEnabled = localStorage.getItem('flutter.call_push_enabled') === 'true';
+          worker.postMessage({type: 'call_push_enabled', enabled: currentEnabled}, [channel.port2]);
+        });
+      }
+    };
+    // shared_preferences_web writes this key through Storage.setItem. The
+    // browser's storage event excludes the writing tab, so observe only this
+    // one key locally as well as cross-tab updates. Never inspect auth tokens.
+    const syncCallPushDelivery = () => {
+      try {
+        window.globetrotterCallPush.setEnabled(
+          localStorage.getItem('flutter.call_push_enabled') === 'true'
+        ).catch(() => console.warn('Call notification delivery settings could not be synchronized.'));
+      } catch (_) {
+        console.warn('Local call notification settings are unavailable.');
+      }
+    };
+    const storageSetItem = Storage.prototype.setItem;
+    const storageRemoveItem = Storage.prototype.removeItem;
+    Storage.prototype.setItem = function(key, value) {
+      storageSetItem.call(this, key, value);
+      if (this === localStorage && key === 'flutter.call_push_enabled') syncCallPushDelivery();
+    };
+    Storage.prototype.removeItem = function(key) {
+      storageRemoveItem.call(this, key);
+      if (this === localStorage && key === 'flutter.call_push_enabled') syncCallPushDelivery();
+    };
+    window.addEventListener('storage', event => {
+      if (event.key === 'flutter.call_push_enabled' || event.key === null) syncCallPushDelivery();
+    });
+    syncCallPushDelivery();
     // This loads your Flutter app
     var serviceWorkerUrl = "flutter_service_worker.js?v=" + Date.now();
     // The actual main.dart.js entry point

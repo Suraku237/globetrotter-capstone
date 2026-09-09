@@ -64,6 +64,11 @@ Uvicorn worker / replica**, as with the existing JSON-backed social feature.
 Multiple workers/replicas require a transactional database and shared job queue
 before scaling. Writes use the existing social mutex and atomic replacement.
 
+Foreground cache updates also use the authenticated gateway `/events/ws` stream
+described in [REALTIME.md](REALTIME.md). `calls` invalidations reach participants
+before provider delivery and on visible state changes; push delivery and the
+HTTP heartbeat/lease protocol below remain required and independent of sockets.
+
 ## API contract
 
 Every endpoint below requires the current user's bearer token. Gateway paths are

@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../Services/api_service.dart';
+import '../Services/media_cache.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
 
@@ -241,7 +242,8 @@ class _RailAvatar extends StatelessWidget {
             child: CircleAvatar(
               backgroundColor: AppColors.sandDim,
               backgroundImage: avatarUrl != null
-                  ? NetworkImage(ApiService.resolveUrl(avatarUrl!))
+                  ? MediaCache.imageProvider(
+                      ApiService.resolveUrl(avatarUrl!), cacheWidth: 160)
                   : null,
               child: avatarUrl == null
                   ? Text(
@@ -325,7 +327,8 @@ class _SoundDiscState extends State<_SoundDisc>
           border: Border.all(color: Colors.white, width: 2),
           image: widget.avatarUrl != null
               ? DecorationImage(
-                  image: NetworkImage(ApiService.resolveUrl(widget.avatarUrl!)),
+                  image: MediaCache.imageProvider(
+                      ApiService.resolveUrl(widget.avatarUrl!), cacheWidth: 160),
                   fit: BoxFit.cover,
                 )
               : null,

@@ -27,14 +27,16 @@ messages we already had:
 import io
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Literal, Optional
+from typing import Annotated, Literal, Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from PIL import Image
 from pydantic import BaseModel
 
 from .models import DATA_DIR, _load, _save, load_users
 from .security import get_current_user
+from .event_store import publish
+from .pagination import message_page
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -65,6 +67,7 @@ def _load_room() -> list:
 
 def _save_room(messages: list) -> None:
     _save(ROOM_FILE, messages)
+    publish(["chat"])
 
 
 def _load_presence() -> dict:
@@ -178,8 +181,12 @@ class ReactionPayload(BaseModel):
 
 
 @router.get("/room/messages")
-def get_room_messages(current_user: dict = Depends(get_current_user)):
-    return _load_room()
+def get_room_messages(
+    current_user: dict = Depends(get_current_user),
+    limit: Annotated[int | None, Query(ge=1, le=200)] = None,
+    before: Annotated[str | None, Query(min_length=1, max_length=128)] = None,
+):
+    return message_page(_load_room(), limit, before)
 
 
 @router.post("/room/messages", status_code=201)

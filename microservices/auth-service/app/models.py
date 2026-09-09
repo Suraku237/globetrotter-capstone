@@ -221,7 +221,10 @@ def load_users() -> list:
 
 
 def save_users(users: list) -> None:
+    previous = load_users()
     _save(USERS_FILE, users)
+    from .events import users_changed
+    users_changed(previous, users)
 
 
 def load_pending_registrations() -> list:

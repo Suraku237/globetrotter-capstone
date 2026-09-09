@@ -4,6 +4,7 @@ import '../models/models.dart';
 import '../theme/app_theme.dart';
 import '../screens/home/destination_detail_screen.dart';
 import 'star_rating.dart';
+import 'public_network_image.dart';
 
 /// Tag -> icon, so cards read at a glance without needing photography
 IconData _iconForTag(String tag) {
@@ -81,7 +82,7 @@ class DestinationCard extends StatelessWidget {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      Image.network(
+                      PublicNetworkImage(
                         ApiService.resolveUrl(destination.imageUrl ?? ''),
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) => Container(

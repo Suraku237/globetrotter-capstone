@@ -20,6 +20,7 @@ from threading import Lock
 from fastapi import APIRouter, HTTPException
 
 from .models import DATA_DIR, load_users
+from .event_store import publish
 
 router = APIRouter(prefix="/stats", tags=["stats"])
 
@@ -44,6 +45,7 @@ def _load_stats() -> dict:
 def _save_stats(data: dict) -> None:
     with open(STATS_FILE, "w") as f:
         json.dump(data, f, indent=2)
+    publish(["stats"])
 
 
 @router.get("")

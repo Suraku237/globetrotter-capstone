@@ -17,6 +17,7 @@ from . import call_providers as providers
 from . import social
 from .models import DATA_DIR
 from .security import get_current_user
+from .event_store import publish
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/social", tags=["calls"])
@@ -84,7 +85,20 @@ def _atomic_save(path: Path, records: list) -> None:
 
 
 def _save(calls: list) -> None:
+    previous = {call["id"]: call for call in social._load_list(CALLS_FILE)}
     _atomic_save(CALLS_FILE, calls)
+    changed_users = set()
+    for call in calls:
+        old = previous.get(call["id"])
+        # Lease renewal and provider bookkeeping aren't visible state changes.
+        if old is None or any(
+            old.get(key) != call.get(key) for key in (*PUBLIC_FIELDS, "_departed")
+        ):
+            changed_users.update(call["participant_ids"])
+    if changed_users:
+        # Persist signalling invalidations before the independent FCM/APNs worker
+        # touches a provider. Slow/offline pushes must never postpone ringing.
+        publish(["calls"], changed_users)
 
 
 def _save_devices(devices: list) -> None:

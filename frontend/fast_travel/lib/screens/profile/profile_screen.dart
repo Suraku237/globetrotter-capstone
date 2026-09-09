@@ -3,6 +3,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../Services/api_service.dart';
 import '../../Services/locale_controller.dart';
+import '../../Services/media_cache.dart';
+import '../../Services/media_settings.dart';
+import '../../Services/preference_storage.dart';
 import '../../Services/session_state.dart';
 import '../../l10n/generated/app_localizations.dart';
 import '../../theme/app_theme.dart';
@@ -31,6 +34,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _savingName = false;
   bool _uploadingAvatar = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    MediaSettings.instance.load();
+  }
 
   Future<void> _editName() async {
     final l10n = AppLocalizations.of(context)!;
@@ -68,7 +77,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       await widget.session.updateProfile(fullName: newName);
     } on ApiException catch (e) {
       setState(() => _error = e.message);
-    } catch (_) {
+    } on PreferenceStorageException {
       setState(() => _error = 'Could not reach the server.');
     } finally {
       if (mounted) setState(() => _savingName = false);
@@ -252,7 +261,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       radius: 56,
                       backgroundColor: AppColors.sandDim,
                       backgroundImage: avatarUrl != null
-                          ? NetworkImage('${ApiService.baseUrl}$avatarUrl')
+                          ? MediaCache.imageProvider(
+                              ApiService.resolveUrl(avatarUrl),
+                              cacheWidth: 336)
                           : null,
                       child: avatarUrl == null
                           ? const Icon(Icons.person_rounded,
@@ -335,6 +346,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     onSelectionChanged: (selected) =>
                         widget.localeController.setLanguageCode(selected.first),
                   ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Card(
+                child: ListenableBuilder(
+                  listenable: MediaSettings.instance,
+                  builder: (context, _) {
+                    final french =
+                        Localizations.localeOf(context).languageCode == 'fr';
+                    return SwitchListTile(
+                      secondary: const Icon(Icons.data_saver_on_rounded),
+                      title: Text(
+                          french ? 'Économiseur de données' : 'Data Saver'),
+                      subtitle: Text(french
+                          ? 'Vidéos sur appui uniquement. Aucune prélecture.'
+                          : 'Tap to play videos. No automatic preloading.'),
+                      value: MediaSettings.instance.dataSaver,
+                      onChanged: (enabled) async {
+                        try {
+                          await MediaSettings.instance.setDataSaver(enabled);
+                        } catch (_) {
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                            content: Text(french
+                                ? 'Impossible de sauvegarder le réglage.'
+                                : 'Could not save this setting.'),
+                          ));
+                        }
+                      },
+                    );
+                  },
                 ),
               ),
               const SizedBox(height: 8),

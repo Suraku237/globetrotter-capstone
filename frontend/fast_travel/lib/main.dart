@@ -9,6 +9,7 @@ import 'screens/admin/pending_destinations_screen.dart';
 import 'screens/assistant/assistant_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/friends/friends_screen.dart';
+import 'screens/chat/community_room_screen.dart';
 import 'screens/feed/feed_screen.dart';
 import 'screens/home/discover_screen.dart';
 import 'screens/itineraries/itineraries_screen.dart';
@@ -19,14 +20,20 @@ import 'Services/call_coordinator.dart';
 import 'Services/call_push_service.dart';
 import 'Services/locale_controller.dart';
 import 'Services/session_state.dart';
+import 'Services/media_cache.dart';
+import 'Services/media_settings.dart';
+import 'Services/media_playback.dart';
 import 'l10n/generated/app_localizations.dart';
 import 'theme/app_theme.dart';
 import 'widgets/adaptive_shell.dart';
 import 'widgets/app_background.dart';
 import 'widgets/logout_confirm.dart';
+import 'widgets/connection_banner.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  MediaCache.initialize();
+  await MediaSettings.instance.load();
   final nativeScene = !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
   const appChannel = MethodChannel('globetrotter/app_runtime');
   var uiRequested = !nativeScene;
@@ -108,7 +115,8 @@ class GlobeTrotterApp extends StatefulWidget {
   State<GlobeTrotterApp> createState() => _GlobeTrotterAppState();
 }
 
-class _GlobeTrotterAppState extends State<GlobeTrotterApp> {
+class _GlobeTrotterAppState extends State<GlobeTrotterApp>
+    with WidgetsBindingObserver {
   SessionState get _session => widget.session;
   final _localeController = LocaleController();
   GlobalKey<NavigatorState> get _navigatorKey => widget.navigatorKey;
@@ -123,6 +131,9 @@ class _GlobeTrotterAppState extends State<GlobeTrotterApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _calls.callState.addListener(_syncCallPlayback);
+    _syncCallPlayback();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _calls.setUiAvailable(true);
     });
@@ -138,10 +149,23 @@ class _GlobeTrotterAppState extends State<GlobeTrotterApp> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _calls.callState.removeListener(_syncCallPlayback);
+    MediaPlayback.suspended.value = false;
+    ApiService.instance.setActive(false);
     ApiService.instance.onUnauthorized = null;
     _session.beforeSignOut = null;
     unawaited(_calls.dispose());
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    ApiService.instance.setActive(state == AppLifecycleState.resumed);
+  }
+
+  void _syncCallPlayback() {
+    MediaPlayback.suspended.value = _calls.callState.value != null;
   }
 
   @override
@@ -165,7 +189,7 @@ class _GlobeTrotterAppState extends State<GlobeTrotterApp> {
           builder: (context, child) => Stack(
             children: [
               const Positioned.fill(child: AppBackground()),
-              if (child != null) child,
+              if (child != null) ConnectionBanner(child: child),
             ],
           ),
           home: _restoringSession
@@ -256,6 +280,19 @@ class _WorkerHomeScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.forum_outlined),
+              title: Text(Localizations.localeOf(context).languageCode == 'fr'
+                  ? 'Communaute' : 'Community chat'),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) =>
+                    CommunityRoomScreen(session: session)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
           Card(
             child: ListTile(
               leading: const Icon(Icons.assignment_turned_in_rounded),
@@ -362,6 +399,11 @@ class _HomeShellState extends State<_HomeShell> {
           ),
         );
       },
+      onOpenCommunity: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) =>
+            CommunityRoomScreen(session: widget.session)),
+      ),
       actions: [
         if (widget.isAdmin)
           IconButton(

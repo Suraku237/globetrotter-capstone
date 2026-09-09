@@ -8,12 +8,14 @@ import 'package:flutter/services.dart' show PlatformException;
 import 'package:record/record.dart';
 
 import '../../Services/api_service.dart';
+import '../../Services/media_cache.dart';
 import '../../Services/session_state.dart';
 import '../../models/models.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/voice_bytes.dart';
 import '../../Services/call_coordinator.dart';
 import '../../models/call_models.dart';
+import '../chat/chat_ui.dart';
 
 class FriendsScreen extends StatefulWidget {
   final SessionState session;
@@ -31,25 +33,42 @@ class _FriendsScreenState extends State<FriendsScreen>
   List<ChatGroup> _groups = [];
   bool _loading = true;
   String? _error;
+  late final ChatRefreshController _updates;
+  final _pendingRequests = <String>{};
+  final _resolvedRequests = <String>{};
+  final _acceptedFriends = <String, SocialUser>{};
 
   @override
   void initState() {
     super.initState();
     _tabs = TabController(length: 3, vsync: this);
-    _load();
+    _updates = ChatRefreshController(
+      changes: ApiService.instance.changes,
+      topics: const {'friends'},
+      isLive: () => ApiService.instance.isLive,
+      isVisible: () =>
+          mounted &&
+          TickerMode.of(context) &&
+          (ModalRoute.of(context)?.isCurrent ?? true),
+      load: _load,
+      invalidate: ApiService.instance.refreshTopics,
+    )..start();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _updates.visibilityChanged();
   }
 
   @override
   void dispose() {
     _tabs.dispose();
+    _updates.dispose();
     super.dispose();
   }
 
   Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
     try {
       final result = await Future.wait([
         ApiService.instance.getFriendsOverview(),
@@ -57,11 +76,36 @@ class _FriendsScreenState extends State<FriendsScreen>
       ]);
       if (!mounted) return;
       setState(() {
-        _overview = result[0] as FriendsOverview;
+        final overview = result[0] as FriendsOverview;
+        final incomingIds = overview.incomingRequests
+            .map((request) => request.requestId)
+            .toSet();
+        _resolvedRequests.removeWhere((id) => !incomingIds.contains(id));
+        final friendIds = overview.friends.map((friend) => friend.id).toSet();
+        _acceptedFriends.removeWhere((id, _) => friendIds.contains(id));
+        // A stale cache read must not undo a confirmed approval.
+        _overview = FriendsOverview(
+          friends: {
+            for (final friend in overview.friends) friend.id: friend,
+            ..._acceptedFriends,
+          }.values.toList(),
+          incomingRequests: overview.incomingRequests
+              .where((request) =>
+                  !_resolvedRequests.contains(request.requestId) &&
+                  !_acceptedFriends.containsKey(request.user.id))
+              .toList(),
+          outgoingRequests: overview.outgoingRequests,
+        );
         _groups = result[1] as List<ChatGroup>;
+        _error = null;
       });
-    } on ApiException catch (error) {
-      if (mounted) setState(() => _error = error.message);
+    } catch (error) {
+      if (mounted) {
+        setState(() => _error = error is ApiException
+            ? error.message
+            : chatLabel(context, 'Could not refresh your friends.',
+                "Impossible d'actualiser vos amis."));
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -106,7 +150,7 @@ class _FriendsScreenState extends State<FriendsScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Friend request sent.')),
       );
-      await _load();
+      await _updates.refresh();
     } on ApiException catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -116,29 +160,71 @@ class _FriendsScreenState extends State<FriendsScreen>
   }
 
   Future<void> _acceptRequest(String requestId) async {
+    if (!_pendingRequests.add(requestId)) return;
+    setState(() {});
     try {
       await ApiService.instance.acceptFriendRequest(requestId);
       if (!mounted) return;
+      setState(() {
+        final overview = _overview;
+        if (overview == null) return;
+        final accepted = overview.incomingRequests
+            .where((request) => request.requestId == requestId)
+            .map((request) => request.user);
+        _resolvedRequests.add(requestId);
+        for (final user in accepted) {
+          _acceptedFriends[user.id] = user;
+        }
+        _overview = FriendsOverview(
+          friends: {
+            for (final user in [...overview.friends, ...accepted])
+              user.id: user,
+          }.values.toList(),
+          incomingRequests: overview.incomingRequests
+              .where((request) => request.requestId != requestId)
+              .toList(),
+          outgoingRequests: overview.outgoingRequests,
+        );
+      });
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('You are now friends.')));
-      await _load();
+      await _updates.refresh();
     } on ApiException catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(error.message)));
       }
+    } finally {
+      if (mounted) setState(() => _pendingRequests.remove(requestId));
     }
   }
 
   Future<void> _declineRequest(String requestId) async {
+    if (!_pendingRequests.add(requestId)) return;
+    setState(() {});
     try {
       await ApiService.instance.declineFriendRequest(requestId);
-      await _load();
+      if (!mounted) return;
+      setState(() {
+        final overview = _overview;
+        if (overview == null) return;
+        _resolvedRequests.add(requestId);
+        _overview = FriendsOverview(
+          friends: overview.friends,
+          incomingRequests: overview.incomingRequests
+              .where((request) => request.requestId != requestId)
+              .toList(),
+          outgoingRequests: overview.outgoingRequests,
+        );
+      });
+      await _updates.refresh();
     } on ApiException catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(error.message)));
       }
+    } finally {
+      if (mounted) setState(() => _pendingRequests.remove(requestId));
     }
   }
 
@@ -224,8 +310,8 @@ class _FriendsScreenState extends State<FriendsScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('Group created.')));
-      await _load();
-      _tabs.animateTo(2);
+      await _updates.refresh();
+      if (mounted) _tabs.animateTo(2);
     } on ApiException catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -236,8 +322,8 @@ class _FriendsScreenState extends State<FriendsScreen>
     }
   }
 
-  void _openFriend(SocialUser friend) {
-    Navigator.push(
+  Future<void> _openFriend(SocialUser friend) async {
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => ConversationScreen.direct(
@@ -246,10 +332,11 @@ class _FriendsScreenState extends State<FriendsScreen>
         ),
       ),
     );
+    if (mounted) unawaited(_updates.refresh());
   }
 
-  void _openGroup(ChatGroup group) {
-    Navigator.push(
+  Future<void> _openGroup(ChatGroup group) async {
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => ConversationScreen.group(
@@ -258,13 +345,18 @@ class _FriendsScreenState extends State<FriendsScreen>
         ),
       ),
     );
+    if (mounted) unawaited(_updates.refresh());
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('Friends'),
+        backgroundColor: ChatColors.header,
+        foregroundColor: Colors.white,
+        title:
+            Text(chatLabel(context, 'Chats & friends', 'Discussions et amis')),
         actions: [
           IconButton(
             tooltip: 'Enable call notifications',
@@ -284,6 +376,9 @@ class _FriendsScreenState extends State<FriendsScreen>
         ],
         bottom: TabBar(
           controller: _tabs,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white70,
+          indicatorColor: Colors.white,
           tabs: [
             const Tab(text: 'Friends'),
             Tab(
@@ -298,14 +393,21 @@ class _FriendsScreenState extends State<FriendsScreen>
       body: _loading
           ? const Center(
               child: CircularProgressIndicator(color: AppColors.ochre))
-          : _error != null
-              ? _FailureState(message: _error!, onRetry: _load)
-              : TabBarView(
-                  controller: _tabs,
+          : _error != null && _overview == null
+              ? _FailureState(message: _error!, onRetry: _updates.refreshFromNetwork)
+              : Column(
                   children: [
-                    _friendsTab(),
-                    _requestsTab(),
-                    _groupsTab(),
+                    if (_error != null)
+                      ChatNotice(message: _error!, onRetry: _updates.refreshFromNetwork),
+                    Expanded(
+                        child: TabBarView(
+                      controller: _tabs,
+                      children: [
+                        _friendsTab(),
+                        _requestsTab(),
+                        _groupsTab(),
+                      ],
+                    )),
                   ],
                 ),
     );
@@ -323,8 +425,9 @@ class _FriendsScreenState extends State<FriendsScreen>
       );
     }
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: _updates.refreshFromNetwork,
       child: ListView.separated(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
         itemCount: friends.length,
         separatorBuilder: (_, __) => const Divider(height: 1),
@@ -333,9 +436,12 @@ class _FriendsScreenState extends State<FriendsScreen>
           return ListTile(
             contentPadding: const EdgeInsets.symmetric(vertical: 8),
             leading: _UserAvatar(user: friend, radius: 25),
-            title: Text(friend.fullName),
-            subtitle: Text('@${friend.username}'),
-            trailing: const Icon(Icons.chevron_right_rounded),
+            title: Text(friend.fullName,
+                style: const TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: Text('@${friend.username}',
+                style: const TextStyle(color: ChatColors.muted)),
+            trailing: const Icon(Icons.chat_bubble_outline_rounded,
+                size: 20, color: ChatColors.header),
             onTap: () => _openFriend(friend),
           );
         },
@@ -354,8 +460,9 @@ class _FriendsScreenState extends State<FriendsScreen>
       );
     }
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: _updates.refreshFromNetwork,
       child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
         children: [
           if (incoming.isNotEmpty) ...[
@@ -368,22 +475,29 @@ class _FriendsScreenState extends State<FriendsScreen>
                   leading: _UserAvatar(user: request.user, radius: 23),
                   title: Text(request.user.fullName),
                   subtitle: Text('@${request.user.username} wants to connect'),
-                  trailing: Wrap(
-                    spacing: 4,
-                    children: [
-                      IconButton(
-                        tooltip: 'Ignore',
-                        onPressed: () => _declineRequest(request.requestId),
-                        icon: const Icon(Icons.close_rounded),
-                      ),
-                      IconButton(
-                        tooltip: 'Accept',
-                        onPressed: () => _acceptRequest(request.requestId),
-                        icon: const Icon(Icons.check_rounded,
-                            color: AppColors.ochre),
-                      ),
-                    ],
-                  ),
+                  trailing: _pendingRequests.contains(request.requestId)
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : Wrap(
+                          spacing: 4,
+                          children: [
+                            IconButton(
+                              tooltip: 'Ignore',
+                              onPressed: () =>
+                                  _declineRequest(request.requestId),
+                              icon: const Icon(Icons.close_rounded),
+                            ),
+                            IconButton(
+                              tooltip: 'Accept',
+                              onPressed: () =>
+                                  _acceptRequest(request.requestId),
+                              icon: const Icon(Icons.check_rounded,
+                                  color: AppColors.ochre),
+                            ),
+                          ],
+                        ),
                 ),
               ),
             ),
@@ -418,8 +532,9 @@ class _FriendsScreenState extends State<FriendsScreen>
       );
     }
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: _updates.refreshFromNetwork,
       child: ListView.separated(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
         itemCount: _groups.length,
         separatorBuilder: (_, __) => const Divider(height: 1),
@@ -429,12 +544,15 @@ class _FriendsScreenState extends State<FriendsScreen>
             contentPadding: const EdgeInsets.symmetric(vertical: 8),
             leading: CircleAvatar(
               radius: 25,
-              backgroundColor: AppColors.ochre.withValues(alpha: 0.2),
-              child: const Icon(Icons.groups_rounded, color: AppColors.ochre),
+              backgroundColor: ChatColors.header.withValues(alpha: 0.15),
+              child: const Icon(Icons.groups_rounded, color: ChatColors.header),
             ),
-            title: Text(group.name),
-            subtitle: Text('${group.members.length} members'),
-            trailing: const Icon(Icons.chevron_right_rounded),
+            title: Text(group.name,
+                style: const TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: Text('${group.members.length} members',
+                style: const TextStyle(color: ChatColors.muted)),
+            trailing: const Icon(Icons.chat_bubble_outline_rounded,
+                size: 20, color: ChatColors.header),
             onTap: () => _openGroup(group),
           );
         },
@@ -470,10 +588,17 @@ class _ConversationScreenState extends State<ConversationScreen> {
   final _composer = TextEditingController();
   final _scrollController = ScrollController();
   List<SocialMessage> _messages = [];
-  Timer? _poller;
+  String? _oldestCursor;
+  bool _loadingOlder = false;
+  bool _canLoadOlder = false;
+  bool _historyLoaded = false;
+  late final ChatRefreshController _updates;
   bool _loading = true;
   bool _sending = false;
   String? _error;
+  String? _sendError;
+  Future<void> Function()? _retrySend;
+  bool _hasNewMessages = false;
 
   // Sticker + emoji picker state — only one of these is open at a time
   // so the composer stays usable and the keyboard has room to appear.
@@ -492,12 +617,29 @@ class _ConversationScreenState extends State<ConversationScreen> {
   @override
   void initState() {
     super.initState();
-    _load(initial: true);
+    _updates = ChatRefreshController(
+      changes: ApiService.instance.changes,
+      topics: const {'friends'},
+      isLive: () => ApiService.instance.isLive,
+      isVisible: () =>
+          mounted &&
+          TickerMode.of(context) &&
+          (ModalRoute.of(context)?.isCurrent ?? true),
+      load: _load,
+      invalidate: ApiService.instance.refreshTopics,
+    )..start();
     CallCoordinator.instance.beforeConnect = _releaseMicrophoneForCall;
-    _poller = Timer.periodic(
-      const Duration(seconds: 4),
-      (_) => _load(),
-    );
+    _scrollController.addListener(() {
+      if (_hasNewMessages && _nearBottom) {
+        setState(() => _hasNewMessages = false);
+      }
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _updates.visibilityChanged();
   }
 
   @override
@@ -505,7 +647,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
     if (CallCoordinator.instance.beforeConnect == _releaseMicrophoneForCall) {
       CallCoordinator.instance.beforeConnect = null;
     }
-    _poller?.cancel();
+    _updates.dispose();
     _recordingTicker?.cancel();
     unawaited(_disposeRecorder());
     _composer.dispose();
@@ -524,28 +666,51 @@ class _ConversationScreenState extends State<ConversationScreen> {
     }
   }
 
-  Future<void> _load({bool initial = false}) async {
+  bool get _nearBottom =>
+      !_scrollController.hasClients ||
+      _scrollController.position.extentAfter < 96;
+
+  List<SocialMessage> _merge(Iterable<SocialMessage> incoming) =>
+      mergeChatMessages(_messages, incoming,
+          id: (message) => message.id,
+          createdAt: (message) => message.createdAt);
+
+  Future<void> _load() async {
+    if (_loadingOlder) return;
+    final initial = _loading;
     try {
       final messages = widget.isGroup
           ? await ApiService.instance.getGroupMessages(widget.group!.id)
           : await ApiService.instance.getDirectMessages(widget.friend!.id);
       if (!mounted) return;
-      final added = messages.length > _messages.length;
+      final ids = _messages.map((message) => message.id).toSet();
+      final added = messages.any((message) => !ids.contains(message.id));
+      final follow = initial || _nearBottom;
       setState(() {
-        _messages = messages;
+        _messages = _merge(messages);
+        if (messages.isNotEmpty) _oldestCursor ??= messages.first.id;
+        if (!_historyLoaded) _canLoadOlder = messages.length >= 50;
         _error = null;
+        if (added && !follow) _hasNewMessages = true;
       });
-      if (initial || added) _scrollToBottom();
+      if (follow && (initial || added)) _scrollToBottom();
+      if (_stickers == null &&
+          !_loadingStickers &&
+          messages.any((message) => message.type == 'sticker')) {
+        unawaited(_loadStickers());
+      }
     } on ApiException catch (error) {
-      if (mounted && initial) setState(() => _error = error.message);
+      if (mounted) {
+        setState(() => _error = error.message);
+      }
     } finally {
-      if (mounted && initial) setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scrollController.hasClients) return;
+      if (!mounted || !_scrollController.hasClients) return;
       _scrollController.animateTo(
         _scrollController.position.maxScrollExtent,
         duration: const Duration(milliseconds: 180),
@@ -554,53 +719,108 @@ class _ConversationScreenState extends State<ConversationScreen> {
     });
   }
 
-  Future<void> _send() async {
-    final text = _composer.text.trim();
-    if (text.isEmpty || _sending) return;
-    _composer.clear();
-    setState(() => _sending = true);
+  Future<void> _loadOlder() async {
+    if (_loadingOlder || !_canLoadOlder || _oldestCursor == null) return;
+    setState(() => _loadingOlder = true);
     try {
-      final message = widget.isGroup
-          ? await ApiService.instance
-              .sendGroupMessage(widget.group!.id, text: text)
-          : await ApiService.instance
-              .sendDirectMessage(widget.friend!.id, text: text);
+      final older = widget.isGroup
+          ? await ApiService.instance.getGroupMessages(widget.group!.id, before: _oldestCursor)
+          : await ApiService.instance.getDirectMessages(widget.friend!.id, before: _oldestCursor);
       if (!mounted) return;
-      setState(() => _messages = [..._messages, message]);
-      _scrollToBottom();
+      final position = _scrollController.hasClients ? _scrollController.position.pixels : 0.0;
+      final extent = _scrollController.hasClients ? _scrollController.position.maxScrollExtent : 0.0;
+      setState(() {
+        _messages = mergeChatMessages(older, _messages,
+            id: (message) => message.id, createdAt: (message) => message.createdAt);
+        if (older.isNotEmpty) _oldestCursor = older.first.id;
+        _historyLoaded = true;
+        _canLoadOlder = older.length >= 50;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_scrollController.hasClients) return;
+        final current = _scrollController.position;
+        _scrollController.jumpTo((position + current.maxScrollExtent - extent)
+            .clamp(0.0, current.maxScrollExtent));
+      });
     } on ApiException catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.message)));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(error.message),
+          action: SnackBarAction(label: chatLabel(context, 'Retry', 'Reessayer'), onPressed: _loadOlder),
+        ));
       }
+    } finally {
+      if (mounted) {
+        setState(() => _loadingOlder = false);
+        unawaited(_updates.refresh());
+      }
+    }
+  }
+
+  Future<void> _send() async {
+    final draft = _composer.text;
+    if (draft.trim().isEmpty || _sending || _uploadingVoice || _recording)
+      return;
+    await _sendMessage(
+      () => widget.isGroup
+          ? ApiService.instance
+              .sendGroupMessage(widget.group!.id, text: draft.trim())
+          : ApiService.instance
+              .sendDirectMessage(widget.friend!.id, text: draft.trim()),
+      draft: draft,
+      retry: _send,
+    );
+  }
+
+  Future<void> _sendMessage(
+    Future<SocialMessage> Function() send, {
+    String? draft,
+    Future<void> Function()? retry,
+  }) async {
+    if (_sending || !mounted) return;
+    setState(() {
+      _sending = true;
+      _sendError = null;
+      _retrySend = null;
+    });
+    try {
+      final message = await send();
+      if (!mounted) return;
+      setState(() {
+        _messages = _merge([message]);
+        if (draft != null && _composer.text == draft) _composer.clear();
+        _hasNewMessages = false;
+      });
+      _scrollToBottom();
+    } on ApiException {
+      if (!mounted) return;
+      setState(() {
+        _sendError = chatLabel(
+            context,
+            'Send not confirmed. Your draft is kept. Check the chat before retrying.',
+            'Envoi non confirmé. Brouillon conservé. Vérifiez la discussion avant de réessayer.');
+        _retrySend = retry ?? () => _sendMessage(send, draft: draft);
+      });
+      unawaited(_updates.refreshFromNetwork());
     } finally {
       if (mounted) setState(() => _sending = false);
     }
   }
 
+  Future<void> _retryFailedSend() async {
+    final retry = _retrySend;
+    if (retry == null || _sending || _uploadingVoice || _recording) return;
+    if (await confirmChatRetry(context) && mounted) await retry();
+  }
+
   Future<void> _sendSticker(ChatSticker sticker) async {
-    if (_sending) return;
-    setState(() {
-      _sending = true;
-      _openPicker = _PickerPanel.none;
-    });
-    try {
-      final message = widget.isGroup
-          ? await ApiService.instance
-              .sendGroupMessage(widget.group!.id, stickerId: sticker.id)
-          : await ApiService.instance
-              .sendDirectMessage(widget.friend!.id, stickerId: sticker.id);
-      if (!mounted) return;
-      setState(() => _messages = [..._messages, message]);
-      _scrollToBottom();
-    } on ApiException catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.message)));
-      }
-    } finally {
-      if (mounted) setState(() => _sending = false);
-    }
+    if (_sending || _uploadingVoice || _recording) return;
+    setState(() => _openPicker = _PickerPanel.none);
+    await _sendMessage(() => widget.isGroup
+        ? ApiService.instance
+            .sendGroupMessage(widget.group!.id, stickerId: sticker.id)
+        : ApiService.instance
+            .sendDirectMessage(widget.friend!.id, stickerId: sticker.id));
   }
 
   Future<void> _togglePicker(_PickerPanel panel) async {
@@ -614,18 +834,20 @@ class _ConversationScreenState extends State<ConversationScreen> {
     if (_openPicker == _PickerPanel.stickers &&
         _stickers == null &&
         !_loadingStickers) {
-      setState(() => _loadingStickers = true);
-      try {
-        final stickers = await ApiService.instance.getStickers();
-        if (mounted) setState(() => _stickers = stickers);
-      } on ApiException catch (error) {
-        if (mounted) {
-          ScaffoldMessenger.of(context)
-              .showSnackBar(SnackBar(content: Text(error.message)));
-        }
-      } finally {
-        if (mounted) setState(() => _loadingStickers = false);
-      }
+      await _loadStickers();
+    }
+  }
+
+  Future<void> _loadStickers() async {
+    if (_loadingStickers) return;
+    setState(() => _loadingStickers = true);
+    try {
+      final stickers = await ApiService.instance.getStickers();
+      if (mounted) setState(() => _stickers = stickers);
+    } catch (_) {
+      // Opening the sticker picker offers another attempt.
+    } finally {
+      if (mounted) setState(() => _loadingStickers = false);
     }
   }
 
@@ -651,7 +873,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
   }
 
   Future<void> _startRecordingImpl() async {
-    if (_recording || _uploadingVoice) return;
+    if (_recording || _uploadingVoice || _sending) return;
     if (CallCoordinator.instance.isInCall) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -769,26 +991,30 @@ class _ConversationScreenState extends State<ConversationScreen> {
           ? _recordingElapsed.inMilliseconds
           : 1000;
 
-      final uploaded = await ApiService.instance.uploadVoiceMessage(
-        bytes: bytes,
-        filename: filename,
-        durationMs: durationMs,
-      );
-
-      final message = widget.isGroup
-          ? await ApiService.instance.sendGroupMessage(
-              widget.group!.id,
-              voiceUrl: uploaded.url,
-              voiceDurationMs: uploaded.durationMs,
-            )
-          : await ApiService.instance.sendDirectMessage(
-              widget.friend!.id,
-              voiceUrl: uploaded.url,
-              voiceDurationMs: uploaded.durationMs,
-            );
-      if (!mounted) return;
-      setState(() => _messages = [..._messages, message]);
-      _scrollToBottom();
+      String? uploadedUrl;
+      int? uploadedDuration;
+      await _sendMessage(() async {
+        if (uploadedUrl == null) {
+          final uploaded = await ApiService.instance.uploadVoiceMessage(
+            bytes: bytes,
+            filename: filename,
+            durationMs: durationMs,
+          );
+          uploadedUrl = uploaded.url;
+          uploadedDuration = uploaded.durationMs;
+        }
+        return widget.isGroup
+            ? ApiService.instance.sendGroupMessage(
+                widget.group!.id,
+                voiceUrl: uploadedUrl,
+                voiceDurationMs: uploadedDuration,
+              )
+            : ApiService.instance.sendDirectMessage(
+                widget.friend!.id,
+                voiceUrl: uploadedUrl,
+                voiceDurationMs: uploadedDuration,
+              );
+      });
     } on ApiException catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -856,10 +1082,10 @@ class _ConversationScreenState extends State<ConversationScreen> {
     final myId = widget.session.currentUser?.id;
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: ChatColors.background,
       appBar: AppBar(
         titleSpacing: 0,
-        backgroundColor: AppColors.canopy.withValues(alpha: 0.92),
+        backgroundColor: ChatColors.header,
         foregroundColor: Colors.white,
         title: Row(
           children: [
@@ -902,6 +1128,11 @@ class _ConversationScreenState extends State<ConversationScreen> {
         ),
         actions: [
           IconButton(
+            tooltip: chatLabel(context, 'Refresh messages', 'Actualiser les messages'),
+            onPressed: _updates.refreshFromNetwork,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+          IconButton(
             tooltip: 'Voice call',
             onPressed: () => _startCall(CallKind.voice),
             icon: const Icon(Icons.call_rounded),
@@ -916,38 +1147,51 @@ class _ConversationScreenState extends State<ConversationScreen> {
       ),
       body: Column(
         children: [
+          if (_error != null && _messages.isNotEmpty)
+            ChatNotice(message: _error!, onRetry: _updates.refreshFromNetwork),
           Expanded(
-            // The global AppBackground photo shows through this screen,
-            // which left bare bubbles floating unreadably over the
-            // cityscape. A soft dark veil restores contrast for the
-            // message column while keeping the backdrop visible.
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    AppColors.canopy.withValues(alpha: 0.82),
-                    AppColors.canopy.withValues(alpha: 0.72),
-                    AppColors.canopy.withValues(alpha: 0.86),
-                  ],
-                ),
-              ),
+            child: ColoredBox(
+              color: ChatColors.background,
               child: _loading
                   ? const Center(
                       child: CircularProgressIndicator(color: AppColors.ochre))
-                  : _error != null
+                  : _error != null && _messages.isEmpty
                       ? _FailureState(
-                          message: _error!, onRetry: () => _load(initial: true))
+                          message: _error!, onRetry: _updates.refreshFromNetwork)
                       : _messages.isEmpty
                           ? _emptyConversation(title)
                           : _messageList(myId),
             ),
           ),
+          if (_hasNewMessages)
+            Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: Padding(
+                padding: const EdgeInsetsDirectional.only(end: 12),
+                child: FilledButton.tonalIcon(
+                  onPressed: () {
+                    setState(() => _hasNewMessages = false);
+                    _scrollToBottom();
+                  },
+                  icon: const Icon(Icons.arrow_downward_rounded, size: 18),
+                  label:
+                      Text(chatLabel(context, 'New messages', 'Nouveaux messages')),
+                ),
+              ),
+            ),
+          if (_sendError != null)
+            ChatNotice(
+              message: _sendError!,
+              onRetry: _sending || _uploadingVoice ? null : _retryFailedSend,
+              onDismiss: () => setState(() {
+                _sendError = null;
+                _retrySend = null;
+              }),
+            ),
           if (_openPicker == _PickerPanel.emoji) _emojiPanel(),
           if (_openPicker == _PickerPanel.stickers) _stickerPanel(),
           Container(
-            color: AppColors.sand,
+            color: Colors.white,
             child: SafeArea(
               top: false,
               child: Padding(
@@ -964,9 +1208,25 @@ class _ConversationScreenState extends State<ConversationScreen> {
   Widget _messageList(String? myId) {
     return ListView.builder(
       controller: _scrollController,
+      findChildIndexCallback: (key) {
+        if (key is! ValueKey<String>) return null;
+        final index =
+            _messages.indexWhere((message) => message.id == key.value);
+        return index < 0 ? null : index + 1;
+      },
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: const EdgeInsets.fromLTRB(12, 16, 12, 16),
-      itemCount: _messages.length,
-      itemBuilder: (_, index) {
+      itemCount: _messages.length + 1,
+      itemBuilder: (_, itemIndex) {
+        if (itemIndex == 0) {
+          return Center(child: _loadingOlder
+              ? const Padding(padding: EdgeInsets.all(8), child: CircularProgressIndicator())
+              : _canLoadOlder
+                  ? TextButton.icon(onPressed: _loadOlder, icon: const Icon(Icons.history),
+                      label: Text(chatLabel(context, 'Load older messages', 'Messages precedents')))
+                  : const SizedBox.shrink());
+        }
+        final index = itemIndex - 1;
         final message = _messages[index];
         final mine = message.senderId == myId;
         final previous = index == 0 ? null : _messages[index - 1];
@@ -977,14 +1237,18 @@ class _ConversationScreenState extends State<ConversationScreen> {
         // first carries the sender name — the classic messaging-app
         // grouping that stops a burst of replies looking like a column
         // of disconnected cards.
-        final isRunStart =
-            previous == null || previous.senderId != message.senderId;
-        final isRunEnd = next == null || next.senderId != message.senderId;
+        final isRunStart = previous == null ||
+            previous.senderId != message.senderId ||
+            !sameChatRun(previous.createdAt, message.createdAt);
+        final isRunEnd = next == null ||
+            next.senderId != message.senderId ||
+            !sameChatRun(message.createdAt, next.createdAt);
 
         return Column(
+          key: ValueKey(message.id),
           children: [
-            if (_needsDateSeparator(previous, message))
-              _DateSeparator(label: _dayLabel(message.createdAt)),
+            if (startsChatDay(previous?.createdAt, message.createdAt))
+              ChatDateSeparator(timestamp: message.createdAt),
             _MessageBubble(
               message: message,
               mine: mine,
@@ -1011,18 +1275,18 @@ class _ConversationScreenState extends State<ConversationScreen> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: AppColors.ochre.withValues(alpha: 0.16),
+                color: ChatColors.header.withValues(alpha: 0.12),
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.waving_hand_rounded,
-                  color: AppColors.ochre, size: 34),
+                  color: ChatColors.header, size: 34),
             ),
             const SizedBox(height: 18),
             Text(
               widget.isGroup ? 'Say hello to the group' : 'Say hello to $first',
               textAlign: TextAlign.center,
               style: const TextStyle(
-                color: Colors.white,
+                color: ChatColors.ink,
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
               ),
@@ -1033,7 +1297,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
               'Tap the call buttons above to ring them instead.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.7),
+                color: ChatColors.muted,
                 fontSize: 13,
                 height: 1.4,
               ),
@@ -1042,31 +1306,6 @@ class _ConversationScreenState extends State<ConversationScreen> {
         ),
       ),
     );
-  }
-
-  bool _needsDateSeparator(SocialMessage? previous, SocialMessage current) {
-    final currentDay = _dayKey(current.createdAt);
-    if (currentDay == null) return false;
-    if (previous == null) return true;
-    return _dayKey(previous.createdAt) != currentDay;
-  }
-
-  String? _dayKey(String iso) {
-    final parsed = DateTime.tryParse(iso)?.toLocal();
-    if (parsed == null) return null;
-    return '${parsed.year}-${parsed.month}-${parsed.day}';
-  }
-
-  String _dayLabel(String iso) {
-    final parsed = DateTime.tryParse(iso)?.toLocal();
-    if (parsed == null) return '';
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final that = DateTime(parsed.year, parsed.month, parsed.day);
-    final diff = today.difference(that).inDays;
-    if (diff == 0) return 'Today';
-    if (diff == 1) return 'Yesterday';
-    return MaterialLocalizations.of(context).formatMediumDate(parsed);
   }
 
   Widget _composerBar() {
@@ -1100,9 +1339,16 @@ class _ConversationScreenState extends State<ConversationScreen> {
             textCapitalization: TextCapitalization.sentences,
             onTap: () => setState(() => _openPicker = _PickerPanel.none),
             onSubmitted: (_) => _send(),
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               hintText: 'Write a message',
-              border: OutlineInputBorder(),
+              filled: true,
+              fillColor: ChatColors.background,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(24),
+                borderSide: BorderSide.none,
+              ),
               isDense: true,
             ),
           ),
@@ -1119,14 +1365,26 @@ class _ConversationScreenState extends State<ConversationScreen> {
             if (hasText) {
               return IconButton.filled(
                 tooltip: 'Send message',
+                style: IconButton.styleFrom(
+                    backgroundColor: ChatColors.header,
+                    foregroundColor: Colors.white),
                 onPressed: canSendText ? _send : null,
-                icon: const Icon(Icons.send_rounded),
+                icon: _sending
+                    ? const SizedBox(
+                        height: 18,
+                        width: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.send_rounded),
               );
             }
             return IconButton.filled(
               tooltip: 'Record voice message',
-              onPressed: _uploadingVoice ? null : _startRecording,
-              icon: _uploadingVoice
+              style: IconButton.styleFrom(
+                  backgroundColor: ChatColors.header,
+                  foregroundColor: Colors.white),
+              onPressed: canSendText ? _startRecording : null,
+              icon: _uploadingVoice || _sending
                   ? const SizedBox(
                       width: 18,
                       height: 18,
@@ -1401,8 +1659,8 @@ class _MessageBubbleState extends State<_MessageBubble> {
     // one-shot reactions.
     if (message.type == 'sticker') return _buildSticker(context, message);
 
-    final color = widget.mine ? AppColors.ochre : AppColors.sand;
-    final textColor = widget.mine ? Colors.white : AppColors.ink;
+    final color = widget.mine ? ChatColors.outgoing : Colors.white;
+    const textColor = ChatColors.ink;
 
     Widget content;
     if (message.type == 'voice' && (message.voiceUrl ?? '').isNotEmpty) {
@@ -1434,9 +1692,9 @@ class _MessageBubbleState extends State<_MessageBubble> {
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.16),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 2,
+            offset: const Offset(0, 1),
           ),
         ],
       ),
@@ -1532,7 +1790,7 @@ class _MessageBubbleState extends State<_MessageBubble> {
           Text(
             _formatClock(message.createdAt),
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.6),
+              color: ChatColors.muted,
               fontSize: 10.5,
               fontWeight: FontWeight.w500,
             ),
@@ -1640,10 +1898,6 @@ class _AvatarRow extends StatelessWidget {
             const SizedBox(width: 8),
           ],
           Flexible(child: child),
-          if (mine) ...[
-            const SizedBox(width: 8),
-            slot,
-          ],
         ],
       ),
     );
@@ -1679,7 +1933,7 @@ class _ConversationAvatar extends StatelessWidget {
       // message list, so full-resolution avatars would be pure waste.
       backgroundImage: hasImage
           ? ResizeImage(
-              NetworkImage(ApiService.resolveUrl(avatarUrl!)),
+              MediaCache.imageProvider(ApiService.resolveUrl(avatarUrl!), cacheWidth: 96),
               width: (radius * 4).round(),
             )
           : null,
@@ -1700,40 +1954,6 @@ class _ConversationAvatar extends StatelessWidget {
   }
 }
 
-// "Today" / "Yesterday" / "12 Mar 2026" chip that breaks the message
-// list into days.
-class _DateSeparator extends StatelessWidget {
-  final String label;
-
-  const _DateSeparator({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    if (label.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Center(
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.32),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.82),
-              fontSize: 11.5,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _UserAvatar extends StatelessWidget {
   final SocialUser user;
   final double radius;
@@ -1750,7 +1970,7 @@ class _UserAvatar extends StatelessWidget {
       backgroundColor: AppColors.ochre.withValues(alpha: 0.2),
       backgroundImage: user.avatarUrl == null
           ? null
-          : NetworkImage(ApiService.resolveUrl(user.avatarUrl!)),
+          : MediaCache.imageProvider(ApiService.resolveUrl(user.avatarUrl!), cacheWidth: 96),
       child: user.avatarUrl == null
           ? Text(initials,
               style: const TextStyle(

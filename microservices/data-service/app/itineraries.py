@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends
 
 from .security import get_current_user
 from .models import ItineraryCreate, load_itineraries, save_itineraries
+from .event_store import publish
 
 router = APIRouter()
 
@@ -34,6 +35,7 @@ def create_itinerary(payload: ItineraryCreate, current_user: dict = Depends(get_
     }
     itineraries.append(itinerary)
     save_itineraries(itineraries)
+    publish(["itineraries"], [current_user["id"]])
     return itinerary
 
 

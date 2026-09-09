@@ -2,7 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import '../Services/api_service.dart';
+import '../Services/media_cache.dart';
+import '../Services/media_settings.dart';
 import '../theme/app_theme.dart';
+import 'public_network_image.dart';
 
 /// Full-bleed rotating photo background used only by login and registration.
 /// It fills its parent with cover-fit imagery and crossfades every 5 seconds.
@@ -36,7 +39,7 @@ class _AuthBackgroundState extends State<AuthBackground> {
     // connection.
     WidgetsBinding.instance.addPostFrameCallback((_) => _precache(_next()));
     _timer = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (!mounted) return;
+      if (!mounted || MediaSettings.instance.dataSaver) return;
       setState(() => _index = _next());
       _precache(_next());
     });
@@ -45,8 +48,9 @@ class _AuthBackgroundState extends State<AuthBackground> {
   int _next() => (_index + 1) % _images.length;
 
   void _precache(int index) {
-    if (!mounted) return;
-    precacheImage(NetworkImage(ApiService.resolveUrl(_images[index])), context);
+    if (!mounted || MediaSettings.instance.dataSaver) return;
+    precacheImage(
+        MediaCache.imageProvider(ApiService.resolveUrl(_images[index])), context);
   }
 
   @override
@@ -62,7 +66,7 @@ class _AuthBackgroundState extends State<AuthBackground> {
         Positioned.fill(
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 900),
-            child: Image.network(
+            child: PublicNetworkImage(
               ApiService.resolveUrl(_images[_index]),
               key: ValueKey(_index),
               fit: BoxFit.cover,

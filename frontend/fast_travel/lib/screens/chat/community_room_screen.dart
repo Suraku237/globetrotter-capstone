@@ -9,10 +9,12 @@ import 'package:image_picker/image_picker.dart';
 import 'package:record/record.dart';
 
 import '../../Services/api_service.dart';
+import '../../Services/media_cache.dart';
 import '../../Services/session_state.dart';
 import '../../models/models.dart';
 import '../../theme/app_theme.dart';
 import 'audio_capture_web.dart' if (dart.library.io) 'audio_capture_io.dart';
+import 'chat_ui.dart';
 
 // Curated sticker set — same list as before, kept small so the picker
 // stays a quick emoji pad rather than a full keyboard.
@@ -48,11 +50,7 @@ const _kRoomStickers = [
 // out of scope and rarely used.
 const _kQuickReactions = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
-/// A single public room every user is implicitly in. This is now the app's
-/// only chat surface — 1:1 DMs were removed in favour of "everyone in the
-/// same conversation, WhatsApp-community-style". The screen aims to feel
-/// close to WhatsApp: image/voice/sticker/text messages, reply, react,
-/// delete, copy, in-thread search, and a lightweight presence indicator.
+/// One public conversation for everyone signed in, alongside private chats.
 class CommunityRoomScreen extends StatefulWidget {
   final SessionState session;
 
@@ -67,10 +65,12 @@ class _CommunityRoomScreenState extends State<CommunityRoomScreen> {
   final _searchController = TextEditingController();
   final _scrollController = ScrollController();
   final _recorder = AudioRecorder();
-  final _player = AudioPlayer();
+  AudioPlayer? _player;
+  StreamSubscription<void>? _playerComplete;
   final _imagePicker = ImagePicker();
 
   List<RoomMessage> _messages = [];
+  String? _oldestCursor;
   RoomPresence _presence = const RoomPresence(count: 0, users: []);
   bool _loading = true;
   bool _sending = false;
@@ -80,30 +80,44 @@ class _CommunityRoomScreenState extends State<CommunityRoomScreen> {
   String _searchQuery = '';
   String? _playingMessageId;
   RoomMessage? _replyingTo;
-  Timer? _pollTimer;
+  late final ChatRefreshController _updates;
   Timer? _heartbeatTimer;
+  bool _heartbeatInFlight = false;
+  DateTime? _lastPresenceRead;
+  bool _loadingOlder = false;
+  bool _historyLoaded = false;
+  bool _canLoadOlder = false;
+  bool _hasNewMessages = false;
+  String? _loadError;
+  String? _sendError;
+  Future<void> Function()? _retrySend;
 
   @override
   void initState() {
     super.initState();
-    _load(initial: true);
-    // Poll for new messages and presence updates. A real-time transport
-    // (websockets/SSE) would be nicer but is out of scope — the 4 s
-    // cadence is close enough to feel live in practice and matches what
-    // every other screen in the app already does.
-    _pollTimer = Timer.periodic(
-      const Duration(seconds: 4),
-      (_) => _refreshInBackground(),
-    );
+    _updates = ChatRefreshController(
+      changes: ApiService.instance.changes,
+      topics: const {'chat'},
+      isLive: () => ApiService.instance.isLive,
+      isVisible: () =>
+          mounted &&
+          TickerMode.of(context) &&
+          (ModalRoute.of(context)?.isCurrent ?? true),
+      load: _load,
+      invalidate: ApiService.instance.refreshTopics,
+      onResume: () => _sendHeartbeat(),
+    )..start();
     // The server prunes stale entries after ~15 s, so a 5 s heartbeat
     // keeps this viewer in the "active now" list without spamming.
     _heartbeatTimer = Timer.periodic(
       const Duration(seconds: 5),
       (_) => _sendHeartbeat(),
     );
-    _sendHeartbeat();
-    _player.onPlayerComplete.listen((_) {
-      if (mounted) setState(() => _playingMessageId = null);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _sendHeartbeat());
+    _scrollController.addListener(() {
+      if (_hasNewMessages && _nearBottom) {
+        setState(() => _hasNewMessages = false);
+      }
     });
     _searchController.addListener(() {
       final q = _searchController.text.trim();
@@ -113,70 +127,133 @@ class _CommunityRoomScreenState extends State<CommunityRoomScreen> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _updates.visibilityChanged();
+  }
+
+  @override
   void dispose() {
-    _pollTimer?.cancel();
+    _updates.dispose();
     _heartbeatTimer?.cancel();
     _textController.dispose();
     _searchController.dispose();
     _scrollController.dispose();
     _recorder.dispose();
-    _player.dispose();
+    _playerComplete?.cancel();
+    _player?.dispose();
     super.dispose();
   }
 
   // ---- Data ---------------------------------------------------------------
 
-  Future<void> _load({bool initial = false}) async {
+  bool get _nearBottom =>
+      !_scrollController.hasClients ||
+      _scrollController.position.extentAfter < 96;
+
+  List<RoomMessage> _merge(Iterable<RoomMessage> incoming) =>
+      mergeChatMessages(_messages, incoming,
+          id: (message) => message.id,
+          createdAt: (message) => message.createdAt);
+
+  Future<void> _load() async {
+    if (_loadingOlder) return;
+    final initial = _loading;
     try {
-      final results = await Future.wait([
-        ApiService.instance.getRoomMessages(),
-        ApiService.instance.getRoomPresence(),
-      ]);
+      final messages = await ApiService.instance.getRoomMessages(limit: 50);
       if (!mounted) return;
-      final messages = results[0] as List<RoomMessage>;
-      final presence = results[1] as RoomPresence;
-      final grew = messages.length > _messages.length;
+      final ids = _messages.map((message) => message.id).toSet();
+      final grew = messages.any((message) => !ids.contains(message.id));
+      final follow = _searchQuery.isEmpty && (initial || _nearBottom);
       setState(() {
-        _messages = messages;
-        _presence = presence;
+        _messages = _merge(messages);
+        if (messages.isNotEmpty) _oldestCursor ??= messages.first.id;
+        _loadError = null;
+        if (!_historyLoaded) _canLoadOlder = messages.length >= 50;
+        if (grew && !follow) _hasNewMessages = true;
       });
-      if (initial || grew) _scrollToBottom(animated: !initial);
-    } catch (_) {
-      // Missed poll — the next one four seconds later probably succeeds.
+      if (follow && (initial || grew)) _scrollToBottom(animated: !initial);
+    } on ApiException {
+      if (mounted) {
+        setState(() => _loadError = chatLabel(
+            context,
+            'Could not refresh. Your messages are still here.',
+            'Actualisation impossible. Vos messages restent disponibles.'));
+      }
     } finally {
-      if (initial && mounted) setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
-  Future<void> _refreshInBackground() async {
-    if (!mounted) return;
+  Future<void> _loadOlder() async {
+    if (_loadingOlder || !_canLoadOlder || _messages.isEmpty) return;
+    setState(() => _loadingOlder = true);
     try {
-      final results = await Future.wait([
-        ApiService.instance.getRoomMessages(),
-        ApiService.instance.getRoomPresence(),
-      ]);
+      await _updates.refresh();
+      if (!mounted || !_canLoadOlder) return;
+      final older = await ApiService.instance
+          .getRoomMessages(before: _oldestCursor, limit: 50);
       if (!mounted) return;
-      final messages = results[0] as List<RoomMessage>;
-      final presence = results[1] as RoomPresence;
-      final grew = messages.length > _messages.length;
+      final position = _scrollController.hasClients
+          ? _scrollController.position.pixels
+          : 0.0;
+      final extent = _scrollController.hasClients
+          ? _scrollController.position.maxScrollExtent
+          : 0.0;
       setState(() {
-        _messages = messages;
-        _presence = presence;
+        _messages = mergeChatMessages(older, _messages,
+            id: (message) => message.id,
+            createdAt: (message) => message.createdAt);
+        if (older.isNotEmpty) _oldestCursor = older.first.id;
+        _historyLoaded = true;
+        _canLoadOlder = older.length >= 50;
       });
-      if (grew) _scrollToBottom();
-    } catch (_) {}
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_scrollController.hasClients) return;
+        final current = _scrollController.position;
+        _scrollController.jumpTo((position + current.maxScrollExtent - extent)
+            .clamp(0.0, current.maxScrollExtent));
+      });
+    } on ApiException {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(chatLabel(context, 'Could not load older messages.',
+              'Impossible de charger les anciens messages.')),
+          action: SnackBarAction(
+              label: chatLabel(context, 'Retry', 'Réessayer'),
+              onPressed: _loadOlder),
+        ));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _loadingOlder = false);
+        unawaited(_updates.refresh());
+      }
+    }
   }
 
   Future<void> _sendHeartbeat() async {
+    if (_heartbeatInFlight || !_updates.active) return;
+    _heartbeatInFlight = true;
     try {
       await ApiService.instance.roomHeartbeat();
-    } catch (_) {}
+      if (_lastPresenceRead == null ||
+          DateTime.now().difference(_lastPresenceRead!).inSeconds >= 15) {
+        final presence = await ApiService.instance.getRoomPresence();
+        if (!mounted) return;
+        _lastPresenceRead = DateTime.now();
+        setState(() => _presence = presence);
+      }
+    } catch (_) {
+      // Presence is best-effort and must not hide cached messages.
+    } finally {
+      _heartbeatInFlight = false;
+    }
   }
 
   void _scrollToBottom({bool animated = true}) {
-    if (!_scrollController.hasClients) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scrollController.hasClients) return;
+      if (!mounted || !_scrollController.hasClients) return;
       final target = _scrollController.position.maxScrollExtent;
       if (animated) {
         _scrollController.animateTo(target,
@@ -189,8 +266,6 @@ class _CommunityRoomScreenState extends State<CommunityRoomScreen> {
 
   // ---- Sending ------------------------------------------------------------
 
-  String? get _replyToId => _replyingTo?.id;
-
   void _startReply(RoomMessage message) {
     setState(() => _replyingTo = message);
   }
@@ -200,47 +275,76 @@ class _CommunityRoomScreenState extends State<CommunityRoomScreen> {
   }
 
   Future<void> _sendText() async {
-    final text = _textController.text.trim();
-    if (text.isEmpty || _sending) return;
-    _textController.clear();
-    setState(() => _sending = true);
+    final draft = _textController.text;
+    if (draft.trim().isEmpty || _sending || _recording) return;
+    final reply = _replyingTo;
+    await _sendMessage(
+      () =>
+          ApiService.instance.sendRoomText(draft.trim(), replyToId: reply?.id),
+      draft: draft,
+      reply: reply,
+      retry: _sendText,
+    );
+  }
+
+  Future<void> _sendMessage(
+    Future<RoomMessage> Function() send, {
+    String? draft,
+    RoomMessage? reply,
+    Future<void> Function()? retry,
+  }) async {
+    if (_sending || !mounted) return;
+    setState(() {
+      _sending = true;
+      _sendError = null;
+      _retrySend = null;
+    });
     try {
-      final message =
-          await ApiService.instance.sendRoomText(text, replyToId: _replyToId);
+      final message = await send();
       if (!mounted) return;
       setState(() {
-        _messages = [..._messages, message];
-        _replyingTo = null;
+        _messages = _merge([message]);
+        if (draft != null && _textController.text == draft) {
+          _textController.clear();
+        }
+        if (_replyingTo?.id == reply?.id) _replyingTo = null;
+        _hasNewMessages = false;
       });
       _scrollToBottom();
-    } on ApiException catch (e) {
+    } on ApiException {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.message)));
+      setState(() {
+        _sendError = chatLabel(
+            context,
+            'Send not confirmed. Your draft is kept. Check the chat before retrying.',
+            'Envoi non confirmé. Brouillon conservé. Vérifiez la discussion avant de réessayer.');
+        _retrySend =
+            retry ?? () => _sendMessage(send, draft: draft, reply: reply);
+      });
+      unawaited(_updates.refreshFromNetwork());
     } finally {
       if (mounted) setState(() => _sending = false);
     }
   }
 
+  Future<void> _retryFailedSend() async {
+    final retry = _retrySend;
+    if (retry == null || _sending) return;
+    if (await confirmChatRetry(context) && mounted) await retry();
+  }
+
   Future<void> _sendSticker(String sticker) async {
+    if (_sending || _recording) return;
+    final reply = _replyingTo;
     setState(() => _showStickers = false);
-    try {
-      final message = await ApiService.instance
-          .sendRoomSticker(sticker, replyToId: _replyToId);
-      if (!mounted) return;
-      setState(() {
-        _messages = [..._messages, message];
-        _replyingTo = null;
-      });
-      _scrollToBottom();
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.message)));
-    }
+    await _sendMessage(
+      () => ApiService.instance.sendRoomSticker(sticker, replyToId: reply?.id),
+      reply: reply,
+    );
   }
 
   Future<void> _toggleRecording() async {
+    if (_sending) return;
     try {
       if (_recording) {
         final path = await _recorder.stop();
@@ -274,8 +378,8 @@ class _CommunityRoomScreenState extends State<CommunityRoomScreen> {
   }
 
   Future<void> _uploadRecording(String path) async {
-    setState(() => _sending = true);
-    try {
+    final reply = _replyingTo;
+    await _sendMessage(() async {
       final Uint8List bytes;
       if (kIsWeb) {
         final res = await http.get(Uri.parse(path));
@@ -283,56 +387,36 @@ class _CommunityRoomScreenState extends State<CommunityRoomScreen> {
       } else {
         bytes = await readAudioBytes(path);
       }
-      final message = await ApiService.instance
-          .sendRoomAudio(bytes, 'voice.m4a', replyToId: _replyToId);
-      if (!mounted) return;
-      setState(() {
-        _messages = [..._messages, message];
-        _replyingTo = null;
-      });
-      _scrollToBottom();
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not send the voice message.')),
-      );
-    } finally {
-      if (mounted) setState(() => _sending = false);
-    }
+      return ApiService.instance
+          .sendRoomAudio(bytes, 'voice.m4a', replyToId: reply?.id);
+    }, reply: reply);
   }
 
   Future<void> _pickAndSendImage(ImageSource source) async {
+    if (_sending || _recording) return;
     try {
       final file = await _imagePicker.pickImage(
         source: source,
         imageQuality: 85,
         maxWidth: 1920,
       );
-      if (file == null) return;
-      setState(() => _sending = true);
-      final bytes = await file.readAsBytes();
-      final message = await ApiService.instance.sendRoomImage(
-        bytes,
-        file.name.isNotEmpty ? file.name : 'photo.jpg',
-        caption: _textController.text.trim().isEmpty
-            ? null
-            : _textController.text.trim(),
-        replyToId: _replyToId,
-      );
-      if (!mounted) return;
-      setState(() {
-        _messages = [..._messages, message];
-        _textController.clear();
-        _replyingTo = null;
-      });
-      _scrollToBottom();
+      if (file == null || !mounted) return;
+      final draft = _textController.text;
+      final reply = _replyingTo;
+      await _sendMessage(() async {
+        final bytes = await file.readAsBytes();
+        return ApiService.instance.sendRoomImage(
+          bytes,
+          file.name.isNotEmpty ? file.name : 'photo.jpg',
+          caption: draft.trim().isEmpty ? null : draft.trim(),
+          replyToId: reply?.id,
+        );
+      }, draft: draft, reply: reply);
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not send the photo.')),
       );
-    } finally {
-      if (mounted) setState(() => _sending = false);
     }
   }
 
@@ -476,13 +560,27 @@ class _CommunityRoomScreenState extends State<CommunityRoomScreen> {
 
   Future<void> _togglePlay(RoomMessage message) async {
     if (message.audioUrl == null) return;
-    if (_playingMessageId == message.id) {
-      await _player.pause();
-      setState(() => _playingMessageId = null);
-      return;
+    try {
+      if (_player == null) {
+        _player = AudioPlayer();
+        _playerComplete = _player!.onPlayerComplete.listen((_) {
+          if (mounted) setState(() => _playingMessageId = null);
+        });
+      }
+      if (_playingMessageId == message.id) {
+        await _player!.pause();
+        if (mounted) setState(() => _playingMessageId = null);
+        return;
+      }
+      await _player!.play(UrlSource(ApiService.resolveUrl(message.audioUrl!)));
+      if (mounted) setState(() => _playingMessageId = message.id);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(chatLabel(context, 'Could not play this voice message.',
+            'Impossible de lire ce message vocal.')),
+      ));
     }
-    await _player.play(UrlSource(ApiService.resolveUrl(message.audioUrl!)));
-    setState(() => _playingMessageId = message.id);
   }
 
   // ---- Filtering ----------------------------------------------------------
@@ -508,9 +606,18 @@ class _CommunityRoomScreenState extends State<CommunityRoomScreen> {
     final currentUserId = widget.session.currentUser?.id ?? '';
     final visible = _visibleMessages;
     return Scaffold(
+      backgroundColor: ChatColors.background,
       appBar: AppBar(
+        backgroundColor: ChatColors.header,
+        foregroundColor: Colors.white,
         title: _PresenceTitle(presence: _presence),
         actions: [
+          IconButton(
+            tooltip: chatLabel(
+                context, 'Refresh messages', 'Actualiser les messages'),
+            onPressed: _updates.refreshFromNetwork,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
           IconButton(
             tooltip: 'Search messages',
             icon:
@@ -537,6 +644,8 @@ class _CommunityRoomScreenState extends State<CommunityRoomScreen> {
       ),
       body: Column(
         children: [
+          if (_loadError != null)
+            ChatNotice(message: _loadError!, onRetry: _updates.refreshFromNetwork),
           Expanded(
             child: _loading
                 ? const Center(
@@ -552,78 +661,169 @@ class _CommunityRoomScreenState extends State<CommunityRoomScreen> {
                       )
                     : ListView.builder(
                         controller: _scrollController,
+                        findChildIndexCallback: (key) {
+                          if (key is! ValueKey<String>) return null;
+                          final index = visible
+                              .indexWhere((message) => message.id == key.value);
+                          return index < 0 ? null : index + 1;
+                        },
                         padding: const EdgeInsets.symmetric(
                             horizontal: 12, vertical: 16),
-                        itemCount: visible.length,
+                        keyboardDismissBehavior:
+                            ScrollViewKeyboardDismissBehavior.onDrag,
+                        itemCount: visible.length + 1,
                         itemBuilder: (context, index) {
-                          final message = visible[index];
+                          if (index == 0) {
+                            if (_searchQuery.isNotEmpty) {
+                              return const SizedBox.shrink();
+                            }
+                            return Center(
+                              child: _loadingOlder
+                                  ? const Padding(
+                                      padding: EdgeInsets.all(12),
+                                      child: SizedBox(
+                                        height: 20,
+                                        width: 20,
+                                        child: CircularProgressIndicator(
+                                            strokeWidth: 2),
+                                      ),
+                                    )
+                                  : _canLoadOlder
+                                      ? TextButton.icon(
+                                          onPressed: _loadOlder,
+                                          icon: const Icon(
+                                              Icons.history_rounded,
+                                              size: 18),
+                                          label: Text(chatLabel(
+                                              context,
+                                              'Load older messages',
+                                              'Charger les anciens messages')),
+                                        )
+                                      : Padding(
+                                          padding: const EdgeInsets.all(8),
+                                          child: Text(
+                                              chatLabel(
+                                                  context,
+                                                  'Beginning of the conversation',
+                                                  'Début de la discussion'),
+                                              style: const TextStyle(
+                                                  color: ChatColors.muted,
+                                                  fontSize: 12)),
+                                        ),
+                            );
+                          }
+                          final messageIndex = index - 1;
+                          final message = visible[messageIndex];
                           final mine = message.senderId == currentUserId;
                           // Group consecutive messages from the same
                           // sender within 5 minutes so the sender name +
                           // avatar only render on the first bubble of a
                           // run — cuts down the visual noise a lot,
                           // matching WhatsApp/Telegram.
-                          final prev = index > 0 ? visible[index - 1] : null;
+                          final prev = messageIndex > 0
+                              ? visible[messageIndex - 1]
+                              : null;
                           final showSenderHeader =
                               prev == null || !_sameGroup(prev, message);
-                          return _RoomMessageBubble(
-                            message: message,
-                            mine: mine,
-                            currentUserId: currentUserId,
-                            playing: _playingMessageId == message.id,
-                            showSenderHeader: showSenderHeader,
-                            highlight:
-                                _searchQuery.isNotEmpty ? _searchQuery : null,
-                            onLongPress: () => _showMessageActions(message),
-                            onSwipeReply: () => _startReply(message),
-                            onPlayAudio: () => _togglePlay(message),
-                            onQuickReact: (emoji) =>
-                                _toggleReaction(message, emoji),
-                            onTapReply: () {
-                              // Scroll to the parent message if we can
-                              // find it — a small QoL touch that makes
-                              // long threads navigable.
-                              final targetId = message.replyTo?.id;
-                              if (targetId == null) return;
-                              final idx =
-                                  visible.indexWhere((m) => m.id == targetId);
-                              if (idx < 0 || !_scrollController.hasClients) {
-                                return;
-                              }
-                              _scrollController.animateTo(
-                                (idx *
-                                        (_scrollController
-                                                .position.maxScrollExtent /
-                                            visible.length))
-                                    .clamp(
-                                        0.0,
-                                        _scrollController
-                                            .position.maxScrollExtent),
-                                duration: const Duration(milliseconds: 300),
-                                curve: Curves.easeOut,
-                              );
-                            },
+                          return Column(
+                            key: ValueKey(message.id),
+                            children: [
+                              if (startsChatDay(
+                                  prev?.createdAt, message.createdAt))
+                                ChatDateSeparator(timestamp: message.createdAt),
+                              _RoomMessageBubble(
+                                message: message,
+                                mine: mine,
+                                currentUserId: currentUserId,
+                                playing: _playingMessageId == message.id,
+                                showSenderHeader: showSenderHeader,
+                                highlight: _searchQuery.isNotEmpty
+                                    ? _searchQuery
+                                    : null,
+                                onLongPress: () => _showMessageActions(message),
+                                onSwipeReply: () => _startReply(message),
+                                onPlayAudio: () => _togglePlay(message),
+                                onQuickReact: (emoji) =>
+                                    _toggleReaction(message, emoji),
+                                onTapReply: () {
+                                  // Scroll to the parent message if we can
+                                  // find it — a small QoL touch that makes
+                                  // long threads navigable.
+                                  final targetId = message.replyTo?.id;
+                                  if (targetId == null) return;
+                                  final idx = visible
+                                      .indexWhere((m) => m.id == targetId);
+                                  if (idx < 0 ||
+                                      !_scrollController.hasClients) {
+                                    return;
+                                  }
+                                  _scrollController.animateTo(
+                                    (idx *
+                                            (_scrollController
+                                                    .position.maxScrollExtent /
+                                                visible.length))
+                                        .clamp(
+                                            0.0,
+                                            _scrollController
+                                                .position.maxScrollExtent),
+                                    duration: const Duration(milliseconds: 300),
+                                    curve: Curves.easeOut,
+                                  );
+                                },
+                              ),
+                            ],
                           );
                         },
                       ),
           ),
+          if (_hasNewMessages)
+            Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: Padding(
+                padding: const EdgeInsetsDirectional.only(end: 12),
+                child: FilledButton.tonalIcon(
+                  onPressed: () {
+                    setState(() {
+                      _searchController.clear();
+                      _hasNewMessages = false;
+                    });
+                    _scrollToBottom();
+                  },
+                  icon: const Icon(Icons.arrow_downward_rounded, size: 18),
+                  label: Text(
+                      chatLabel(context, 'New messages', 'Nouveaux messages')),
+                ),
+              ),
+            ),
+          if (_sendError != null)
+            ChatNotice(
+              message: _sendError!,
+              onRetry: _sending ? null : _retryFailedSend,
+              onDismiss: () => setState(() {
+                _sendError = null;
+                _retrySend = null;
+              }),
+            ),
           if (_showStickers) _RoomStickerPicker(onPick: _sendSticker),
           if (_replyingTo != null)
             _ReplyComposerPreview(
               message: _replyingTo!,
               onCancel: _cancelReply,
             ),
-          _RoomInputBar(
-            controller: _textController,
-            sending: _sending,
-            recording: _recording,
-            replying: _replyingTo != null,
-            onSend: _sendText,
-            onToggleStickers: () =>
-                setState(() => _showStickers = !_showStickers),
-            onToggleRecording: _toggleRecording,
-            onPickImage: () => _pickAndSendImage(ImageSource.gallery),
-            onTakePhoto: () => _pickAndSendImage(ImageSource.camera),
+          ColoredBox(
+            color: Colors.white,
+            child: _RoomInputBar(
+              controller: _textController,
+              sending: _sending,
+              recording: _recording,
+              replying: _replyingTo != null,
+              onSend: _sendText,
+              onToggleStickers: () =>
+                  setState(() => _showStickers = !_showStickers),
+              onToggleRecording: _toggleRecording,
+              onPickImage: () => _pickAndSendImage(ImageSource.gallery),
+              onTakePhoto: () => _pickAndSendImage(ImageSource.camera),
+            ),
           ),
         ],
       ),
@@ -631,14 +831,7 @@ class _CommunityRoomScreenState extends State<CommunityRoomScreen> {
   }
 
   bool _sameGroup(RoomMessage a, RoomMessage b) {
-    if (a.senderId != b.senderId) return false;
-    try {
-      final ta = DateTime.parse(a.createdAt);
-      final tb = DateTime.parse(b.createdAt);
-      return tb.difference(ta).inMinutes.abs() < 5;
-    } catch (_) {
-      return false;
-    }
+    return a.senderId == b.senderId && sameChatRun(a.createdAt, b.createdAt);
   }
 }
 
@@ -651,14 +844,14 @@ class _PresenceTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final subtitle = presence.count == 0
-        ? 'No one else is here right now'
-        : presence.count == 1
-            ? '1 person active now'
-            : '${presence.count} people active now';
+        ? chatLabel(
+            context, 'Public · everyone signed in', 'Public · tous les membres')
+        : chatLabel(context, 'Public · ${presence.count} active now',
+            'Public · ${presence.count} en ligne');
     return Row(
       children: [
         const CircleAvatar(
-          backgroundColor: AppColors.ochre,
+          backgroundColor: Color(0xFF7199B8),
           radius: 18,
           child: Icon(Icons.public_rounded, color: Colors.white, size: 20),
         ),
@@ -668,13 +861,14 @@ class _PresenceTitle extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('Community Room',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+              Text(chatLabel(context, 'Community', 'Communauté'),
+                  style: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.w600)),
               Text(
                 subtitle,
                 style: const TextStyle(
                     fontSize: 12,
-                    color: AppColors.inkSoft,
+                    color: Colors.white70,
                     fontWeight: FontWeight.w400),
               ),
             ],
@@ -879,13 +1073,9 @@ class _BubbleContent extends StatelessWidget {
     final bg = message.deleted
         ? AppColors.sandDim
         : mine
-            ? AppColors.ochre
-            : AppColors.sandDim;
-    final fg = message.deleted
-        ? AppColors.inkSoft
-        : mine
-            ? Colors.white
-            : AppColors.ink;
+            ? ChatColors.outgoing
+            : Colors.white;
+    final fg = message.deleted ? AppColors.inkSoft : ChatColors.ink;
     return Container(
       constraints:
           BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.72),
@@ -909,7 +1099,7 @@ class _BubbleContent extends StatelessWidget {
             _ReplyPreviewInsideBubble(
               reply: message.replyTo!,
               onTap: onTapReply,
-              dark: mine,
+              dark: false,
             ),
           if (message.deleted)
             Row(
@@ -945,7 +1135,6 @@ class _BubbleContent extends StatelessWidget {
             padding: const EdgeInsets.only(top: 4),
             child: _TimestampLabel(
               createdAt: message.createdAt,
-              onDark: mine && !message.deleted,
             ),
           ),
         ],
@@ -976,8 +1165,8 @@ class _ImageBubble extends StatelessWidget {
         if (url != null)
           ClipRRect(
             borderRadius: BorderRadius.circular(12),
-            child: Image.network(
-              ApiService.resolveUrl(url),
+            child: Image(
+              image: MediaCache.imageProvider(ApiService.resolveUrl(url)),
               fit: BoxFit.cover,
               errorBuilder: (context, _, __) => Container(
                 width: 200,
@@ -1295,7 +1484,7 @@ class _Avatar extends StatelessWidget {
       radius: 18,
       backgroundColor: AppColors.canopy,
       backgroundImage: resolved != null
-          ? NetworkImage(ApiService.resolveUrl(resolved))
+          ? MediaCache.imageProvider(ApiService.resolveUrl(resolved), cacheWidth: 96)
           : null,
       child: resolved == null
           ? Text(
@@ -1310,33 +1499,18 @@ class _Avatar extends StatelessWidget {
 
 class _TimestampLabel extends StatelessWidget {
   final String createdAt;
-  final bool onDark;
-  const _TimestampLabel({required this.createdAt, this.onDark = false});
+  const _TimestampLabel({required this.createdAt});
 
   @override
   Widget build(BuildContext context) {
-    String label;
-    try {
-      final dt = DateTime.parse(createdAt).toLocal();
-      final now = DateTime.now();
-      final isToday =
-          dt.year == now.year && dt.month == now.month && dt.day == now.day;
-      final hh = dt.hour.toString().padLeft(2, '0');
-      final mm = dt.minute.toString().padLeft(2, '0');
-      if (isToday) {
-        label = '$hh:$mm';
-      } else {
-        label =
-            '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')} $hh:$mm';
-      }
-    } catch (_) {
-      label = '';
-    }
+    final date = DateTime.tryParse(createdAt)?.toLocal();
+    final label =
+        date == null ? '' : TimeOfDay.fromDateTime(date).format(context);
     return Text(
       label,
-      style: TextStyle(
+      style: const TextStyle(
         fontSize: 10,
-        color: onDark ? Colors.white70 : AppColors.inkSoft,
+        color: ChatColors.muted,
       ),
     );
   }
@@ -1441,15 +1615,18 @@ class _RoomInputBar extends StatelessWidget {
         child: Row(
           children: [
             IconButton(
+              tooltip: chatLabel(context, 'Stickers', 'Autocollants'),
               icon: const Icon(Icons.emoji_emotions_outlined),
               color: AppColors.inkSoft,
-              onPressed: onToggleStickers,
+              onPressed: sending || recording ? null : onToggleStickers,
             ),
             IconButton(
               icon: const Icon(Icons.attach_file_rounded),
               tooltip: 'Attach a photo',
               color: AppColors.inkSoft,
-              onPressed: () => _showAttachmentSheet(context),
+              onPressed: sending || recording
+                  ? null
+                  : () => _showAttachmentSheet(context),
             ),
             Expanded(
               child: TextField(
@@ -1482,16 +1659,36 @@ class _RoomInputBar extends StatelessWidget {
               builder: (context, value, _) {
                 final hasText = value.text.trim().isNotEmpty;
                 if (hasText) {
-                  return IconButton(
-                    icon: const Icon(Icons.send_rounded),
-                    color: AppColors.ochre,
+                  return IconButton.filled(
+                    tooltip: chatLabel(
+                        context, 'Send message', 'Envoyer le message'),
+                    style: IconButton.styleFrom(
+                        backgroundColor: ChatColors.header,
+                        foregroundColor: Colors.white),
+                    icon: sending
+                        ? const SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.send_rounded),
                     onPressed: sending ? null : onSend,
                   );
                 }
                 return IconButton(
-                  icon: Icon(recording
-                      ? Icons.stop_circle_rounded
-                      : Icons.mic_rounded),
+                  tooltip: recording
+                      ? chatLabel(
+                          context, 'Stop and send', 'Arrêter et envoyer')
+                      : chatLabel(context, 'Record voice message',
+                          'Enregistrer un message vocal'),
+                  icon: sending
+                      ? const SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : Icon(recording
+                          ? Icons.stop_circle_rounded
+                          : Icons.mic_rounded),
                   color: recording ? AppColors.clay : AppColors.inkSoft,
                   onPressed: sending ? null : onToggleRecording,
                 );

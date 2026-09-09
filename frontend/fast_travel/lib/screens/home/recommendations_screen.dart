@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/models.dart';
 import '../../Services/api_service.dart';
+import '../../Services/live_refresh.dart';
 import '../../widgets/destination_card.dart';
 import '../../widgets/empty_state.dart';
 
@@ -14,26 +15,47 @@ class RecommendationsScreen extends StatefulWidget {
 class _RecommendationsScreenState extends State<RecommendationsScreen> {
   List<Destination> _items = [];
   bool _loading = true;
+  bool _hasLoaded = false;
+  late final LiveRefresh _refresh;
   String? _error;
 
   @override
   void initState() {
     super.initState();
+    _refresh = LiveRefresh(
+      changes: ApiService.instance.changes,
+      topics: {'recommendations', 'destinations'},
+      onRefresh: _fetch,
+    );
     _load();
   }
 
-  Future<void> _load() async {
+  @override
+  void dispose() {
+    _refresh.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() => _refresh.refresh();
+
+  Future<void> _fetch() async {
     setState(() {
-      _loading = true;
+      _loading = !_hasLoaded;
       _error = null;
     });
     try {
       final results = await ApiService.instance.getRecommendations();
-      setState(() => _items = results);
+      if (!mounted) return;
+      setState(() {
+        _items = results;
+        _hasLoaded = true;
+      });
     } on ApiException catch (e) {
-      setState(() => _error = e.message);
+      if (mounted && !_hasLoaded) setState(() => _error = e.message);
     } catch (_) {
-      setState(() => _error = 'Could not reach the server.');
+      if (mounted && !_hasLoaded) {
+        setState(() => _error = 'Could not reach the server.');
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }

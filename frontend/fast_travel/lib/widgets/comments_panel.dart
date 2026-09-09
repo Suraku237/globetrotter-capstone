@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import '../Services/api_service.dart';
+import '../Services/live_refresh.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
 import 'empty_state.dart';
 
 /// Comments list + input for a single post, shown either as a right-side
 /// panel (wide/web layout) or inside a bottom sheet (narrow/mobile) — never
-/// as its own screen. Always renders from `post` directly (no internal
-/// copy), so it reflects updates the moment the caller's state changes.
+/// as its own screen. Also listens to live updates when on a separate route.
 class CommentsPanel extends StatefulWidget {
   final Post post;
   final String currentUserId;
@@ -30,10 +30,42 @@ class _CommentsPanelState extends State<CommentsPanel> {
   final _commentController = TextEditingController();
   bool _sending = false;
   String? _error;
+  late Post _post = widget.post;
+  late final LiveRefresh _refresh;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh = LiveRefresh(
+      changes: ApiService.instance.changes,
+      topics: {'posts'},
+      onRefresh: () async {
+        try {
+          final id = widget.post.id;
+          final posts = await ApiService.instance.getPosts();
+          if (!mounted || id != widget.post.id) return;
+          for (final post in posts) {
+            if (post.id == id) {
+              setState(() => _post = post);
+              break;
+            }
+          }
+        } catch (_) {
+          // Keep existing comments and the draft on a failed refresh.
+        }
+      },
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant CommentsPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.post != widget.post) _post = widget.post;
+  }
 
   Future<void> _addComment() async {
     final text = _commentController.text.trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty || _sending) return;
 
     setState(() {
       _sending = true;
@@ -42,12 +74,14 @@ class _CommentsPanelState extends State<CommentsPanel> {
     try {
       final updated =
           await ApiService.instance.addComment(widget.post.id, text);
+      if (!mounted) return;
+      setState(() => _post = updated);
       widget.onPostUpdated(updated);
       _commentController.clear();
     } on ApiException catch (e) {
-      setState(() => _error = e.message);
+      if (mounted) setState(() => _error = e.message);
     } catch (_) {
-      setState(() => _error = 'Could not reach the server.');
+      if (mounted) setState(() => _error = 'Could not reach the server.');
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -55,6 +89,7 @@ class _CommentsPanelState extends State<CommentsPanel> {
 
   @override
   void dispose() {
+    _refresh.dispose();
     _commentController.dispose();
     super.dispose();
   }
@@ -62,7 +97,7 @@ class _CommentsPanelState extends State<CommentsPanel> {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    final comments = widget.post.comments;
+    final comments = _post.comments;
 
     return Column(
       mainAxisSize: MainAxisSize.min,

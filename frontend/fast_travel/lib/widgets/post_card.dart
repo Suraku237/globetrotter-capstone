@@ -1,9 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import '../Services/api_service.dart';
+import '../Services/media_cache.dart';
+import '../Services/media_playback.dart';
+import '../Services/media_settings.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
 import 'post_action_rail.dart';
+import 'public_network_image.dart';
 
 /// A full-bleed, TikTok-style post: the photo/video (or a gradient for
 /// text-only posts) fills the whole card, caption + author sit bottom-left
@@ -45,12 +52,25 @@ class PostCard extends StatefulWidget {
 }
 
 class _PostCardState extends State<PostCard>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late final AnimationController _burstController;
   late final Animation<double> _burstScale;
   late final Animation<double> _burstOpacity;
 
   VideoPlayerController? _videoController;
+  Timer? _initializationTimeout;
+  bool _initializing = false;
+  bool _videoFailed = false;
+  bool _userRequestedPlay = false;
+  bool _userPaused = false;
+  bool _visible = false;
+  bool _foreground = true;
+
+  bool get _canPlay =>
+      widget.isActive &&
+      _visible &&
+      _foreground &&
+      !MediaPlayback.suspended.value;
 
   @override
   void initState() {
@@ -69,46 +89,156 @@ class _PostCardState extends State<PostCard>
       TweenSequenceItem(tween: ConstantTween(1.0), weight: 35),
       TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.0), weight: 45),
     ]).animate(_burstController);
-    _initVideo();
+    WidgetsBinding.instance.addObserver(this);
+    _foreground = WidgetsBinding.instance.lifecycleState == null ||
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+    MediaSettings.instance.addListener(_settingsChanged);
+    MediaPlayback.suspended.addListener(_syncPlayback);
   }
 
-  void _initVideo() {
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _visible = TickerMode.of(context) &&
+        (ModalRoute.isCurrentOf(context) ?? true);
+    _syncPlayback();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _foreground = state == AppLifecycleState.resumed;
+    _syncPlayback();
+  }
+
+  void _settingsChanged() {
+    if (MediaSettings.instance.dataSaver && !_userRequestedPlay) {
+      _releaseVideo();
+      if (mounted) setState(() {});
+    }
+    _syncPlayback();
+  }
+
+  void _releaseVideo() {
+    _initializationTimeout?.cancel();
+    final controller = _videoController;
+    _videoController = null;
+    _initializing = false;
+    controller?.removeListener(_videoChanged);
+    if (controller != null) unawaited(controller.dispose());
+  }
+
+  void _videoChanged() {
+    final controller = _videoController;
+    if (controller == null || !controller.value.hasError || _videoFailed) return;
+    setState(() {
+      _videoFailed = true;
+      _initializing = false;
+    });
+  }
+
+  void _syncPlayback() {
+    if (!mounted) return;
+    final controller = _videoController;
+    if (!_canPlay || _userPaused) {
+      if (_initializing && MediaSettings.instance.dataSaver) {
+        _releaseVideo();
+        _userRequestedPlay = false;
+        return;
+      }
+      if (controller?.value.isInitialized == true) {
+        unawaited(controller!.pause());
+      }
+      return;
+    }
+    if (_videoFailed) return;
+    if (controller == null) {
+      if (_userRequestedPlay || !MediaSettings.instance.dataSaver) {
+        unawaited(_initVideo());
+      }
+    } else if (controller.value.isInitialized) {
+      unawaited(_play(controller));
+    }
+  }
+
+  Future<void> _play(VideoPlayerController controller) async {
+    try {
+      await controller.play();
+    } on PlatformException {
+      if (mounted && identical(controller, _videoController)) {
+        setState(() => _videoFailed = true);
+      }
+    }
+  }
+
+  Future<void> _initVideo() async {
     final video = widget.post.video;
-    if (video == null) return;
+    if (video == null || _initializing || !_canPlay) return;
+    // initialize() itself downloads video bytes: do not even create the
+    // controller until the user requests playback (or opts out of Data Saver).
     final controller = VideoPlayerController.networkUrl(
       Uri.parse(ApiService.resolveUrl(video)),
     );
     _videoController = controller;
-    controller.setLooping(true);
-    controller.initialize().then((_) {
-      if (!mounted) return;
-      setState(() {});
-      if (widget.isActive) controller.play();
+    controller.addListener(_videoChanged);
+    setState(() {
+      _initializing = true;
+      _videoFailed = false;
     });
+    final deadline = Timer(const Duration(seconds: 30), () {
+      if (!mounted || !identical(controller, _videoController)) return;
+      _releaseVideo();
+      setState(() => _videoFailed = true);
+    });
+    _initializationTimeout = deadline;
+    try {
+      await controller.initialize();
+      if (!mounted || !identical(controller, _videoController)) return;
+      await controller.setLooping(true);
+      if (!mounted || !identical(controller, _videoController)) return;
+      setState(() => _initializing = false);
+      if (_canPlay && !_userPaused) await _play(controller);
+    } on PlatformException {
+      if (!mounted || !identical(controller, _videoController)) return;
+      setState(() {
+        _initializing = false;
+        _videoFailed = true;
+      });
+    } finally {
+      deadline.cancel();
+    }
+  }
+
+  void _startVideo() {
+    if (!_canPlay || _initializing) return;
+    setState(() {
+      _userRequestedPlay = true;
+      _userPaused = false;
+      _videoFailed = false;
+    });
+    _releaseVideo();
+    unawaited(_initVideo());
   }
 
   @override
   void didUpdateWidget(covariant PostCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.post.id != widget.post.id) {
-      _videoController?.dispose();
-      _videoController = null;
-      _initVideo();
-      return;
+    if (oldWidget.post.id != widget.post.id ||
+        oldWidget.post.video != widget.post.video) {
+      _releaseVideo();
+      _userRequestedPlay = false;
+      _userPaused = false;
+      _videoFailed = false;
     }
-    final controller = _videoController;
-    if (controller == null || !controller.value.isInitialized) return;
-    if (widget.isActive && !oldWidget.isActive) {
-      controller.play();
-    } else if (!widget.isActive && oldWidget.isActive) {
-      controller.pause();
-    }
+    _syncPlayback();
   }
 
   @override
   void dispose() {
     _burstController.dispose();
-    _videoController?.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+    MediaSettings.instance.removeListener(_settingsChanged);
+    MediaPlayback.suspended.removeListener(_syncPlayback);
+    _releaseVideo();
     super.dispose();
   }
 
@@ -119,12 +249,20 @@ class _PostCardState extends State<PostCard>
   }
 
   void _togglePlayPause() {
+    if (!_canPlay) return;
     final controller = _videoController;
-    if (controller == null || !controller.value.isInitialized) return;
+    if (controller == null || _videoFailed) {
+      _startVideo();
+      return;
+    }
+    if (!controller.value.isInitialized) return;
     if (controller.value.isPlaying) {
-      controller.pause();
+      _userPaused = true;
+      unawaited(controller.pause());
     } else {
-      controller.play();
+      _userRequestedPlay = true;
+      _userPaused = false;
+      unawaited(_play(controller));
     }
   }
 
@@ -185,9 +323,9 @@ class _PostCardState extends State<PostCard>
                       child: VideoPlayer(_videoController!),
                     ),
                   )
-                : const _FallbackBackground(buffering: true)
+                : _FallbackBackground(buffering: _initializing)
           else if (hasImage)
-            Image.network(
+            PublicNetworkImage(
               ApiService.resolveUrl(post.image!),
               fit: BoxFit.cover,
               // Decode at roughly the card's own pixel size instead of
@@ -229,14 +367,41 @@ class _PostCardState extends State<PostCard>
             ),
           ),
 
+          if (hasVideo &&
+              (_videoController == null || _videoFailed || _initializing))
+            Center(
+              child: _initializing
+                  ? const SizedBox.shrink()
+                  : TextButton.icon(
+                      key: const ValueKey('video-play'),
+                      onPressed: _canPlay ? _startVideo : null,
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        backgroundColor: Colors.black54,
+                      ),
+                      icon: Icon(_videoFailed
+                          ? Icons.refresh_rounded
+                          : Icons.play_arrow_rounded),
+                      label: Text(
+                        Localizations.localeOf(context).languageCode == 'fr'
+                            ? (_videoFailed
+                                ? 'Échec du chargement · Réessayer'
+                                : 'Appuyer pour lire')
+                            : (_videoFailed
+                                ? 'Loading failed · Retry'
+                                : 'Tap to play'),
+                      ),
+                    ),
+            ),
+
           Center(
-            child: FadeTransition(
+            child: IgnorePointer(child: FadeTransition(
               opacity: _burstOpacity,
               child: ScaleTransition(
                 scale: _burstScale,
                 child: const Icon(Icons.favorite_rounded,
                     color: Colors.white, size: 96),
-              ),
+              )),
             ),
           ),
 
@@ -249,7 +414,7 @@ class _PostCardState extends State<PostCard>
               _videoController != null &&
               _videoController!.value.isInitialized)
             Center(
-              child: ValueListenableBuilder<VideoPlayerValue>(
+              child: IgnorePointer(child: ValueListenableBuilder<VideoPlayerValue>(
                 valueListenable: _videoController!,
                 builder: (context, value, _) => AnimatedOpacity(
                   opacity: value.isPlaying ? 0 : 1,
@@ -259,7 +424,7 @@ class _PostCardState extends State<PostCard>
                     color: Colors.white,
                     size: 72,
                     shadows: [Shadow(blurRadius: 12, color: Colors.black54)],
-                  ),
+                  )),
                 ),
               ),
             ),
@@ -341,10 +506,9 @@ class _PostCardState extends State<PostCard>
                       // pixels covers any device pixel ratio without
                       // pulling the full-size source into memory.
                       backgroundImage: post.authorAvatar != null
-                          ? ResizeImage(
-                              NetworkImage(
-                                  ApiService.resolveUrl(post.authorAvatar!)),
-                              width: 96,
+                          ? MediaCache.imageProvider(
+                              ApiService.resolveUrl(post.authorAvatar!),
+                              cacheWidth: 96,
                             )
                           : null,
                       child: post.authorAvatar == null

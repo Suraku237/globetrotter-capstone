@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/models.dart';
 import '../../Services/api_service.dart';
+import '../../Services/live_refresh.dart';
 import '../../l10n/generated/app_localizations.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/category_ribbon.dart';
@@ -23,6 +24,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   List<Destination> _filteredDestinations = [];
   List<String> _categories = [];
   bool _loading = true;
+  bool _hasLoaded = false;
+  late final LiveRefresh _refresh;
   String? _error;
   final TextEditingController _searchController = TextEditingController();
   String? _selectedCategory;
@@ -30,23 +33,32 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   @override
   void initState() {
     super.initState();
+    _refresh = LiveRefresh(
+      changes: ApiService.instance.changes,
+      topics: {'destinations'},
+      onRefresh: _fetchDestinations,
+    );
     _loadDestinations();
     _searchController.addListener(_onSearchOrFilterChanged);
   }
 
   @override
   void dispose() {
+    _refresh.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadDestinations() async {
+  Future<void> _loadDestinations() => _refresh.refresh();
+
+  Future<void> _fetchDestinations() async {
     setState(() {
-      _loading = true;
+      _loading = !_hasLoaded;
       _error = null;
     });
     try {
       final data = await ApiService.instance.getDestinations();
+      if (!mounted) return;
       // Categories always match whatever tags actually exist on the
       // loaded destinations, sorted, instead of a hardcoded list that
       // could drift out of sync with real data.
@@ -56,12 +68,16 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         _filteredDestinations = data;
         _categories = categories;
         _loading = false;
+        _hasLoaded = true;
       });
+      _onSearchOrFilterChanged();
     } on ApiException catch (e) {
-      setState(() => _error = e.message);
+      if (mounted && !_hasLoaded) setState(() => _error = e.message);
     } catch (_) {
-      setState(() =>
-          _error = AppLocalizations.of(context)!.couldNotReachServerShort);
+      if (mounted && !_hasLoaded) {
+        setState(() =>
+            _error = AppLocalizations.of(context)!.couldNotReachServerShort);
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }

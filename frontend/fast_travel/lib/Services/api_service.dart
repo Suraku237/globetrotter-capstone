@@ -2,33 +2,87 @@
 // mobile, desktop, and web builds of the same Flutter app.
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/models.dart';
 import '../models/call_models.dart';
+import 'cached_api_client.dart';
+import 'realtime_updates.dart';
+import 'preference_storage.dart';
 
-class ApiException implements Exception {
+class ApiException extends CacheConnectionException {
+  @override
   final String message;
   final int? statusCode;
   // Not a real HTTP status — set on the "user closed the Google picker
   // without choosing an account" case so the UI can tell that apart from
   // an actual failure and skip showing an error for it.
   final bool cancelled;
-  ApiException(this.message, {this.statusCode, this.cancelled = false});
+  ApiException(this.message, {this.statusCode, this.cancelled = false})
+      : super(message);
   bool get isUnauthorized => statusCode == 401;
   @override
   String toString() => message;
 }
 
 class ApiService {
-  ApiService._();
+  ApiService._() {
+    _client = CachedApiClient(
+      baseUrl: baseUrl,
+      onChanged: _changes.add,
+      onUnauthorized: _sessionRejected,
+      connectionError: (message) => ApiException(message),
+    );
+    _live = RealtimeUpdates(
+      uri: Uri.parse('$baseUrl/events/ws').replace(
+          scheme: Uri.parse(baseUrl).scheme == 'https' ? 'wss' : 'ws'),
+      onInvalidate: _client.invalidate,
+      onUnauthorized: _sessionRejected,
+    );
+  }
   static final ApiService instance = ApiService._();
+  final _changes = StreamController<Set<String>>.broadcast();
+  late final CachedApiClient _client;
+  late final RealtimeUpdates _live;
+  Stream<Set<String>> get changes => _changes.stream;
+  bool get isLive => _live.connected.value;
+  ValueListenable<bool> get liveStatus => _live.connected;
+  ValueListenable<bool> get networkUnavailable => _client.unavailable;
+  ValueListenable<bool> get cacheStorageWarning => _client.storageWarning;
+  void setActive(bool active) {
+    _live.setActive(active);
+    if (!active) unawaited(_client.flush());
+  }
+  void refreshTopics(Set<String> topics) => _client.invalidate(topics);
+  void retryConnection() {
+    _client.invalidate({'all'});
+    _live.retry();
+  }
+  void _sessionRejected() {
+    if (_token == null) return;
+    setToken(null);
+    onUnauthorized?.call();
+  }
+
+  Future<void> rememberUser(AppUser user) => _client.prime(
+        Uri.parse('$baseUrl/me'),
+        {
+          'id': user.id,
+          'email': user.email,
+          'full_name': user.fullName,
+          'username': user.username,
+          'role': user.role,
+          'avatar_url': user.avatarUrl,
+        },
+      );
 
   static const _tokenPrefsKey = 'auth_token';
 
   String? _token;
+  Future<void> _tokenWrites = Future.value();
 
   // The last successful /posts response, kept in memory only. The Feed
   // screen paints this immediately on entry (stale-while-revalidate) so
@@ -44,25 +98,54 @@ class ApiService {
   // (see auth-service's ACCESS_TOKEN_EXPIRE_MINUTES), matching "remember my
   // login for a week" rather than forcing a fresh sign-in every launch.
   void setToken(String? token) {
+    if (_token == token) return;
     _token = token;
-    if (token == null) {
-      // Signing out — drop any cached feed so the next user doesn't see
-      // the previous account's posts flash on-screen before their own load.
-      _cachedPosts = null;
-    }
-    SharedPreferences.getInstance().then((prefs) {
-      if (token != null) {
-        prefs.setString(_tokenPrefsKey, token);
-      } else {
-        prefs.remove(_tokenPrefsKey);
+    _cachedPosts = null;
+    unawaited(_client.setScope(_cacheScope(token), reset: true));
+    _live.setToken(token);
+    _tokenWrites = _tokenWrites.then((_) async {
+      try {
+        final prefs = await preferenceStorage(SharedPreferences.getInstance);
+        final saved = token != null
+            ? await preferenceStorage(() => prefs.setString(_tokenPrefsKey, token))
+            : await preferenceStorage(() => prefs.remove(_tokenPrefsKey));
+        if (!saved) _client.storageWarning.value = true;
+      } on PreferenceStorageException {
+        _client.storageWarning.value = true;
       }
     });
   }
 
+  Future<void> clearSession() async {
+    setToken(null);
+    await _client.setScope(null);
+    await _tokenWrites;
+  }
+
   bool get isAuthenticated => _token != null;
+
+  String? _cacheScope(String? token) {
+    if (token == null) return null;
+    try {
+      final payload = jsonDecode(utf8.decode(base64Url.decode(
+          base64Url.normalize(token.split('.')[1])))) as Map<String, dynamic>;
+      final subject = payload['sub'] as String?;
+      return subject == null ? null : '$baseUrl|$subject';
+    } on FormatException {
+      debugPrint('Invalid session format; persistent caching disabled.');
+      return null;
+    } on RangeError {
+      debugPrint('Invalid session format; persistent caching disabled.');
+      return null;
+    } on TypeError {
+      debugPrint('Invalid session claims; persistent caching disabled.');
+      return null;
+    }
+  }
 
   Future<dynamic> _callRequest(String path,
       {String method = 'GET', Map<String, dynamic>? body}) async {
+    final token = _token;
     final request = http.Request(method, Uri.parse('$baseUrl/social/$path'));
     request.headers.addAll(_headers);
     if (body != null) request.body = jsonEncode(body);
@@ -72,6 +155,7 @@ class ApiService {
           .send(request)
           .then(http.Response.fromStream)
           .timeout(const Duration(seconds: 20));
+      if (_token != token) throw ApiException('The sign-in session changed.');
       return await _handle(response);
     } on TimeoutException {
       throw ApiException('The call server timed out. Check your connection.');
@@ -155,8 +239,34 @@ class ApiService {
   // validating it (the caller finds out it's stale/expired the first time
   // it's actually used, via the normal 401 handling).
   Future<String?> loadPersistedToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_tokenPrefsKey);
+    final SharedPreferences prefs;
+    try {
+      prefs = await preferenceStorage(SharedPreferences.getInstance);
+    } on PreferenceStorageException {
+      _client.storageWarning.value = true;
+      throw ApiException('Cannot read the saved login on this device.');
+    }
+    final token = prefs.getString(_tokenPrefsKey);
+    if (token == null) return null;
+    try {
+      final claims = jsonDecode(utf8.decode(base64Url.decode(
+          base64Url.normalize(token.split('.')[1])))) as Map<String, dynamic>;
+      final expiry = claims['exp'] as num;
+      if (expiry * 1000 > DateTime.now().millisecondsSinceEpoch) return token;
+    } on FormatException {
+      debugPrint('Discarding malformed saved session.');
+    } on RangeError {
+      debugPrint('Discarding malformed saved session.');
+    } on TypeError {
+      debugPrint('Discarding saved session without valid expiry.');
+    }
+    try {
+      await preferenceStorage(() => prefs.remove(_tokenPrefsKey));
+    } on PreferenceStorageException {
+      _client.storageWarning.value = true;
+    }
+    await _client.setScope(null);
+    return null;
   }
 
   // Called whenever a request comes back 401 — the token has been rejected
@@ -171,7 +281,8 @@ class ApiService {
   // the app itself is served over HTTPS, and browsers block a secure page
   // from calling an insecure (http://) backend ("mixed content").
   static String get baseUrl {
-    return 'https://fasttravel-web.duckdns.org/api';
+    return const String.fromEnvironment('API_BASE_URL',
+        defaultValue: 'https://fasttravel-web.duckdns.org/api');
   }
 
   // Media paths from the backend are either relative (served by this
@@ -208,8 +319,7 @@ class ApiService {
       detail = parsed['detail']?.toString() ?? res.body;
     } catch (_) {}
     if (res.statusCode == 401) {
-      setToken(null);
-      onUnauthorized?.call();
+      _sessionRejected();
     }
     throw ApiException(detail, statusCode: res.statusCode);
   }
@@ -219,19 +329,12 @@ class ApiService {
   // any other call, and the caller falls back to the login screen.
   Future<AppUser> fetchCurrentUser() async {
     final token = _token;
-    final client = http.Client();
-    try {
-      final res = await client
+      final res = await _client
           .get(Uri.parse('$baseUrl/me'), headers: _headers)
           .timeout(const Duration(seconds: 10));
       if (_token != token) throw ApiException('The sign-in session changed.');
       final data = await _handle(res);
       return AppUser.fromJson(data as Map<String, dynamic>);
-    } finally {
-      // A headless startup timeout must also close the request, so a late 401
-      // cannot sign out an account that subsequently signed in.
-      client.close();
-    }
   }
 
   // Registering no longer signs you in — see RegistrationResult.status for
@@ -244,7 +347,7 @@ class ApiService {
     required String username,
     required String role,
   }) async {
-    final res = await http.post(
+    final res = await _client.post(
       Uri.parse('$baseUrl/register'),
       headers: _headers,
       body: jsonEncode({
@@ -261,7 +364,7 @@ class ApiService {
 
   Future<AppUser> verifyEmail(
       {required String email, required String code}) async {
-    final res = await http.post(
+    final res = await _client.post(
       Uri.parse('$baseUrl/verify-email'),
       headers: _headers,
       body: jsonEncode({'email': email, 'code': code}),
@@ -286,7 +389,7 @@ class ApiService {
   Future<PendingAdminStatus> checkAdminRequestStatus({
     required String pendingSessionToken,
   }) async {
-    final res = await http.post(
+    final res = await _client.post(
       Uri.parse('$baseUrl/admin-requests/status'),
       headers: const {'Content-Type': 'application/json'},
       body: jsonEncode({'pending_session_token': pendingSessionToken}),
@@ -305,7 +408,7 @@ class ApiService {
 
   Future<AppUser> login(
       {required String email, required String password}) async {
-    final res = await http.post(
+    final res = await _client.post(
       Uri.parse('$baseUrl/login'),
       headers: _headers,
       body: jsonEncode({'email': email, 'password': password}),
@@ -330,7 +433,7 @@ class ApiService {
     print('📤 URL: $baseUrl/auth/google');
 
     try {
-      final res = await http.post(
+      final res = await _client.post(
         Uri.parse('$baseUrl/auth/google'),
         headers: _headers,
         body: jsonEncode({'id_token': idToken}),
@@ -368,7 +471,7 @@ class ApiService {
       queryParameters:
           (query != null && query.isNotEmpty) ? {'q': query} : null,
     );
-    final res = await http.get(uri, headers: _headers);
+    final res = await _client.get(uri, headers: _headers);
 
     print('📤 API: Getting destinations');
     print('📥 Response status: ${res.statusCode}');
@@ -394,7 +497,7 @@ class ApiService {
 
   Future<List<Destination>> getRecommendations() async {
     print('📤 API: Getting recommendations');
-    final res = await http.get(
+    final res = await _client.get(
       Uri.parse('$baseUrl/recommendations'),
       headers: _headers,
     );
@@ -411,7 +514,7 @@ class ApiService {
     String? notes,
   }) async {
     print('📤 API: Creating itinerary: $title');
-    final res = await http.post(
+    final res = await _client.post(
       Uri.parse('$baseUrl/itineraries'),
       headers: _headers,
       body: jsonEncode({
@@ -438,7 +541,7 @@ class ApiService {
 
   Future<List<Itinerary>> getItineraries() async {
     print('📤 API: Getting itineraries');
-    final res = await http.get(
+    final res = await _client.get(
       Uri.parse('$baseUrl/itineraries'),
       headers: _headers,
     );
@@ -450,7 +553,7 @@ class ApiService {
   // ---- Profile ----
 
   Future<AppUser> updateProfile({required String fullName}) async {
-    final res = await http.patch(
+    final res = await _client.patch(
       Uri.parse('$baseUrl/me'),
       headers: _headers,
       body: jsonEncode({'full_name': fullName}),
@@ -468,7 +571,7 @@ class ApiService {
     request.files
         .add(http.MultipartFile.fromBytes('file', bytes, filename: file.name));
 
-    final streamed = await request.send();
+    final streamed = await _client.send(request);
     final res = await http.Response.fromStream(streamed);
     final data = await _handle(res);
     return AppUser.fromJson(data as Map<String, dynamic>);
@@ -477,7 +580,7 @@ class ApiService {
   // ---- Social feed ----
 
   Future<List<Post>> getPosts() async {
-    final res = await http.get(Uri.parse('$baseUrl/posts'), headers: _headers);
+    final res = await _client.get(Uri.parse('$baseUrl/posts'), headers: _headers);
     final data = await _handle(res) as List;
     final posts = data.map((e) => Post.fromJson(e)).toList();
     _cachedPosts = posts;
@@ -506,14 +609,14 @@ class ApiService {
       );
     }
 
-    final streamed = await request.send();
+    final streamed = await _client.send(request);
     final res = await http.Response.fromStream(streamed);
     final data = await _handle(res, okStatus: 201);
     return Post.fromJson(data as Map<String, dynamic>);
   }
 
   Future<Post> likePost(String postId) async {
-    final res = await http.post(
+    final res = await _client.post(
       Uri.parse('$baseUrl/posts/$postId/like'),
       headers: _headers,
     );
@@ -522,7 +625,7 @@ class ApiService {
   }
 
   Future<Post> addComment(String postId, String text) async {
-    final res = await http.post(
+    final res = await _client.post(
       Uri.parse('$baseUrl/posts/$postId/comments'),
       headers: _headers,
       body: jsonEncode({'text': text}),
@@ -533,7 +636,7 @@ class ApiService {
 
   // Admin-only — backend rejects this for anyone else.
   Future<void> deletePost(String postId) async {
-    final res = await http.delete(
+    final res = await _client.delete(
       Uri.parse('$baseUrl/posts/$postId'),
       headers: _headers,
     );
@@ -542,15 +645,17 @@ class ApiService {
 
   // ---- Community room (public, all users) ----
 
-  Future<List<RoomMessage>> getRoomMessages() async {
-    final res = await http.get(Uri.parse('$baseUrl/chat/room/messages'),
+  Future<List<RoomMessage>> getRoomMessages({String? before, int limit = 50}) async {
+    final uri = Uri.parse('$baseUrl/chat/room/messages').replace(
+      queryParameters: {'limit': '$limit', if (before != null) 'before': before});
+    final res = await _client.get(uri,
         headers: _headers);
     final data = await _handle(res) as List;
     return data.map((e) => RoomMessage.fromJson(e)).toList();
   }
 
   Future<RoomMessage> sendRoomText(String text, {String? replyToId}) async {
-    final res = await http.post(
+    final res = await _client.post(
       Uri.parse('$baseUrl/chat/room/messages'),
       headers: _headers,
       body: jsonEncode({
@@ -565,7 +670,7 @@ class ApiService {
 
   Future<RoomMessage> sendRoomSticker(String sticker,
       {String? replyToId}) async {
-    final res = await http.post(
+    final res = await _client.post(
       Uri.parse('$baseUrl/chat/room/messages'),
       headers: _headers,
       body: jsonEncode({
@@ -594,7 +699,7 @@ class ApiService {
     );
     if (replyToId != null) request.fields['reply_to_id'] = replyToId;
 
-    final streamed = await request.send();
+    final streamed = await _client.send(request);
     final res = await http.Response.fromStream(streamed);
     final data = await _handle(res, okStatus: 201);
     return RoomMessage.fromJson(data as Map<String, dynamic>);
@@ -620,14 +725,14 @@ class ApiService {
     }
     if (replyToId != null) request.fields['reply_to_id'] = replyToId;
 
-    final streamed = await request.send();
+    final streamed = await _client.send(request);
     final res = await http.Response.fromStream(streamed);
     final data = await _handle(res, okStatus: 201);
     return RoomMessage.fromJson(data as Map<String, dynamic>);
   }
 
   Future<RoomMessage> toggleRoomReaction(String messageId, String emoji) async {
-    final res = await http.post(
+    final res = await _client.post(
       Uri.parse('$baseUrl/chat/room/messages/$messageId/react'),
       headers: _headers,
       body: jsonEncode({'emoji': emoji}),
@@ -637,7 +742,7 @@ class ApiService {
   }
 
   Future<RoomMessage> deleteRoomMessage(String messageId) async {
-    final res = await http.delete(
+    final res = await _client.delete(
       Uri.parse('$baseUrl/chat/room/messages/$messageId'),
       headers: _headers,
     );
@@ -646,7 +751,7 @@ class ApiService {
   }
 
   Future<void> roomHeartbeat() async {
-    final res = await http.post(
+    final res = await _client.post(
       Uri.parse('$baseUrl/chat/room/heartbeat'),
       headers: _headers,
     );
@@ -654,7 +759,7 @@ class ApiService {
   }
 
   Future<RoomPresence> getRoomPresence() async {
-    final res = await http.get(
+    final res = await _client.get(
       Uri.parse('$baseUrl/chat/room/presence'),
       headers: _headers,
     );
@@ -666,13 +771,13 @@ class ApiService {
 
   Future<FriendsOverview> getFriendsOverview() async {
     final res =
-        await http.get(Uri.parse('$baseUrl/social/friends'), headers: _headers);
+        await _client.get(Uri.parse('$baseUrl/social/friends'), headers: _headers);
     final data = await _handle(res);
     return FriendsOverview.fromJson(data as Map<String, dynamic>);
   }
 
   Future<void> sendFriendRequest(String username) async {
-    final res = await http.post(
+    final res = await _client.post(
       Uri.parse('$baseUrl/social/friends/requests'),
       headers: _headers,
       body: jsonEncode({'username': username}),
@@ -681,7 +786,7 @@ class ApiService {
   }
 
   Future<void> acceptFriendRequest(String requestId) async {
-    final res = await http.post(
+    final res = await _client.post(
       Uri.parse('$baseUrl/social/friends/requests/$requestId/accept'),
       headers: _headers,
     );
@@ -689,16 +794,18 @@ class ApiService {
   }
 
   Future<void> declineFriendRequest(String requestId) async {
-    final res = await http.delete(
+    final res = await _client.delete(
       Uri.parse('$baseUrl/social/friends/requests/$requestId'),
       headers: _headers,
     );
     await _handle(res, okStatus: 204);
   }
 
-  Future<List<SocialMessage>> getDirectMessages(String friendId) async {
-    final res = await http.get(
-      Uri.parse('$baseUrl/social/friends/$friendId/messages'),
+  Future<List<SocialMessage>> getDirectMessages(String friendId,
+      {String? before, int limit = 50}) async {
+    final res = await _client.get(
+      Uri.parse('$baseUrl/social/friends/$friendId/messages').replace(
+          queryParameters: {'limit': '$limit', if (before != null) 'before': before}),
       headers: _headers,
     );
     final data = await _handle(res) as List;
@@ -714,7 +821,7 @@ class ApiService {
     String? voiceUrl,
     int? voiceDurationMs,
   }) async {
-    final res = await http.post(
+    final res = await _client.post(
       Uri.parse('$baseUrl/social/friends/$friendId/messages'),
       headers: _headers,
       body: jsonEncode(_composeMessageBody(
@@ -730,7 +837,7 @@ class ApiService {
 
   Future<List<ChatGroup>> getGroups() async {
     final res =
-        await http.get(Uri.parse('$baseUrl/social/groups'), headers: _headers);
+        await _client.get(Uri.parse('$baseUrl/social/groups'), headers: _headers);
     final data = await _handle(res) as List;
     return data
         .map((item) => ChatGroup.fromJson(item as Map<String, dynamic>))
@@ -739,7 +846,7 @@ class ApiService {
 
   Future<ChatGroup> createGroup(
       {required String name, required List<String> memberIds}) async {
-    final res = await http.post(
+    final res = await _client.post(
       Uri.parse('$baseUrl/social/groups'),
       headers: _headers,
       body: jsonEncode({'name': name, 'member_ids': memberIds}),
@@ -748,9 +855,11 @@ class ApiService {
     return ChatGroup.fromJson(data as Map<String, dynamic>);
   }
 
-  Future<List<SocialMessage>> getGroupMessages(String groupId) async {
-    final res = await http.get(
-      Uri.parse('$baseUrl/social/groups/$groupId/messages'),
+  Future<List<SocialMessage>> getGroupMessages(String groupId,
+      {String? before, int limit = 50}) async {
+    final res = await _client.get(
+      Uri.parse('$baseUrl/social/groups/$groupId/messages').replace(
+          queryParameters: {'limit': '$limit', if (before != null) 'before': before}),
       headers: _headers,
     );
     final data = await _handle(res) as List;
@@ -766,7 +875,7 @@ class ApiService {
     String? voiceUrl,
     int? voiceDurationMs,
   }) async {
-    final res = await http.post(
+    final res = await _client.post(
       Uri.parse('$baseUrl/social/groups/$groupId/messages'),
       headers: _headers,
       body: jsonEncode(_composeMessageBody(
@@ -800,7 +909,7 @@ class ApiService {
   }
 
   Future<List<ChatSticker>> getStickers() async {
-    final res = await http.get(
+    final res = await _client.get(
       Uri.parse('$baseUrl/social/stickers'),
       headers: _headers,
     );
@@ -830,7 +939,7 @@ class ApiService {
       bytes,
       filename: filename,
     ));
-    final streamed = await request.send();
+    final streamed = await _client.send(request);
     final res = await http.Response.fromStream(streamed);
     final data = await _handle(res, okStatus: 201);
     return UploadedVoiceMessage.fromJson(data as Map<String, dynamic>);
@@ -858,14 +967,14 @@ class ApiService {
       http.MultipartFile.fromBytes('image', bytes, filename: image.name),
     );
 
-    final streamed = await request.send();
+    final streamed = await _client.send(request);
     final res = await http.Response.fromStream(streamed);
     final data = await _handle(res, okStatus: 201);
     return Destination.fromJson(data as Map<String, dynamic>);
   }
 
   Future<List<Destination>> getPendingDestinations() async {
-    final res = await http.get(
+    final res = await _client.get(
       Uri.parse('$baseUrl/destinations/pending'),
       headers: _headers,
     );
@@ -894,7 +1003,7 @@ class ApiService {
       if (lat != null) 'lat': lat,
       if (lng != null) 'lng': lng,
     };
-    final res = await http.patch(
+    final res = await _client.patch(
       Uri.parse('$baseUrl/destinations/$id'),
       headers: _headers,
       body: jsonEncode(body),
@@ -904,7 +1013,7 @@ class ApiService {
   }
 
   Future<void> approveDestination(String id) async {
-    final res = await http.post(
+    final res = await _client.post(
       Uri.parse('$baseUrl/destinations/$id/approve'),
       headers: _headers,
     );
@@ -912,7 +1021,7 @@ class ApiService {
   }
 
   Future<void> rejectDestination(String id) async {
-    final res = await http.post(
+    final res = await _client.post(
       Uri.parse('$baseUrl/destinations/$id/reject'),
       headers: _headers,
     );
@@ -925,7 +1034,7 @@ class ApiService {
   // chat screen can show past messages when reopened — the backend
   // already remembers them for context either way.
   Future<List<Map<String, dynamic>>> getAssistantHistory() async {
-    final res = await http.get(
+    final res = await _client.get(
       Uri.parse('$baseUrl/assistant/history'),
       headers: _headers,
     );
@@ -937,7 +1046,7 @@ class ApiService {
   // (conversations.json) and uses that for context, so the client no
   // longer needs to track/send its own history.
   Future<String> askAssistant({required String message}) async {
-    final res = await http.post(
+    final res = await _client.post(
       Uri.parse('$baseUrl/assistant/chat'),
       headers: _headers,
       body: jsonEncode({'message': message}),
@@ -959,6 +1068,7 @@ class ApiService {
   /// server-provided status code so the UI can show a targeted message
   /// (quota, safety-blocked, etc.).
   Stream<String> streamAssistant({required String message}) async* {
+    final token = _token;
     final client = http.Client();
     try {
       final request =
@@ -968,12 +1078,15 @@ class ApiService {
       if (auth != null) request.headers['Authorization'] = auth;
       request.body = jsonEncode({'message': message});
 
-      final streamed = await client.send(request);
+      final streamed = await client.send(request)
+          .timeout(const Duration(seconds: 90));
+      if (_token != token) throw ApiException('The sign-in session changed.');
       if (streamed.statusCode != 200) {
         // The server didn't even start streaming — treat this like a
         // plain HTTP error so the caller gets the same ApiException it
         // would from askAssistant().
         final body = await streamed.stream.bytesToString();
+        if (_token != token) throw ApiException('The sign-in session changed.');
         String detail = body;
         try {
           detail = (jsonDecode(body) as Map<String, dynamic>)['detail']
@@ -981,8 +1094,7 @@ class ApiService {
               body;
         } catch (_) {}
         if (streamed.statusCode == 401) {
-          setToken(null);
-          onUnauthorized?.call();
+          _sessionRejected();
         }
         throw ApiException(detail, statusCode: streamed.statusCode);
       }
@@ -991,7 +1103,9 @@ class ApiService {
       // http.ByteStream giving us line-aligned chunks, so buffer until
       // we see a newline and parse each complete line.
       final buffer = StringBuffer();
-      await for (final chunk in streamed.stream.transform(utf8.decoder)) {
+      await for (final chunk in streamed.stream.transform(utf8.decoder)
+          .timeout(const Duration(seconds: 90))) {
+        if (_token != token) throw ApiException('The sign-in session changed.');
         buffer.write(chunk);
         while (true) {
           final text = buffer.toString();
@@ -1018,10 +1132,16 @@ class ApiService {
                 frame['detail']?.toString() ?? 'Assistant stream failed.';
             throw ApiException(detail, statusCode: status);
           } else if (type == 'done') {
+            refreshTopics({'assistant'});
             return;
           }
         }
       }
+      throw ApiException('The reply was interrupted. Check your connection.');
+    } on TimeoutException {
+      throw ApiException('The assistant timed out. Please try again.');
+    } on http.ClientException {
+      throw ApiException('Connection interrupted. Please try again.');
     } finally {
       client.close();
     }

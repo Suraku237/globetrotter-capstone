@@ -64,9 +64,20 @@ CallSession _call(
     );
 
 class _Api extends Fake implements ApiService {
+  final updates = StreamController<Set<String>>.broadcast();
+  @override
+  Stream<Set<String>> get changes => updates.stream;
+  @override
+  bool isLive = false;
+
   CallSession call = _call();
   final actions = <String>[];
+  int incomingReads = 0;
+  int callReads = 0;
+  bool publishHeartbeat = false;
   Completer<List<CallSession>>? pendingIncoming;
+  Completer<CallSession>? pendingCall;
+  Completer<CallSession>? pendingAction;
   final pendingConnection = Completer<CallConnection>();
   bool connecting = false;
 
@@ -75,13 +86,18 @@ class _Api extends Fake implements ApiService {
 
   @override
   Future<List<CallSession>> getIncomingCalls() async {
+    incomingReads++;
     final pending = pendingIncoming;
     if (pending != null) return pending.future;
     return call.isEnded ? [] : [call];
   }
 
   @override
-  Future<CallSession> getCall(String id) async => call;
+  Future<CallSession> getCall(String id) async {
+    callReads++;
+    if (pendingCall != null) return pendingCall!.future;
+    return call;
+  }
 
   @override
   Future<CallSession> createCall({
@@ -100,7 +116,9 @@ class _Api extends Fake implements ApiService {
   @override
   Future<CallSession> updateCall(String id, String action) async {
     actions.add(action);
+    if (pendingAction != null) return pendingAction!.future;
     if (action != 'heartbeat') call = call.endedLocally();
+    if (action == 'heartbeat' && publishHeartbeat) updates.add({'calls'});
     return call;
   }
 }
@@ -251,7 +269,7 @@ void main() {
   CallConnection connection(CallSession call) => CallConnection(
       call: call, url: 'wss://example.livekit.cloud', token: 'test-token');
 
-  void headless(_MediaRoom room) {
+  void headless(WidgetTester tester, _MediaRoom room) {
     api = _Api();
     push = _Push();
     session = _Session();
@@ -262,15 +280,24 @@ void main() {
       api: api,
       push: push,
       roomFactory: () => room,
+      now: tester.binding.clock.now,
       uiAvailable: false,
     );
+  }
+
+  Future<void> disposeCalls(WidgetTester tester) async {
+    // Stream cancellation crosses zones; finish teardown outside FakeAsync.
+    await tester.runAsync(() async {
+      await calls.dispose();
+      await api.updates.close();
+    });
   }
 
   testWidgets(
       'restored native answer connects with no scene, frame, or Navigator',
       (tester) async {
     final room = _MediaRoom();
-    headless(room);
+    headless(tester, room);
     api.call = _call(kind: CallKind.video);
     api.pendingConnection.complete(connection(api.call));
     final recovered = Completer<void>();
@@ -289,14 +316,14 @@ void main() {
     expect(room.disconnects, 1);
     expect(room.disposals, 1);
     expect(push.unregistrations, 1);
-    await calls.dispose();
+    await disposeCalls(tester);
   }, variant: const TargetPlatformVariant({TargetPlatform.linux}));
 
   testWidgets(
       'scene foreground renders the same headless Room without reconnecting',
       (tester) async {
     final room = _MediaRoom();
-    headless(room);
+    headless(tester, room);
     api.pendingConnection.complete(connection(api.call));
     await calls.initialize();
     await calls.acceptIncoming(api.call.id);
@@ -320,14 +347,14 @@ void main() {
     await calls.signOut();
     await tester.pumpAndSettle();
     expect(room.disposals, 1);
-    await calls.dispose();
+    await disposeCalls(tester);
   }, variant: const TargetPlatformVariant({TargetPlatform.linux}));
 
   testWidgets(
       'cold native mute and mute while connecting never publish an open mic',
       (tester) async {
     final room = _MediaRoom()..connecting = Completer<void>();
-    headless(room);
+    headless(tester, room);
     push.initialMute = true;
     api.pendingConnection.complete(connection(api.call));
     await calls.initialize();
@@ -348,14 +375,14 @@ void main() {
     expect(push.muteUpdates, [true]);
     expect(room.participant.microphoneRequests, [false, true, false]);
     await calls.signOut();
-    await calls.dispose();
+    await disposeCalls(tester);
   }, variant: const TargetPlatformVariant({TargetPlatform.linux}));
 
   testWidgets(
       'native cancellation invalidates a pending headless backend accept',
       (tester) async {
     final room = _MediaRoom();
-    headless(room);
+    headless(tester, room);
     final offered = api.call;
     await calls.initialize();
     final accepting = calls.acceptIncoming(offered.id);
@@ -368,13 +395,13 @@ void main() {
     expect(room.participant.microphoneRequests, isEmpty);
     expect(calls.media, isNull);
     expect(api.actions, contains('leave'));
-    await calls.dispose();
+    await disposeCalls(tester);
   });
 
   testWidgets('native end during Room.connect cannot publish late media',
       (tester) async {
     final room = _MediaRoom()..connecting = Completer<void>();
-    headless(room);
+    headless(tester, room);
     api.pendingConnection.complete(connection(api.call));
     await calls.initialize();
     final accepting = calls.acceptIncoming(api.call.id);
@@ -388,13 +415,13 @@ void main() {
     expect(room.participant.microphoneRequests, isEmpty);
     expect(room.disposals, 1);
     expect(calls.media, isNull);
-    await calls.dispose();
+    await disposeCalls(tester);
   }, variant: const TargetPlatformVariant({TargetPlatform.linux}));
 
   testWidgets('no restored credentials cannot consume a lock-screen accept',
       (tester) async {
     final room = _MediaRoom();
-    headless(room);
+    headless(tester, room);
     session.user = null;
     await calls.initialize();
     await calls.signOut();
@@ -402,7 +429,7 @@ void main() {
     expect(push.unregistrations, 1);
     expect(api.connecting, isFalse);
     expect(room.connections, 0);
-    await calls.dispose();
+    await disposeCalls(tester);
   });
 
   Future<void> mount(WidgetTester tester) async {
@@ -417,6 +444,7 @@ void main() {
       messengerKey: messenger,
       api: api,
       push: push,
+      now: tester.binding.clock.now,
     );
     await tester.pumpWidget(MaterialApp(
       navigatorKey: navigator,
@@ -439,7 +467,230 @@ void main() {
     expect(push.ended, ['call-id']);
     expect(calls.callState.value, isNull);
     expect(find.text('Incoming voice call'), findsNothing);
-    await calls.dispose();
+    await disposeCalls(tester);
+  });
+
+  for (final topic in ['calls', 'all']) {
+    testWidgets('$topic event immediately presents an incoming call',
+        (tester) async {
+      await mount(tester);
+      api.isLive = true;
+      api.call = _call(status: 'ended');
+      await calls.initialize();
+      await tester.pumpAndSettle();
+      expect(api.incomingReads, 1);
+
+      api.call = _call();
+      api.updates.add({topic});
+      await tester.pumpAndSettle();
+
+      expect(api.incomingReads, 2);
+      expect(find.text('Incoming voice call'), findsOneWidget);
+      await disposeCalls(tester);
+    });
+  }
+
+  testWidgets(
+      'connected idle polls every 30 seconds and falls back to 3 seconds',
+      (tester) async {
+    await mount(tester);
+    api.isLive = true;
+    api.call = _call(status: 'ended');
+    await calls.initialize();
+    await tester.pumpAndSettle();
+    expect(api.incomingReads, 1);
+
+    api.updates.add({'chat'});
+    await tester.pump(const Duration(seconds: 3));
+    expect(api.incomingReads, 1);
+    await tester.pump(const Duration(seconds: 27));
+    expect(api.incomingReads, 2);
+
+    api.isLive = false;
+    await tester.pump(const Duration(seconds: 3));
+    expect(api.incomingReads, 3);
+    await disposeCalls(tester);
+  });
+
+  testWidgets('background idle defers events until foreground resumes',
+      (tester) async {
+    await mount(tester);
+    api.call = _call(status: 'ended');
+    await calls.initialize();
+    await tester.pumpAndSettle();
+
+    calls.didChangeAppLifecycleState(AppLifecycleState.paused);
+    api.call = _call();
+    api.updates.add({'calls'});
+    await tester.pump(const Duration(seconds: 30));
+    expect(api.incomingReads, 1);
+    expect(find.text('Incoming voice call'), findsNothing);
+
+    calls.didChangeAppLifecycleState(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(api.incomingReads, 2);
+    expect(find.text('Incoming voice call'), findsOneWidget);
+    await disposeCalls(tester);
+  });
+
+  testWidgets('events during incoming polling coalesce into one fresh request',
+      (tester) async {
+    await mount(tester);
+    final pending = Completer<List<CallSession>>();
+    api.pendingIncoming = pending;
+    await calls.initialize();
+    await tester.pump();
+    expect(api.incomingReads, 1);
+
+    api.updates.add({'calls'});
+    api.updates.add({'all'});
+    await tester.pump();
+    expect(api.incomingReads, 1);
+
+    api.pendingIncoming = null;
+    pending.complete([]);
+    await tester.pumpAndSettle();
+    expect(api.incomingReads, 2);
+    expect(find.text('Incoming voice call'), findsOneWidget);
+    await disposeCalls(tester);
+  });
+
+  testWidgets('active polling drains events that arrived during a stale read',
+      (tester) async {
+    await mount(tester);
+    await calls.initialize();
+    await tester.pumpAndSettle();
+    final pending = Completer<CallSession>();
+    api.pendingCall = pending;
+
+    api.updates.add({'calls'});
+    await tester.pump();
+    expect(api.callReads, 1);
+    api.call = _call(status: 'ended');
+    api.updates.add({'calls'});
+    api.updates.add({'all'});
+    await tester.pump();
+    expect(api.callReads, 1);
+
+    api.pendingCall = null;
+    pending.complete(_call(status: 'active'));
+    await tester.pumpAndSettle();
+    expect(api.callReads, 2);
+    expect(calls.callState.value, isNull);
+    expect(find.text('Incoming voice call'), findsNothing);
+    expect(push.ended, ['call-id']);
+    await disposeCalls(tester);
+  });
+
+  for (final outgoing in [false, true]) {
+    testWidgets(
+        'events during ${outgoing ? 'start' : 'accept'} refresh on completion',
+        (tester) async {
+      final room = _MediaRoom();
+      headless(tester, room);
+      api.isLive = true;
+      api.call = _call(status: 'ended');
+      await calls.initialize();
+      await tester.pump();
+      final offered = _call(status: 'active');
+      final connecting = outgoing
+          ? calls.startCall(
+              kind: CallKind.voice,
+              targetType: 'direct',
+              targetId: 'alice',
+            )
+          : calls.acceptIncoming(offered.id);
+      await tester.pump();
+      expect(api.connecting, isTrue);
+
+      api.updates.add({'calls'});
+      api.updates.add({'all'});
+      await tester.pump();
+      expect(api.callReads, 0);
+      api.pendingConnection.complete(connection(offered));
+      await connecting;
+      await tester.pump();
+
+      expect(api.callReads, 1);
+      expect(room.connections, 1);
+      expect(room.disposals, 1);
+      expect(calls.media, isNull);
+      expect(calls.callState.value, isNull);
+      await disposeCalls(tester);
+    }, variant: const TargetPlatformVariant({TargetPlatform.linux}));
+  }
+
+  testWidgets('events while declining refresh after releasing busy state',
+      (tester) async {
+    await mount(tester);
+    await calls.initialize();
+    await tester.pumpAndSettle();
+    final pending = Completer<CallSession>();
+    api.pendingAction = pending;
+    final declining = calls.endIncoming(api.call.id);
+    await tester.pump();
+    api.updates.add({'calls'});
+    api.updates.add({'all'});
+    await tester.pump();
+    expect(api.incomingReads, 1);
+
+    api.call = _call(status: 'ended');
+    pending.complete(api.call);
+    await declining;
+    await tester.pumpAndSettle();
+    expect(api.incomingReads, 2);
+    expect(calls.callState.value, isNull);
+    await disposeCalls(tester);
+  });
+
+  testWidgets(
+      'heartbeat invalidation refreshes without a heartbeat feedback loop',
+      (tester) async {
+    final room = _MediaRoom();
+    headless(tester, room);
+    api.isLive = true;
+    api.publishHeartbeat = true;
+    api.call = _call(status: 'active');
+    api.pendingConnection.complete(connection(api.call));
+    await calls.initialize();
+    await calls.acceptIncoming(api.call.id);
+    await tester.pump();
+    final initialReads = api.callReads;
+
+    calls.didChangeAppLifecycleState(AppLifecycleState.paused);
+    await tester.pump(const Duration(seconds: 9));
+    expect(api.actions, isEmpty);
+    await tester.pump(const Duration(seconds: 3));
+    expect(api.actions, ['heartbeat']);
+    expect(api.callReads, initialReads + 1);
+
+    await tester.pump(const Duration(seconds: 3));
+    expect(api.actions, ['heartbeat']);
+    expect(api.callReads, initialReads + 1);
+    api.call = _call(status: 'ended');
+    api.updates.add({'calls'});
+    await tester.pump();
+    expect(calls.callState.value, isNull);
+    expect(room.disposals, 1);
+    await disposeCalls(tester);
+  }, variant: const TargetPlatformVariant({TargetPlatform.linux}));
+
+  testWidgets(
+      'dispose removes realtime and session listeners and cancels polling',
+      (tester) async {
+    await mount(tester);
+    api.call = _call(status: 'ended');
+    await calls.initialize();
+    await tester.pumpAndSettle();
+    expect(api.updates.hasListener, isTrue);
+
+    await tester.runAsync(calls.dispose);
+    expect(api.updates.hasListener, isFalse);
+    expect(session.listeners, isEmpty);
+    api.updates.add({'calls'});
+    await tester.pump(const Duration(seconds: 30));
+    expect(api.incomingReads, 1);
+    await tester.runAsync(api.updates.close);
   });
 
   testWidgets('cancelled calls remove the incoming prompt on the next poll',
@@ -453,7 +704,7 @@ void main() {
     expect(find.text('Incoming voice call'), findsNothing);
     expect(calls.callState.value, isNull);
     expect(push.ended, ['call-id']);
-    await calls.dispose();
+    await disposeCalls(tester);
   });
 
   testWidgets('expired calls never display an answer prompt', (tester) async {
@@ -463,7 +714,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Answer'), findsNothing);
     expect(calls.callState.value, isNull);
-    await calls.dispose();
+    await disposeCalls(tester);
   });
 
   testWidgets('signing out releases the call and unregisters notifications',
@@ -477,7 +728,7 @@ void main() {
     expect(push.unregistrations, 1);
     expect(calls.callState.value, isNull);
     expect(find.text('Incoming voice call'), findsNothing);
-    await calls.dispose();
+    await disposeCalls(tester);
   });
 
   testWidgets('late polling response cannot show a call after sign out',
@@ -492,7 +743,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Incoming voice call'), findsNothing);
     expect(calls.callState.value, isNull);
-    await calls.dispose();
+    await disposeCalls(tester);
   });
 
   for (final nextUser in ['bob', 'another-account']) {
@@ -523,7 +774,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(CallScreen), findsNothing);
       expect(calls.callState.value, isNull);
-      await calls.dispose();
+      await disposeCalls(tester);
     });
   }
 }

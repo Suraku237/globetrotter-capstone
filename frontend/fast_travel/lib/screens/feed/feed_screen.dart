@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../Services/api_service.dart';
+import '../../Services/live_refresh.dart';
+import '../../Services/media_settings.dart';
 import '../../Services/session_state.dart';
 import '../../models/models.dart';
 import '../../theme/app_theme.dart';
@@ -38,6 +40,8 @@ class _FeedScreenState extends State<FeedScreen> {
   String _searchQuery = '';
   List<Post> _posts = [];
   bool _loading = true;
+  bool _hasLoaded = false;
+  late final LiveRefresh _refresh;
   String? _error;
   bool _errorIsNetwork = false;
   int _currentPage = 0;
@@ -50,15 +54,22 @@ class _FeedScreenState extends State<FeedScreen> {
   @override
   void initState() {
     super.initState();
+    _refresh = LiveRefresh(
+      changes: ApiService.instance.changes,
+      topics: {'posts'},
+      onRefresh: _fetchPosts,
+    );
+    MediaSettings.instance.addListener(_mediaSettingsChanged);
     // Stale-while-revalidate: paint the previously fetched feed the
     // instant this screen mounts (switching tabs, hot reload, coming
     // back from create-post) instead of showing a blocking spinner
     // while /posts round-trips. The silent refresh below then pulls
     // any new posts in the background.
     final cached = ApiService.instance.cachedPosts;
-    if (cached != null && cached.isNotEmpty) {
+    if (cached != null) {
       _posts = cached;
       _loading = false;
+      _hasLoaded = true;
     }
     _loadPosts(silent: _posts.isNotEmpty);
     _searchController.addListener(() {
@@ -79,6 +90,8 @@ class _FeedScreenState extends State<FeedScreen> {
 
   @override
   void dispose() {
+    _refresh.dispose();
+    MediaSettings.instance.removeListener(_mediaSettingsChanged);
     _pageController.dispose();
     _searchController.dispose();
     super.dispose();
@@ -98,7 +111,14 @@ class _FeedScreenState extends State<FeedScreen> {
         .toList();
   }
 
-  Future<void> _loadPosts({bool silent = false}) async {
+  void _mediaSettingsChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _loadPosts({bool silent = false}) => _refresh.refresh();
+
+  Future<void> _fetchPosts() async {
+    final silent = _hasLoaded;
     // "silent" means we already have cached posts on-screen and the
     // refresh is happening in the background — don't blank them out
     // behind a full-screen spinner.
@@ -110,7 +130,30 @@ class _FeedScreenState extends State<FeedScreen> {
     try {
       final posts = await ApiService.instance.getPosts();
       if (!mounted) return;
-      setState(() => _posts = posts);
+      final visible = _visiblePosts;
+      final activeId = visible.isEmpty
+          ? null
+          : visible[_currentPage.clamp(0, visible.length - 1)].id;
+      final oldPage = _currentPage;
+      setState(() {
+        _posts = posts;
+        _hasLoaded = true;
+        final updatedVisible = _visiblePosts;
+        final activeIndex =
+            updatedVisible.indexWhere((post) => post.id == activeId);
+        _currentPage = activeIndex >= 0
+            ? activeIndex
+            : (updatedVisible.isEmpty
+                ? 0
+                : _currentPage.clamp(0, updatedVisible.length - 1));
+      });
+      if (_currentPage != oldPage) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _pageController.hasClients) {
+            _pageController.jumpToPage(_currentPage);
+          }
+        });
+      }
     } on ApiException catch (e) {
       // A 401 signs the user out and returns them to the login screen (see
       // ApiService.onUnauthorized in main.dart) — nothing to show here.
@@ -251,15 +294,14 @@ class _FeedScreenState extends State<FeedScreen> {
       controller: _pageController,
       scrollDirection: Axis.vertical,
       itemCount: visiblePosts.length,
-      // Preload the next post's video controller ahead of a swipe so
-      // the feed feels instant on phones — a big perceived-perf win
-      // over the previous "wait for buffering on every swipe" behavior.
-      // Deliberately disabled on wide/web: the constrained-width layout
-      // below (ConstrainedBox + Row with a finite cardWidth) crashes
-      // the renderer when this flag is on ("RenderViewport ... w<=Infinity"
-      // / "Cannot hit test a render box with no size"). The phone path
-      // is a full-bleed PageView with tight width bounds, which is safe.
-      allowImplicitScrolling: !isWide,
+      // Data Saver never prebuilds neighboring media. Even when disabled,
+      // PostCard only initializes video on the active page.
+      allowImplicitScrolling: !isWide && !MediaSettings.instance.dataSaver,
+      findChildIndexCallback: (key) {
+        if (key is! ValueKey<String>) return null;
+        final index = visiblePosts.indexWhere((post) => post.id == key.value);
+        return index < 0 ? null : index;
+      },
       onPageChanged: (index) => setState(() {
         _currentPage = index;
         _openCommentsPostId = null;
@@ -267,6 +309,7 @@ class _FeedScreenState extends State<FeedScreen> {
       itemBuilder: (context, index) {
         final post = visiblePosts[index];
         return Padding(
+          key: ValueKey(post.id),
           padding: isWide
               ? const EdgeInsets.symmetric(vertical: 4)
               : EdgeInsets.zero,

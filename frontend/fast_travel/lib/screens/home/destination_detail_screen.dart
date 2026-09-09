@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import '../../Services/api_service.dart';
+import '../../Services/live_refresh.dart';
 import '../../models/models.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/destination_essentials.dart';
 import '../../widgets/star_rating.dart';
+import '../../widgets/public_network_image.dart';
 import '../assistant/assistant_screen.dart';
 import '../itineraries/itineraries_screen.dart';
 import '../itineraries/itinerary_map_screen.dart';
@@ -21,19 +23,45 @@ class DestinationDetailScreen extends StatefulWidget {
 
 class _DestinationDetailScreenState extends State<DestinationDetailScreen> {
   final FlutterTts _tts = FlutterTts();
+  late Destination _destination = widget.destination;
+  late final LiveRefresh _refresh;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh = LiveRefresh(
+      changes: ApiService.instance.changes,
+      topics: {'destinations'},
+      onRefresh: () async {
+        try {
+          final destinations = await ApiService.instance.getDestinations();
+          if (!mounted) return;
+          for (final destination in destinations) {
+            if (destination.id == widget.destination.id) {
+              setState(() => _destination = destination);
+              break;
+            }
+          }
+        } catch (_) {
+          // The detail passed by the previous screen remains usable offline.
+        }
+      },
+    );
+  }
 
   @override
   void dispose() {
+    _refresh.dispose();
     _tts.stop();
     super.dispose();
   }
 
-  String get _description => widget.destination.description.isNotEmpty
-      ? widget.destination.description
+  String get _description => _destination.description.isNotEmpty
+      ? _destination.description
       : 'No description available for this location.';
 
   Future<void> _speakDescription() async {
-    await _tts.speak('${widget.destination.name}. $_description');
+    await _tts.speak('${_destination.name}. $_description');
   }
 
   void _showOnMap() {
@@ -41,9 +69,9 @@ class _DestinationDetailScreenState extends State<DestinationDetailScreen> {
       context,
       MaterialPageRoute(
         builder: (context) => ItineraryMapScreen(
-          destLat: widget.destination.lat,
-          destLng: widget.destination.lng,
-          destName: widget.destination.name,
+          destLat: _destination.lat,
+          destLng: _destination.lng,
+          destName: _destination.name,
         ),
       ),
     );
@@ -55,7 +83,7 @@ class _DestinationDetailScreenState extends State<DestinationDetailScreen> {
     // "Plan Trip" for this specific place, so they shouldn't have to
     // retype the packing list into their itinerary.
     final essentialsNote =
-        essentialsAsNoteText(essentialsForDestination(widget.destination));
+        essentialsAsNoteText(essentialsForDestination(_destination));
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -64,7 +92,7 @@ class _DestinationDetailScreenState extends State<DestinationDetailScreen> {
           appBar: AppBar(title: const Text('Plan a Trip')),
           body: SafeArea(
             child: ItinerariesScreen(
-              presetDestination: widget.destination,
+              presetDestination: _destination,
               presetNotes: essentialsNote,
             ),
           ),
@@ -79,7 +107,7 @@ class _DestinationDetailScreenState extends State<DestinationDetailScreen> {
       MaterialPageRoute(
         builder: (context) => AssistantScreen(
           initialQuestion:
-              'Tell me more about ${widget.destination.name} in ${widget.destination.region}, Cameroon.',
+              'Tell me more about ${_destination.name} in ${_destination.region}, Cameroon.',
         ),
       ),
     );
@@ -87,7 +115,7 @@ class _DestinationDetailScreenState extends State<DestinationDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final destination = widget.destination;
+    final destination = _destination;
     final textTheme = Theme.of(context).textTheme;
 
     return Scaffold(
@@ -113,7 +141,7 @@ class _DestinationDetailScreenState extends State<DestinationDetailScreen> {
                     // + "What to bring" content sits above the fold on
                     // typical phones.
                     height: 220,
-                    child: Image.network(
+                    child: PublicNetworkImage(
                       ApiService.resolveUrl(destination.imageUrl ?? ''),
                       fit: BoxFit.cover,
                       errorBuilder: (context, error, stackTrace) => Container(

@@ -112,6 +112,8 @@ def save_destinations(destinations: list) -> None:
         _save(DESTINATIONS_FILE, existing)
     else:
         _save(DESTINATIONS_FILE, destinations)
+    from .event_store import publish
+    publish(["destinations", "recommendations"])
 
 
 def load_itineraries() -> list:
@@ -128,6 +130,8 @@ def load_posts() -> list:
 
 def save_posts(posts: list) -> None:
     _save(POSTS_FILE, posts)
+    from .event_store import publish
+    publish(["posts"])
 
 
 def load_conversations() -> dict:

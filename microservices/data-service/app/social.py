@@ -3,13 +3,15 @@
 import threading
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
 from .models import DATA_DIR, _load, _save, load_users
 from .security import get_current_user
+from .event_store import publish
+from .pagination import message_page
 
 router = APIRouter(prefix="/social", tags=["social"])
 
@@ -272,6 +274,7 @@ def send_friend_request(
         }
         friendships.append(request)
         _save(FRIENDSHIPS_FILE, friendships)
+        publish(["friends"], [request["requester_id"], request["recipient_id"]])
         return {"request_id": request["id"], "status": request["status"]}
 
 
@@ -291,6 +294,7 @@ def accept_friend_request(
         request["status"] = "accepted"
         request["updated_at"] = datetime.now(timezone.utc).isoformat()
         _save(FRIENDSHIPS_FILE, friendships)
+        publish(["friends"], [request["requester_id"], request["recipient_id"]])
         return {"request_id": request["id"], "status": request["status"]}
 
 
@@ -308,16 +312,22 @@ def decline_friend_request(
         if request["status"] != "pending":
             raise HTTPException(status_code=400, detail="Only pending requests can be removed")
         _save(FRIENDSHIPS_FILE, [item for item in friendships if item["id"] != request_id])
+        publish(["friends"], [request["requester_id"], request["recipient_id"]])
 
 
 @router.get("/friends/{friend_id}/messages")
-def get_direct_messages(friend_id: str, current_user: dict = Depends(get_current_user)):
+def get_direct_messages(
+    friend_id: str,
+    current_user: dict = Depends(get_current_user),
+    limit: Annotated[int | None, Query(ge=1, le=200)] = None,
+    before: Annotated[str | None, Query(min_length=1, max_length=128)] = None,
+):
     with _social_lock:
         friendships = _load_list(FRIENDSHIPS_FILE)
         _require_friendship(friendships, current_user["id"], friend_id)
         threads = _load_list(DIRECT_THREADS_FILE)
         thread = _thread_for(threads, current_user["id"], friend_id)
-        return thread["messages"]
+        return message_page(thread["messages"], limit, before)
 
 
 @router.post("/friends/{friend_id}/messages", status_code=201)
@@ -334,6 +344,7 @@ def send_direct_message(
         message = _message(current_user, payload)
         thread["messages"].append(message)
         _save(DIRECT_THREADS_FILE, threads)
+        publish(["friends"], thread["participant_ids"])
         return message
 
 
@@ -398,6 +409,7 @@ def create_group(
         groups = _load_list(GROUPS_FILE)
         groups.append(group)
         _save(GROUPS_FILE, groups)
+        publish(["friends"], all_members)
         return {
             "id": group["id"],
             "name": group["name"],
@@ -417,10 +429,15 @@ def _group_for_member(groups: list, group_id: str, member_id: str) -> dict:
 
 
 @router.get("/groups/{group_id}/messages")
-def get_group_messages(group_id: str, current_user: dict = Depends(get_current_user)):
+def get_group_messages(
+    group_id: str,
+    current_user: dict = Depends(get_current_user),
+    limit: Annotated[int | None, Query(ge=1, le=200)] = None,
+    before: Annotated[str | None, Query(min_length=1, max_length=128)] = None,
+):
     with _social_lock:
         group = _group_for_member(_load_list(GROUPS_FILE), group_id, current_user["id"])
-        return group.get("messages", [])
+        return message_page(group.get("messages", []), limit, before)
 
 
 @router.post("/groups/{group_id}/messages", status_code=201)
@@ -435,6 +452,7 @@ def send_group_message(
         message = _message(current_user, payload)
         group.setdefault("messages", []).append(message)
         _save(GROUPS_FILE, groups)
+        publish(["friends"], group["member_ids"])
         return message
 
 

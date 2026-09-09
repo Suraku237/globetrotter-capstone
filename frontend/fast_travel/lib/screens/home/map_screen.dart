@@ -9,6 +9,7 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 import '../../theme/app_theme.dart';
 import '../../models/models.dart';
 import '../../Services/api_service.dart';
+import '../../Services/live_refresh.dart';
 import '../../widgets/map_platform.dart';
 
 // A search result on the map screen — either one of the app's own curated
@@ -80,6 +81,7 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
   bool _isWaitingForPermission = false;
 
   List<Destination> _allDestinations = [];
+  late final LiveRefresh _refresh;
   List<_MapSearchResult> _searchResults = [];
   bool _searchingExternal = false;
   Timer? _searchDebounce;
@@ -89,27 +91,46 @@ class _ExploreMapScreenState extends State<ExploreMapScreen> {
   @override
   void initState() {
     super.initState();
+    _refresh = LiveRefresh(
+      changes: ApiService.instance.changes,
+      topics: {'destinations'},
+      onRefresh: _fetchDestinations,
+    );
     _loadDestinations();
     _searchController.addListener(_onSearchChanged);
   }
 
   @override
   void dispose() {
+    _refresh.dispose();
     _searchController.dispose();
     _searchDebounce?.cancel();
     super.dispose();
   }
 
-  Future<void> _loadDestinations() async {
+  Future<void> _loadDestinations() => _refresh.refresh();
+
+  Future<void> _fetchDestinations() async {
     try {
       final data = await ApiService.instance.getDestinations();
+      if (!mounted) return;
       setState(() {
         _allDestinations = data;
-        _searchResults = data.map(_MapSearchResult.fromDestination).toList();
+        final query = _searchController.text.trim().toLowerCase();
+        final external = _searchResults.where((r) => r.isExternal).toList();
+        _searchResults = [
+          ...data.where((d) =>
+              query.isEmpty ||
+              d.name.toLowerCase().contains(query) ||
+              d.region.toLowerCase().contains(query) ||
+              d.tags.any((tag) => tag.toLowerCase().contains(query)))
+              .map(_MapSearchResult.fromDestination),
+          ...external,
+        ];
         _loadingDestinations = false;
       });
     } catch (e) {
-      setState(() => _loadingDestinations = false);
+      if (mounted) setState(() => _loadingDestinations = false);
     }
   }
 

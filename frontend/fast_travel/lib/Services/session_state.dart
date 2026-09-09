@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:image_picker/image_picker.dart';
@@ -8,7 +10,19 @@ import 'api_service.dart';
 /// a plain ChangeNotifier is enough for Phase 1 and avoids pulling in a
 /// state-management package before it's actually needed.
 class SessionState extends ChangeNotifier {
+  SessionState() {
+    _updates = ApiService.instance.changes.listen((topics) {
+      if (topics.contains('profile') || topics.contains('all')) {
+        unawaited(_refreshProfile());
+      }
+    });
+  }
+
   AppUser? currentUser;
+  StreamSubscription<Set<String>>? _updates;
+  bool _refreshingProfile = false;
+  bool _profileRefreshQueued = false;
+  bool _disposed = false;
   Future<void> Function()? beforeSignOut;
 
   bool get isSignedIn => currentUser != null;
@@ -25,16 +39,20 @@ class SessionState extends ChangeNotifier {
   // launch. Returns false (and leaves currentUser null) if there was no
   // saved token or it's no longer valid.
   Future<bool> tryRestoreSession() async {
-    final token = await ApiService.instance.loadPersistedToken();
-    if (token == null) return false;
-    ApiService.instance.setToken(token);
     try {
+      final token = await ApiService.instance.loadPersistedToken();
+      if (token == null) return false;
+      ApiService.instance.setToken(token);
       currentUser = await ApiService.instance.fetchCurrentUser()
           .timeout(const Duration(seconds: 12));
       notifyListeners();
       return true;
-    } catch (_) {
-      ApiService.instance.setToken(null);
+    } on ApiException catch (error) {
+      // A network outage is not a logout; a 401 is handled by the API.
+      debugPrint('Session restoration unavailable: ${error.message}');
+      return false;
+    } on TimeoutException {
+      debugPrint('Session restoration timed out; keeping the saved login.');
       return false;
     }
   }
@@ -45,6 +63,7 @@ class SessionState extends ChangeNotifier {
         email: email,
         password: password,
       );
+      await ApiService.instance.rememberUser(user);
       currentUser = user;
       notifyListeners();
       return user;
@@ -74,6 +93,7 @@ class SessionState extends ChangeNotifier {
   Future<AppUser> verifyEmail(String email, String code) async {
     final user =
         await ApiService.instance.verifyEmail(email: email, code: code);
+    await ApiService.instance.rememberUser(user);
     currentUser = user;
     notifyListeners();
     return user;
@@ -88,6 +108,7 @@ class SessionState extends ChangeNotifier {
     required AppUser user,
   }) async {
     ApiService.instance.setToken(accessToken);
+    await ApiService.instance.rememberUser(user);
     currentUser = user;
     notifyListeners();
     return user;
@@ -130,6 +151,7 @@ class SessionState extends ChangeNotifier {
       final user = await ApiService.instance.loginWithGoogle(
         idToken: tokenToSend,
       );
+      await ApiService.instance.rememberUser(user);
 
       print('6. SUCCESS! User: ${user.fullName}');
       currentUser = user;
@@ -159,9 +181,40 @@ class SessionState extends ChangeNotifier {
 
   Future<void> signOut() async {
     await beforeSignOut?.call();
-    ApiService.instance.setToken(null);
+    await ApiService.instance.clearSession();
     _googleSignIn.signOut();
     currentUser = null;
     notifyListeners();
+  }
+
+  Future<void> _refreshProfile() async {
+    final userId = currentUser?.id;
+    if (userId == null || _disposed) return;
+    if (_refreshingProfile) {
+      _profileRefreshQueued = true;
+      return;
+    }
+    _refreshingProfile = true;
+    _profileRefreshQueued = false;
+    try {
+      final user = await ApiService.instance.fetchCurrentUser();
+      if (_disposed || currentUser?.id != userId) return;
+      currentUser = user;
+      notifyListeners();
+    } on ApiException catch (error) {
+      debugPrint('Profile refresh unavailable: ${error.message}');
+    } on TimeoutException {
+      debugPrint('Profile refresh timed out.');
+    } finally {
+      _refreshingProfile = false;
+      if (_profileRefreshQueued) unawaited(_refreshProfile());
+    }
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    unawaited(_updates?.cancel());
+    super.dispose();
   }
 }

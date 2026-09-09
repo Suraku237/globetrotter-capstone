@@ -35,6 +35,9 @@ dependencies:
   livekit_client: 2.11.0
   firebase_messaging: 15.2.10
   flutter_callkit_incoming: 3.1.5
+  web_socket_channel: 3.0.3
+  cached_network_image: 3.4.1
+  flutter_cache_manager: 3.4.1
 
 dev_dependencies:
   flutter_test:

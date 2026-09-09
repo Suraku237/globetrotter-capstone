@@ -19,6 +19,7 @@ class CallCoordinator with WidgetsBindingObserver {
   final GlobalKey<NavigatorState> navigatorKey;
   final GlobalKey<ScaffoldMessengerState> messengerKey;
   final ApiService _api;
+  final DateTime Function() _now;
   final Room Function()? _roomFactory;
   bool _uiAvailable;
   CallMediaSession? _media;
@@ -31,6 +32,10 @@ class CallCoordinator with WidgetsBindingObserver {
   bool get isInCall => _busy || callState.value != null;
   late final CallPushService _push;
   Timer? _poller;
+  StreamSubscription<Set<String>>? _updates;
+  bool _refreshQueued = false;
+  bool _foreground = true;
+  DateTime _lastPoll = DateTime.fromMillisecondsSinceEpoch(0);
   Route<void>? _incomingRoute;
   Route<void>? _callRoute;
   bool _polling = false;
@@ -52,8 +57,10 @@ class CallCoordinator with WidgetsBindingObserver {
     ApiService? api,
     CallPushService? push,
     Room Function()? roomFactory,
+    DateTime Function()? now,
     bool uiAvailable = true,
   }) : _api = api ?? ApiService.instance,
+       _now = now ?? DateTime.now,
        _roomFactory = roomFactory,
        _uiAvailable = uiAvailable {
     _push = push ??
@@ -75,8 +82,16 @@ class CallCoordinator with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     session.addListener(_sessionChanged);
     _sessionChanged();
+    _updates = _api.changes.listen((topics) {
+      if (!topics.contains('calls') && !topics.contains('all')) return;
+      _requestRefresh();
+    });
     _poller = Timer.periodic(const Duration(seconds: 3), (_) {
-      unawaited(_poll());
+      if (!_foreground && callState.value == null) return;
+      final interval = !_api.isLive ? 3 : (callState.value == null ? 30 : 10);
+      if (_now().difference(_lastPoll).inSeconds >= interval) {
+        unawaited(_poll());
+      }
     });
   }
 
@@ -112,6 +127,7 @@ class CallCoordinator with WidgetsBindingObserver {
     } catch (error) {
       _notify('Call recovery failed. Please check your connection.');
     }
+    _refreshQueued = true;
     await _poll();
   }
 
@@ -122,7 +138,7 @@ class CallCoordinator with WidgetsBindingObserver {
       _pendingNotice = null;
       if (notice != null) _notify(notice);
       _presentMedia();
-      unawaited(_poll());
+      _requestRefresh();
     }
 
   }
@@ -133,9 +149,10 @@ class CallCoordinator with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _uiAvailable) {
-      _presentMedia();
-      unawaited(_poll());
+    _foreground = state == AppLifecycleState.resumed;
+    if (_foreground) {
+      if (_uiAvailable) _presentMedia();
+      _requestRefresh();
     }
   }
 
@@ -192,6 +209,7 @@ class CallCoordinator with WidgetsBindingObserver {
       await _leave();
     } finally {
       _busy = false;
+      if (_refreshQueued) unawaited(_poll());
     }
 
   }
@@ -202,11 +220,24 @@ class CallCoordinator with WidgetsBindingObserver {
       _generation == generation &&
       session.currentUser?.id == userId;
 
+  void _requestRefresh() {
+    if (_disposed || _signedOut || !session.isSignedIn) return;
+    _refreshQueued = true;
+    unawaited(_poll());
+  }
+
   Future<void> _poll() async {
-    if (_polling || _busy || _signedOut || !session.isSignedIn || _disposed) {
+    if (_polling ||
+        _busy ||
+        _signedOut ||
+        !session.isSignedIn ||
+        _disposed ||
+        (!_foreground && callState.value == null)) {
       return;
     }
     _polling = true;
+    _refreshQueued = false;
+    _lastPoll = _now();
     final userId = session.currentUser!.id;
     final generation = _generation;
     try {
@@ -214,7 +245,7 @@ class CallCoordinator with WidgetsBindingObserver {
       if (current != null) {
         if (current.isEnded) return;
         final heartbeat = _media != null && !_media!.closing &&
-            DateTime.now().difference(_lastHeartbeat).inSeconds >= 10;
+            _now().difference(_lastHeartbeat).inSeconds >= 10;
         final updated = heartbeat
             ? await _api.updateCall(current.id, 'heartbeat')
             : await _api.getCall(current.id);
@@ -223,7 +254,7 @@ class CallCoordinator with WidgetsBindingObserver {
             callState.value?.isEnded == true) {
           return;
         }
-        if (heartbeat) _lastHeartbeat = DateTime.now();
+        if (heartbeat) _lastHeartbeat = _now();
         callState.value = updated;
         if (updated.isEnded) {
           await _remoteEnded(updated.id);
@@ -232,7 +263,7 @@ class CallCoordinator with WidgetsBindingObserver {
         final incoming = await _api.getIncomingCalls();
         if (!_sameSession(userId, generation)) return;
         for (final call in incoming) {
-          if (call.canAnswer(userId, DateTime.now())) {
+          if (call.canAnswer(userId, _now())) {
             await _presentIncoming(call);
             break;
           }
@@ -245,6 +276,7 @@ class CallCoordinator with WidgetsBindingObserver {
       _lastPollError = error.message;
     } finally {
       _polling = false;
+      if (_refreshQueued) unawaited(_poll());
     }
   }
 
@@ -266,7 +298,7 @@ class CallCoordinator with WidgetsBindingObserver {
     if (_disposed || _signedOut) return;
     if (_pendingCallId == call.id) return;
     final userId = session.currentUser?.id;
-    if (userId == null || !call.canAnswer(userId, DateTime.now())) {
+    if (userId == null || !call.canAnswer(userId, _now())) {
       await _push.endCall(call.id);
       return;
     }
@@ -355,6 +387,7 @@ class CallCoordinator with WidgetsBindingObserver {
     } finally {
       if (_pendingCallId == id) _pendingCallId = null;
       _busy = false;
+      if (_refreshQueued) unawaited(_poll());
     }
   }
 
@@ -377,7 +410,10 @@ class CallCoordinator with WidgetsBindingObserver {
     } on ApiException catch (error) {
       _notify(error.message);
     } finally {
-      if (claimedBusy) _busy = false;
+      if (claimedBusy) {
+        _busy = false;
+        if (_refreshQueued) unawaited(_poll());
+      }
     }
   }
 
@@ -394,7 +430,7 @@ class CallCoordinator with WidgetsBindingObserver {
     final id = connection.call.id;
     callState.value = connection.call;
     _connection = connection;
-    _lastHeartbeat = DateTime.now();
+    _lastHeartbeat = _now();
     final initialMute = _muteStates[id] ?? await _push.getMuteState(id);
     if (_signedOut || _disposed || callState.value?.id != id || callState.value!.isEnded) return;
     final media = CallMediaSession(
@@ -454,7 +490,7 @@ class CallCoordinator with WidgetsBindingObserver {
       // disconnect an accepted call because no Flutter view exists yet.
       return;
     }
-    _lastHeartbeat = DateTime.now();
+    _lastHeartbeat = _now();
     final route = MaterialPageRoute<void>(
       fullscreenDialog: true,
       builder: (_) => CallScreen(
@@ -476,7 +512,7 @@ class CallCoordinator with WidgetsBindingObserver {
       _connection = null;
       callState.value = null;
       _leaveFuture = null;
-      unawaited(_poll());
+      _requestRefresh();
     }));
   }
 
@@ -515,6 +551,7 @@ class CallCoordinator with WidgetsBindingObserver {
   Future<void> signOut() async {
     _generation++;
     _signedOut = true;
+    _refreshQueued = false;
     _closeIncoming();
     final route = _callRoute;
     if (route != null && route.isActive) {
@@ -534,7 +571,10 @@ class CallCoordinator with WidgetsBindingObserver {
 
   Future<void> dispose() async {
     _disposed = true;
+    _refreshQueued = false;
     _poller?.cancel();
+    await _updates?.cancel();
+    _updates = null;
     WidgetsBinding.instance.removeObserver(this);
     session.removeListener(_sessionChanged);
     await _media?.stop();

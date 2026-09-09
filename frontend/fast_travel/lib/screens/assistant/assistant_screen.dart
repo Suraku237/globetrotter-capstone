@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../../Services/api_service.dart';
+import '../../Services/live_refresh.dart';
 import '../../theme/app_theme.dart';
 
 class _ChatMessage {
@@ -35,6 +36,10 @@ class _AssistantScreenState extends State<AssistantScreen> {
   bool _speakReplies = true;
   bool _loadingHistory = true;
   String _liveTranscript = '';
+  late final LiveRefresh _refresh;
+  bool _historyPending = false;
+  bool _initialQuestionSent = false;
+  int _conversationRevision = 0;
 
   static const _greeting = _ChatMessage(
     "Hi! I'm your Fast Travel assistant — ask me anything about "
@@ -45,6 +50,11 @@ class _AssistantScreenState extends State<AssistantScreen> {
   @override
   void initState() {
     super.initState();
+    _refresh = LiveRefresh(
+      changes: ApiService.instance.changes,
+      topics: {'assistant'},
+      onRefresh: _fetchHistory,
+    );
     _initSpeech();
     _loadHistory();
   }
@@ -53,12 +63,27 @@ class _AssistantScreenState extends State<AssistantScreen> {
   // their account, not this browser/app session) — this loads the real
   // history before showing anything, rather than always starting blank
   // and only silently gaining memory in the background.
-  Future<void> _loadHistory() async {
+  Future<void> _loadHistory() => _refresh.refresh();
+
+  Future<void> _fetchHistory() async {
+    if (_sending) {
+      _historyPending = true;
+      return;
+    }
+    final revision = _conversationRevision;
+    final firstLoad = _loadingHistory;
+    final followBottom = !_scrollController.hasClients ||
+        _scrollController.position.extentAfter < 80;
     try {
       final history = await ApiService.instance.getAssistantHistory();
       if (!mounted) return;
+      if (_sending || revision != _conversationRevision) {
+        _historyPending = true;
+        return;
+      }
       final wasEmpty = history.isEmpty;
       setState(() {
+        _messages.clear();
         if (wasEmpty) {
           _messages.add(_greeting);
         } else {
@@ -69,12 +94,15 @@ class _AssistantScreenState extends State<AssistantScreen> {
         }
         _loadingHistory = false;
       });
-      _scrollToBottom();
-      if (wasEmpty && widget.initialQuestion != null) {
+      if (firstLoad || followBottom) _scrollToBottom();
+      if (wasEmpty &&
+          widget.initialQuestion != null &&
+          !_initialQuestionSent) {
+        _initialQuestionSent = true;
         _send(widget.initialQuestion!);
       }
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || !firstLoad || _sending) return;
       setState(() {
         _messages.add(_greeting);
         _messages.add(const _ChatMessage(
@@ -136,6 +164,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
 
   Future<void> _send(String text) async {
     if (text.trim().isEmpty || _sending) return;
+    _conversationRevision++;
 
     // Push the user bubble immediately, plus a placeholder assistant
     // bubble we'll append tokens into as the stream ticks. This is what
@@ -192,6 +221,10 @@ class _AssistantScreenState extends State<AssistantScreen> {
     } finally {
       if (mounted) setState(() => _sending = false);
       _scrollToBottom();
+      if (mounted && _historyPending) {
+        _historyPending = false;
+        _loadHistory();
+      }
     }
   }
 
@@ -209,6 +242,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
 
   @override
   void dispose() {
+    _refresh.dispose();
     _textController.dispose();
     _scrollController.dispose();
     _speech.stop();

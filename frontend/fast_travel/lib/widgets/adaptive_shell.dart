@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import '../Services/api_service.dart';
+import '../Services/media_cache.dart';
 import '../l10n/generated/app_localizations.dart';
 import '../screens/assistant/assistant_screen.dart';
 import '../theme/app_theme.dart';
@@ -33,6 +34,7 @@ class AdaptiveShell extends StatelessWidget {
   // screen), not one of the indexed tabs in `destinations`, so it isn't
   // part of selectedIndex/onDestinationSelected.
   final VoidCallback onOpenFriends;
+  final VoidCallback onOpenCommunity;
 
   // ✅ UPDATED: Added 4th destination: Map
   // Labels come from AppLocalizations at build time (see _destinations),
@@ -73,6 +75,7 @@ class AdaptiveShell extends StatelessWidget {
     this.userName,
     this.showAppBar = true,
     required this.onOpenFriends,
+    required this.onOpenCommunity,
   });
 
   Widget _profileIcon({required bool selected}) {
@@ -81,7 +84,7 @@ class AdaptiveShell extends StatelessWidget {
       return CircleAvatar(
         radius: 12,
         backgroundColor: AppColors.sandDim,
-        backgroundImage: NetworkImage(ApiService.resolveUrl(url)),
+        backgroundImage: MediaCache.imageProvider(ApiService.resolveUrl(url), cacheWidth: 96),
       );
     }
     final name = userName?.trim();
@@ -136,6 +139,12 @@ class AdaptiveShell extends StatelessWidget {
                   ),
                 ),
                 actions: [
+                  IconButton(
+                    tooltip: Localizations.localeOf(context).languageCode == 'fr'
+                        ? 'Communaute' : 'Community chat',
+                    icon: const Icon(Icons.forum_outlined),
+                    onPressed: onOpenCommunity,
+                  ),
                   IconButton(
                     tooltip: 'Friends',
                     icon: const Icon(Icons.people_outline_rounded,
@@ -201,6 +210,12 @@ class AdaptiveShell extends StatelessWidget {
         ),
         title: Text(title),
         actions: [
+          IconButton(
+            tooltip: Localizations.localeOf(context).languageCode == 'fr'
+                ? 'Communaute' : 'Community chat',
+            icon: const Icon(Icons.forum_outlined),
+            onPressed: onOpenCommunity,
+          ),
           IconButton(
             tooltip: 'Friends',
             icon: const Icon(Icons.people_outline_rounded,
@@ -285,13 +300,17 @@ class AdaptiveShell extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 10),
-                        const Text(
-                          'GlobeTrotter',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.2,
+                        const Flexible(
+                          child: Text(
+                            'GlobeTrotter',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.2,
+                            ),
                           ),
                         ),
                       ],
@@ -330,6 +349,17 @@ class AdaptiveShell extends StatelessWidget {
                             if (selectedIndex != profileIndex) {
                               onDestinationSelected(profileIndex);
                             }
+                          },
+                        ),
+                        _DrawerItem(
+                          icon: Icons.public_outlined,
+                          selectedIcon: Icons.public,
+                          label: Localizations.localeOf(context).languageCode == 'fr'
+                              ? 'Communaute' : 'Community chat',
+                          selected: false,
+                          onTap: () {
+                            Navigator.of(context).pop();
+                            onOpenCommunity();
                           },
                         ),
                         _DrawerItem(

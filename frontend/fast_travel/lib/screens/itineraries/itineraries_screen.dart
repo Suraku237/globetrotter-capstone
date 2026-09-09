@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../models/models.dart';
 import '../../Services/api_service.dart';
+import '../../Services/live_refresh.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/empty_state.dart';
+import '../../widgets/public_network_image.dart';
 import 'itinerary_map_screen.dart';
 
 class ItinerariesScreen extends StatefulWidget {
@@ -30,12 +32,19 @@ class _ItinerariesScreenState extends State<ItinerariesScreen> {
   List<Itinerary> _items = [];
   List<Destination> _destinations = [];
   bool _loading = true;
+  bool _hasLoaded = false;
+  late final LiveRefresh _refresh;
   String? _error;
   bool _errorIsNetwork = false;
 
   @override
   void initState() {
     super.initState();
+    _refresh = LiveRefresh(
+      changes: ApiService.instance.changes,
+      topics: {'itineraries', 'destinations'},
+      onRefresh: _fetch,
+    );
     _load();
     if (widget.presetDestination != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -49,9 +58,17 @@ class _ItinerariesScreenState extends State<ItinerariesScreen> {
     }
   }
 
-  Future<void> _load() async {
+  @override
+  void dispose() {
+    _refresh.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() => _refresh.refresh();
+
+  Future<void> _fetch() async {
     setState(() {
-      _loading = true;
+      _loading = !_hasLoaded;
       _error = null;
       _errorIsNetwork = false;
     });
@@ -60,21 +77,24 @@ class _ItinerariesScreenState extends State<ItinerariesScreen> {
         ApiService.instance.getItineraries(),
         ApiService.instance.getDestinations(),
       ]);
+      if (!mounted) return;
       setState(() {
         _items = results[0] as List<Itinerary>;
         _destinations = results[1] as List<Destination>;
         _loading = false;
+        _hasLoaded = true;
       });
     } on ApiException catch (e) {
       // A 401 signs the user out and returns them to the login screen
       // (see ApiService.onUnauthorized in main.dart), so there's nothing
       // useful to show here — just avoid flashing a confusing error first.
-      if (e.isUnauthorized) return;
+      if (e.isUnauthorized || !mounted || _hasLoaded) return;
       setState(() {
         _error = e.message;
         _errorIsNetwork = false;
       });
     } catch (_) {
+      if (!mounted || _hasLoaded) return;
       setState(() {
         _error = 'Could not reach the server.';
         _errorIsNetwork = true;
@@ -576,7 +596,7 @@ class _ItinerariesScreenState extends State<ItinerariesScreen> {
                               child: SizedBox(
                                 width: 50,
                                 height: 50,
-                                child: Image.network(
+                                child: PublicNetworkImage(
                                   ApiService.resolveUrl(
                                       destination.imageUrl ?? ''),
                                   fit: BoxFit.cover,

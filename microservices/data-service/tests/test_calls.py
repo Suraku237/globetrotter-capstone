@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from jose import jwt
 
-from app import calls, security, social
+from app import calls, event_store, security, social
 
 
 @pytest.fixture
@@ -545,3 +545,278 @@ def test_group_title_is_not_personalized(store):
     call_id = create(request, "group", "group").json()["id"]
     for user in ("alice", "bob", "carol"):
         assert request("GET", f"/calls/{call_id}", user=user).json()["title"] == "Travel"
+
+
+def test_community_discovery_requires_auth_and_explicit_join(store):
+    request, _, _, _ = store
+    assert request("GET", "/calls/community", user=None).status_code == 401
+    assert request("GET", "/calls/community", user="missing").status_code == 401
+    assert create(request, "community", "community", user=None).status_code == 401
+    assert create(request, "community", "community", user="missing").status_code == 401
+    assert create(request, "community", "another-room").status_code == 422
+    empty = request("GET", "/calls/community")
+    assert empty.status_code == 200 and empty.json() is None
+    assert empty.headers["cache-control"] == "no-store"
+    call = create(request, "community", "community").json()
+    assert call["status"] == "active"
+    assert call["participant_ids"] == call["accepted_ids"] == ["alice"]
+    assert set(call) == set(calls.PUBLIC_FIELDS)
+    path = f"/calls/{call['id']}"
+    discovered = request("GET", "/calls/community", user="outsider")
+    assert discovered.json() == call
+    assert discovered.headers["cache-control"] == "no-store"
+    assert request("GET", path, user="outsider").json() == call
+    for action in ("accept", "token", "heartbeat", "leave", "decline"):
+        assert request("POST", f"{path}/{action}", user=None).status_code == 401
+        if action != "accept":
+            assert request("POST", f"{path}/{action}", user="outsider").status_code == 403
+    joined = request("POST", f"{path}/accept", user="outsider")
+    assert joined.status_code == 200
+    assert joined.json()["call"]["participant_ids"] == ["alice", "outsider"]
+    assert joined.json()["call"]["accepted_ids"] == ["alice", "outsider"]
+    assert request("POST", f"{path}/decline", user="outsider").status_code == 409
+    # Eligibility is evaluated on join, not snapshotted when the call starts.
+    social.load_users().append({"id": "new-user", "full_name": "New User"})
+    assert request("POST", f"{path}/accept", user="new-user").status_code == 200
+
+
+@pytest.mark.parametrize("kind,sources", [
+    ("voice", ["microphone"]), ("video", ["microphone", "camera"]),
+])
+def test_community_tokens_and_no_native_events_at_any_stage(store, kind, sources):
+    request, clock, pushed, _ = store
+    for index, user in enumerate(("alice", "bob", "carol", "outsider"), 1):
+        for platform, device_kind, token in (
+            ("android", "fcm", f"{user}-token"),
+            ("ios", "voip", str(index) * 64),
+        ):
+            assert request("POST", "/call-devices", user=user, json={
+                "platform": platform, "kind": device_kind, "token": token,
+            }).status_code == 200
+    call = create(request, "community", "community", kind=kind).json()
+    path = f"/calls/{call['id']}"
+    calls.maintain_calls()
+    for user in ("alice", "bob", "carol", "outsider"):
+        assert request("GET", "/calls/incoming", user=user).json() == []
+    for action, user in (("token", "alice"), ("accept", "outsider")):
+        joined = request("POST", f"{path}/{action}", user=user).json()
+        claims = jwt.decode(joined["token"], "test-secret", algorithms=["HS256"])
+        assert claims["sub"] == user
+        assert claims["video"]["canPublishSources"] == sources
+        assert claims["video"]["roomJoin"] and not claims["video"]["canPublishData"]
+        assert "roomAdmin" not in claims["video"] and "roomCreate" not in claims["video"]
+        assert claims["video"]["room"] != "community"
+    calls.maintain_calls()
+    assert request("POST", f"{path}/leave", user="outsider").status_code == 200
+    calls.maintain_calls()
+    clock["now"] += calls.LEASE_SECONDS + 1
+    calls.maintain_calls()
+    assert request("GET", path).json()["status"] == "ended"
+    assert social._load_list(calls.CALLS_FILE)[0]["_events"] == []
+    assert pushed == []
+    assert request("GET", "/calls/community").json() is None
+
+
+def test_community_creation_race_and_idempotency(store):
+    request, _, _, _ = store
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        results = list(executor.map(
+            lambda user: create(request, "community", "community", user=user),
+            ("alice", "bob", "carol", "outsider"),
+        ))
+    assert sorted(result.status_code for result in results) == [200, 409, 409, 409]
+    for result in results:
+        if result.status_code == 409:
+            assert "join" in result.json()["detail"].lower()
+    call = next(result.json() for result in results if result.status_code == 200)
+    assert len(social._load_list(calls.CALLS_FILE)) == 1
+    assert create(
+        request, "community", "community", user=call["caller_id"]
+    ).json() == call
+    assert create(
+        request, "community", "community", kind="video", user=call["caller_id"]
+    ).status_code == 409
+    assert request("POST", f"/calls/{call['id']}/leave", user=call["caller_id"]).status_code == 200
+    second = create(
+        request, "community", "community", headers={"Idempotency-Key": "public-retry"}
+    ).json()
+    assert second["id"] != call["id"]
+    assert create(
+        request, "community", "community", headers={"Idempotency-Key": "public-retry"}
+    ).json() == second
+
+
+def test_community_does_not_reserve_other_users_and_enforces_busy_joiners(store):
+    request, _, _, _ = store
+    call = create(request, "community", "community", user="outsider").json()
+    path = f"/calls/{call['id']}"
+    private = create(request).json()
+    assert private["status"] == "ringing"
+    assert request("POST", f"{path}/accept").status_code == 409
+    assert request("POST", f"{path}/accept", user="bob").status_code == 409
+    assert request("POST", f"/calls/{private['id']}/leave").status_code == 200
+    assert request("POST", f"{path}/accept").status_code == 200
+    assert create(request, target_id="carol").status_code == 409
+    assert create(request, user="carol", target_id="alice").status_code == 409
+    assert request("POST", f"{path}/leave").status_code == 200
+    assert create(request, target_id="carol").status_code == 200
+    assert request("POST", f"{path}/accept").status_code == 409
+
+
+def test_community_busy_caller_cannot_start(store):
+    request, _, _, _ = store
+    create(request)
+    assert create(request, "community", "community").status_code == 409
+    assert request("GET", "/calls/community").json() is None
+
+
+def test_community_late_join_and_no_invitation_expiration(store):
+    request, clock, _, _ = store
+    call = create(request, "community", "community").json()
+    path = f"/calls/{call['id']}"
+    clock["now"] += calls.RING_SECONDS + 1
+    calls.maintain_calls()
+    assert request("GET", "/calls/community").json()["status"] == "active"
+    assert request("POST", f"{path}/accept", user="outsider").status_code == 200
+    clock["now"] += 10
+    calls.maintain_calls()
+    active = request("GET", "/calls/community").json()
+    assert active["accepted_ids"] == active["participant_ids"] == ["outsider"]
+    assert request("POST", f"{path}/accept", user="carol").status_code == 200
+    assert request("POST", f"{path}/leave", user="outsider").json()["status"] == "active"
+    ended = request("POST", f"{path}/leave", user="carol").json()
+    assert ended["status"] == "ended" and ended["ended_reason"] == "last_participant_left"
+    assert request("GET", "/calls/community").json() is None
+    assert request("POST", f"{path}/accept").status_code == 409
+
+
+def test_community_without_join_token_expires_after_lease_not_ring_timeout(store):
+    request, clock, _, _ = store
+    call = create(request, "community", "community").json()
+    clock["now"] += calls.LEASE_SECONDS
+    calls.maintain_calls()
+    assert request("GET", "/calls/community").json() is None
+    assert request("GET", f"/calls/{call['id']}").json()["ended_reason"] == "connection_lost"
+
+
+def test_community_rejoin_waits_for_failed_and_inflight_cleanup(store, monkeypatch):
+    request, _, _, cleaned = store
+    call = create(request, "community", "community").json()
+    path = f"/calls/{call['id']}"
+    request("POST", f"{path}/token")
+    request("POST", f"{path}/accept", user="outsider")
+    assert request("POST", f"{path}/leave").json()["participant_ids"] == ["outsider"]
+    for action in ("token", "heartbeat", "leave", "decline"):
+        assert request("POST", f"{path}/{action}").status_code == 403
+    assert request("POST", f"{path}/accept").status_code == 409
+    original = calls.providers.cleanup_room
+
+    def fail(room, identity=None):
+        raise calls.providers.ProviderError("offline")
+
+    monkeypatch.setattr(calls.providers, "cleanup_room", fail)
+    calls.maintain_calls()
+    assert request("POST", f"{path}/accept").status_code == 409
+    cleaning, finish = threading.Event(), threading.Event()
+
+    def slow_cleanup(room, identity=None):
+        cleaning.set()
+        assert finish.wait(5)
+        original(room, identity)
+
+    monkeypatch.setattr(calls.providers, "cleanup_room", slow_cleanup)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        pending = executor.submit(calls.maintain_calls)
+        try:
+            assert cleaning.wait(2)
+            assert request("POST", f"{path}/accept").status_code == 409
+            assert request("POST", f"{path}/heartbeat", user="outsider").status_code == 200
+        finally:
+            finish.set()
+        pending.result(timeout=3)
+    monkeypatch.setattr(calls.providers, "cleanup_room", original)
+    rejoined = request("POST", f"{path}/accept")
+    assert rejoined.status_code == 200
+    assert rejoined.json()["call"]["accepted_ids"] == ["outsider", "alice"]
+    assert request("POST", f"{path}/accept").json()["call"] == rejoined.json()["call"]
+    assert social._load_list(calls.CALLS_FILE)[0]["_departed"] == []
+    calls.maintain_calls()
+    assert len(cleaned) == 1
+    assert request("POST", f"{path}/leave").status_code == 200
+    assert request("POST", f"{path}/accept").status_code == 409
+    calls.maintain_calls()
+    assert len(cleaned) == 2
+    assert request("POST", f"{path}/accept").status_code == 200
+
+
+def test_community_unissued_caller_can_rejoin_immediately(store):
+    request, _, _, cleaned = store
+    call = create(request, "community", "community").json()
+    path = f"/calls/{call['id']}"
+    request("POST", f"{path}/accept", user="outsider")
+    request("POST", f"{path}/leave")
+    assert request("POST", f"{path}/accept").status_code == 200
+    assert cleaned == []
+
+
+def test_community_deleted_accounts_are_removed_and_cannot_rejoin(store):
+    request, _, _, cleaned = store
+    call = create(request, "community", "community").json()
+    path = f"/calls/{call['id']}"
+    request("POST", f"{path}/accept", user="outsider")
+    users = social.load_users()
+    users[:] = [user for user in users if user["id"] != "outsider"]
+    calls.maintain_calls()
+    assert request("GET", "/calls/community").json()["participant_ids"] == ["alice"]
+    assert cleaned[-1][1] == "outsider"
+    assert request("POST", f"{path}/accept", user="outsider").status_code == 401
+    users[:] = [user for user in users if user["id"] != "alice"]
+    calls.maintain_calls()
+    assert request("GET", "/calls/community", user="carol").json() is None
+
+
+def test_community_provider_presence_and_metadata_only_broadcasts(store, monkeypatch):
+    request, clock, _, _ = store
+    cursor = event_store.journal.watermark()
+    call = create(request, "community", "community").json()
+    path = f"/calls/{call['id']}"
+    assert event_store.journal.read("alice", cursor)[1] == ["calls", "community_calls"]
+    assert event_store.journal.read("outsider", cursor)[1] == ["community_calls"]
+    request("POST", f"{path}/token")
+    cursor = event_store.journal.watermark()
+    request("POST", f"{path}/heartbeat")
+    request("GET", "/calls/community")
+    calls.maintain_calls()
+    assert event_store.journal.watermark() == cursor
+    request("POST", f"{path}/accept", user="outsider")
+    for user in ("alice", "outsider"):
+        assert event_store.journal.read(user, cursor)[1] == ["calls", "community_calls"]
+    assert event_store.journal.read("carol", cursor)[1] == ["community_calls"]
+    cursor = event_store.journal.watermark()
+    clock["now"] += calls.LEASE_SECONDS + 1
+    monkeypatch.setattr(calls.providers, "participant_present", lambda room, identity: True)
+    calls.maintain_calls()
+    assert request("GET", "/calls/community").json()["accepted_ids"] == ["alice", "outsider"]
+    assert event_store.journal.watermark() == cursor
+    clock["now"] += calls.LEASE_SECONDS + 1
+    monkeypatch.setattr(calls.providers, "participant_present", lambda room, identity: identity == "alice")
+    calls.maintain_calls()
+    assert request("GET", "/calls/community").json()["accepted_ids"] == ["alice"]
+    # The departing coordinator also needs the state change, not all app users.
+    for user in ("alice", "outsider"):
+        assert event_store.journal.read(user, cursor)[1] == ["calls", "community_calls"]
+    assert event_store.journal.read("carol", cursor)[1] == ["community_calls"]
+    cursor = event_store.journal.watermark()
+    request("POST", f"{path}/leave")
+    assert event_store.journal.read("alice", cursor)[1] == ["calls", "community_calls"]
+    assert event_store.journal.read("carol", cursor)[1] == ["community_calls"]
+    calls.maintain_calls()
+    assert request("GET", "/calls/community").json() is None
+
+
+def test_community_token_failure_does_not_enroll_joiner(store, monkeypatch):
+    request, _, _, _ = store
+    call = create(request, "community", "community").json()
+    monkeypatch.delenv("LIVEKIT_API_SECRET")
+    assert request("POST", f"/calls/{call['id']}/accept", user="outsider").status_code == 503
+    assert request("GET", "/calls/community").json()["participant_ids"] == ["alice"]

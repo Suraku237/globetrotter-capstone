@@ -18,6 +18,7 @@ class _Preferences extends Fake implements SharedPreferences {
     values[key] = value;
     return true;
   }
+
   @override
   Future<bool> remove(String key) async {
     values.remove(key);
@@ -34,7 +35,8 @@ void main() {
   late CachedApiClient client;
 
   CachedApiClient create(Future<http.Response> Function(http.Request) handler,
-      {int maxEntries = 80, int maxBytes = 4 * 1024 * 1024,
+      {int maxEntries = 80,
+      int maxBytes = 4 * 1024 * 1024,
       Future<SharedPreferences> Function()? preferences}) {
     return CachedApiClient(
       baseUrl: base,
@@ -120,7 +122,8 @@ void main() {
   test('cache miss offline is an error, not an empty success', () async {
     client = create((_) async => throw http.ClientException('offline'));
     await client.setScope('alice');
-    await expectLater(client.get(posts), throwsA(isA<CacheConnectionException>()));
+    await expectLater(
+        client.get(posts), throwsA(isA<CacheConnectionException>()));
   });
 
   test('late response cannot overwrite cache after account switch', () async {
@@ -135,13 +138,15 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     await client.setScope('bob');
     expect((await client.get(posts)).body, '["bob"]');
-    final rejected = expectLater(alice, throwsA(isA<CacheConnectionException>()));
+    final rejected =
+        expectLater(alice, throwsA(isA<CacheConnectionException>()));
     delayed.complete(http.Response('["alice"]', 200));
     await rejected;
     expect((await client.get(posts)).body, '["bob"]');
   });
 
-  test('logout removes persistent data; other accounts cannot restore it', () async {
+  test('logout removes persistent data; other accounts cannot restore it',
+      () async {
     client = create((_) async => http.Response('["alice"]', 200));
     await client.setScope('alice');
     await client.get(posts);
@@ -188,10 +193,12 @@ void main() {
       return http.Response('[]', 200);
     });
     await client.setScope('alice');
-    final calls = Uri.parse('$base/social/calls/incoming');
-    await client.get(calls);
-    await client.get(calls);
-    expect(requests, 2);
+    for (final path in ['incoming', 'community']) {
+      final calls = Uri.parse('$base/social/calls/$path');
+      await client.get(calls);
+      await client.get(calls);
+    }
+    expect(requests, 4);
   });
 
   test('oldest entries are evicted when the cache limit is reached', () async {
@@ -208,8 +215,10 @@ void main() {
     expect(requests, 4);
   });
 
-  test('serialized storage including escaping stays below its byte budget', () async {
-    client = create((_) async => http.Response(jsonEncode(List.filled(200, '"')), 200),
+  test('serialized storage including escaping stays below its byte budget',
+      () async {
+    client = create(
+        (_) async => http.Response(jsonEncode(List.filled(200, '"')), 200),
         maxBytes: 1000);
     await client.setScope('alice');
     await client.get(posts);
@@ -219,7 +228,8 @@ void main() {
     expect(utf8.encode(stored).length, lessThanOrEqualTo(1000));
   });
 
-  test('profile survives cache eviction for offline session restoration', () async {
+  test('profile survives cache eviction for offline session restoration',
+      () async {
     client = create((_) async => http.Response('[]', 200), maxEntries: 2);
     await client.setScope('alice');
     final me = Uri.parse('$base/me');
@@ -229,7 +239,8 @@ void main() {
     expect((await client.get(me)).body, '{"id":"alice"}');
   });
 
-  test('switching account while cache initializes never sends old credentials', () async {
+  test('switching account while cache initializes never sends old credentials',
+      () async {
     var requests = 0;
     client = create((_) async {
       requests++;
@@ -237,14 +248,16 @@ void main() {
     });
     final initializing = client.setScope('alice');
     final request = client.get(posts, headers: {'Authorization': 'old-token'});
-    final failure = expectLater(request, throwsA(isA<CacheConnectionException>()));
+    final failure =
+        expectLater(request, throwsA(isA<CacheConnectionException>()));
     await client.setScope('bob');
     await initializing;
     await failure;
     expect(requests, 0);
   });
 
-  test('backgrounding during restoration does not overwrite saved content', () async {
+  test('backgrounding during restoration does not overwrite saved content',
+      () async {
     client = create((_) async => http.Response('["saved"]', 200));
     await client.setScope('alice');
     await client.get(posts);
@@ -259,7 +272,8 @@ void main() {
     expect(stored, contains('saved'));
   });
 
-  test('storage failures surface a warning without poisoning the write queue', () async {
+  test('storage failures surface a warning without poisoning the write queue',
+      () async {
     final prefs = _Preferences();
     client = create((_) async => http.Response('[]', 200),
         preferences: () async => prefs);
@@ -275,9 +289,11 @@ void main() {
     expect(prefs.values[CachedApiClient.storageKey], contains('bob'));
   });
 
-  test('successful profile edits replace cached profile before invalidation', () async {
+  test('successful profile edits replace cached profile before invalidation',
+      () async {
     client = create((request) async => http.Response(
-        request.method == 'GET' ? '{"full_name":"Old"}' : '{"full_name":"New"}', 200));
+        request.method == 'GET' ? '{"full_name":"Old"}' : '{"full_name":"New"}',
+        200));
     await client.setScope('alice');
     final me = Uri.parse('$base/me');
     await client.get(me);
@@ -286,14 +302,16 @@ void main() {
     await Future<void>.delayed(Duration.zero);
   });
 
-  test('rotated credentials invalidate late requests even for the same account', () async {
+  test('rotated credentials invalidate late requests even for the same account',
+      () async {
     final response = Completer<http.Response>();
     client = create((_) => response.future);
     await client.setScope('alice');
     final request = client.get(posts);
     await Future<void>.delayed(Duration.zero);
     await client.setScope('alice', reset: true);
-    final rejected = expectLater(request, throwsA(isA<CacheConnectionException>()));
+    final rejected =
+        expectLater(request, throwsA(isA<CacheConnectionException>()));
     response.complete(http.Response('[]', 401));
     await rejected;
     expect(changes, isEmpty);

@@ -38,6 +38,12 @@ samples, guidance on mobile development, and a full API reference.
   can open it from their home screen. It is public to all signed-in users.
   Private chats and groups remain separate. All three chat histories load in pages
   instead of downloading the entire conversation each time.
+- Community supports one shared voice or video call at a time. Start one using
+  **Voice call** or **Video call**, or tap **Join call** on the live banner.
+  Calls are opt-in: community members are never automatically rung or connected.
+  Anyone signed in can join while the call remains active; it ends when the last
+  participant leaves. Discovery and joining need internet, not cached call state.
+  Private and group call invitations continue to work as before.
 - Data Saver is enabled by default: videos require an explicit tap instead of
   autoplay. Change this in Profile. Images use a reusable bounded cache on
   supported native platforms; browser image storage is controlled by the browser.

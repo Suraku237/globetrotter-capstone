@@ -1,9 +1,10 @@
-# Private voice/video calls
+# Voice/video calls
 
-The data service provides authenticated direct/friend and private-group signalling,
-LiveKit Cloud room-scoped JWTs, Android/web FCM, and real iOS APNs PushKit delivery.
+The data service provides authenticated direct/friend, private-group and opt-in
+community signalling, LiveKit Cloud room-scoped JWTs, Android/web FCM, and real iOS
+APNs PushKit delivery for private invitations only.
 Media goes directly to LiveKit Cloud, **not** through the API gateway. No recordings,
-public rooms, screen sharing, or server-side media are enabled.
+anonymous rooms, screen sharing, or server-side media are enabled.
 
 ## Deployment configuration
 
@@ -66,8 +67,10 @@ before scaling. Writes use the existing social mutex and atomic replacement.
 
 Foreground cache updates also use the authenticated gateway `/events/ws` stream
 described in [REALTIME.md](REALTIME.md). `calls` invalidations reach participants
-before provider delivery and on visible state changes; push delivery and the
-HTTP heartbeat/lease protocol below remain required and independent of sockets.
+before provider delivery and on visible state changes; `community_calls` metadata
+reaches all authenticated subscribers to refresh the join banner, without ringing.
+Private push delivery and the HTTP heartbeat/lease protocol below remain
+independent of sockets.
 
 ## API contract
 
@@ -76,8 +79,9 @@ unchanged; if your reverse proxy prefixes the API with `/api`, prepend it below.
 
 | Method / path | Body | Response |
 | --- | --- | --- |
-| `POST /social/calls` | `{"kind":"voice" or "video","target_type":"direct" or "group","target_id":"USER_OR_GROUP_ID"}` | call |
+| `POST /social/calls` | `{"kind":"voice" or "video","target_type":"direct" or "group" or "community","target_id":"USER_OR_GROUP_ID_OR_community"}` | call |
 | `GET /social/calls/incoming` | none | list of pending invitations for this user |
+| `GET /social/calls/community` | none | active community call, or JSON `null` |
 | `GET /social/calls/{id}` | none | call |
 | `POST /social/calls/{id}/token` | none | `{"call":call,"url":"wss://…","token":"JWT"}` |
 | `POST /social/calls/{id}/accept` | none | same join response |
@@ -111,10 +115,10 @@ unchanged; if your reverse proxy prefixes the API with `/api`, prepend it below.
   group's name. Use `caller_name` when displaying an incoming call.
   `caller_avatar_url` always belongs to the caller, including outgoing responses;
   do not use it as the callee's avatar on an outgoing call screen.
-- `participant_ids` is the original invitation membership snapshot.
+- For private calls, `participant_ids` is the original invitation membership snapshot.
   `accepted_ids` is the **current** joined/signalling participation set, initially
   containing the caller. An active call can have one remaining group participant.
-- `expires_at` is the **invitation** deadline (45 seconds), not the active call's
+- For private calls, `expires_at` is the **invitation** deadline (45 seconds), not the active call's
   lifetime. It does not advance on heartbeat. A group invitation may remain
   pending while other members have already accepted.
 - `/token` is available only to the caller or an already accepted member.
@@ -141,7 +145,7 @@ unchanged; if your reverse proxy prefixes the API with `/api`, prepend it below.
   that invitation; all invitees declining ends the ringing call. Group caller
   cancellation before acceptance ends the call; leaving an **active** group call
   preserves others. The last group participant leaving ends it.
-- Declined, departed, lease-expired, and expired-invitation participants cannot
+- Private declined, departed, lease-expired, and expired-invitation participants cannot
   rejoin the same call. Ended call `/token` and `/accept` return 409; terminal
   `/leave`, `/decline`, and `/heartbeat` return the persisted terminal state.
   A late `/decline` after acceptance returns 409: use `/leave`.
@@ -157,7 +161,7 @@ unchanged; if your reverse proxy prefixes the API with `/api`, prepend it below.
   and microphone publishing (plus camera for video). Voice JWTs **cannot publish
   camera or screen tracks**. No client gets admin/create/data-publishing grants.
   Initial token TTL is 45 seconds; LiveKit handles reconnect-token refresh.
-- Unauthorized outsiders see 404, changed membership sees 403, invalid payloads
+- Unauthorized private-call outsiders see 404, changed membership sees 403, invalid payloads
   422, busy/stale transitions 409, missing LiveKit configuration 503.
   `ended_reason` can be `declined`, `cancelled`, `participant_left`,
   `last_participant_left`, `no_answer`, `connection_lost`, `membership_changed`,
@@ -171,6 +175,62 @@ already clean. Provider failures are logged with call IDs, never tokens/keys.
 During a provider outage, API access remains revoked immediately but media
 removal is delayed until cleanup succeeds. Monitor “cleanup pending” and “push
 delivery pending” warnings. Restarting the backend resumes persisted work.
+
+## Opt-in community calls
+
+- Start with `POST /social/calls` and
+  `{"kind":"voice","target_type":"community","target_id":"community"}` (or
+  `"kind":"video"`). No other community target ID is accepted. Only authenticated,
+  currently existing users can start or join; friendship/group membership is not
+  required. Exactly one non-ended community call is allowed under the existing
+  single-worker lock. A conflicting start returns 409:
+  `"A community call is already active. Join the active call instead."`
+  Same-caller/same-payload live retries and `Idempotency-Key` retain the semantics above.
+- Creation returns the existing call object shape, with `title: "Community"`,
+  `status: "active"` and only the caller in `participant_ids` and `accepted_ids`.
+  Other accounts are **not invited, enrolled, or made busy**. The caller uses the
+  existing `/token` endpoint to connect.
+- Discover with authenticated `GET /social/calls/community`. It returns the active
+  call or JSON `null` (200), not a list or wrapper, with `Cache-Control: no-store`.
+  All signed-in users may inspect
+  a community call with `GET /social/calls/{id}`. Read fresh signalling on load,
+  reconnect and `community_calls` invalidation; do not persist/reuse cached call
+  offers, join credentials, or joinability decisions.
+- Show a **Join call banner**, never incoming ringing. The existing `/incoming`
+  endpoint never returns community calls. Community calls queue **no** FCM, APNs,
+  PushKit, incoming-call, or call-ended native events, including on join, leave,
+  expiry and termination. An explicit local media session still uses the normal
+  platform microphone/camera lifecycle.
+- Join only after a user action using `POST /social/calls/{id}/accept`. Response is
+  the existing `{"call":call,"url":"wss://…","token":"JWT"}` shape. This atomically
+  rechecks eligibility/busy state and adds the joiner after token generation
+  succeeds. Both membership arrays represent **currently joined** community users,
+  not all accounts or past participants. Departed/deleted accounts are removed.
+  Voice/video grants and 55-second renewable participant leases are unchanged.
+- There is **no 45-second invitation timeout**; joins remain allowed while active.
+  For schema compatibility `expires_at` remains a timestamp: the initial caller
+  lease deadline, **not** a community join deadline or room lifetime. It does not
+  advance with heartbeats; use current status and the server's join response.
+  A caller that never acquires a token expires after its lease, not after 45 seconds.
+  Connected token holders survive missed HTTP heartbeats when LiveKit confirms
+  presence; confirmed absence removes them. Provider errors defer detection, as
+  described above. A healthy remaining member keeps the call open.
+- Only currently joined users may get `/token`, send `/heartbeat` or `/leave`.
+  A nonparticipant gets 403 on those routes and `/decline`, even if they formerly
+  joined. Joined users get 409 on `/decline`: there is no invitation to decline;
+  use `/leave`. Last departure/expiry ends the room and discovery returns `null`.
+  Ended `/accept` and `/token` return 409; an ended call cannot be revived.
+- A departed user may rejoin the same **active** room via `/accept`. If their
+  previous token requires provider removal, joining returns 409 with a readable
+  retry message until persisted cleanup succeeds. This gate stays closed during
+  in-flight/retried cleanup so an old removal cannot disconnect a new join.
+  A caller who never obtained a token needs no cleanup and may rejoin immediately.
+  Ordinary busy conflicts still apply, including pending private invitations.
+- Visible start/join/leave/end changes publish `community_calls` to all
+  authenticated subscribers. `calls` remains targeted to current participants
+  plus those removed in that transition, so their coordinator can reconcile.
+  Never broadcast `calls` to every account. Routine heartbeats, presence renewal
+  and provider bookkeeping emit neither topic.
 
 ## Device registration and push payloads
 
@@ -257,7 +317,13 @@ python -m pytest tests/test_calls.py tests/test_call_providers.py tests/test_soc
 Tests use isolated JSON stores, fake users/credentials/clock, mocked FCM, HTTP/2
 APNs and LiveKit requests. They cover authorization, membership, token claims,
 direct/group transitions, idempotency, busy conflicts, races, leases/timeouts,
-token ownership, stale notifications and retryable cleanup. The APNs signing
+token ownership, stale notifications and retryable cleanup. Community cases cover
+authenticated discovery, dynamic opt-in membership without friendship, single-room
+creation races, no native notifications, late joins, lease/provider expiry,
+participant-only busy state, rejoining after in-flight cleanup, account removal
+and audience-scoped metadata without heartbeat storms. Include
+`tests/test_events.py` to validate the realtime journal/stream regressions.
+The APNs signing
 test generates a disposable test key inside pytest's project-local test folder;
 it never reads a deployment key. Real Cloud delivery, native background behavior,
 signing, permissions and microphone/camera routing still require a configured

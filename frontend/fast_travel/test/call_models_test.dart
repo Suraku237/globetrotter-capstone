@@ -89,6 +89,17 @@ void main() {
     expect(declined.endedLocally().endedReason, 'declined');
   });
 
+  test('community is multiuser but never an incoming ringing invitation', () {
+    for (final status in ['active', 'ringing']) {
+      final call = CallSession.fromJson(
+          callJson(status: status, targetType: 'community'));
+      expect(call.isGroup, isTrue);
+      expect(call.isCommunity, isTrue);
+      expect(call.canAnswer('bob', beforeExpiry), isFalse);
+      expect(call.canAnswer('outsider', beforeExpiry), isFalse);
+    }
+  });
+
   test('invalid call kinds are rejected rather than treated as voice', () {
     expect(() => CallSession.fromJson(callJson(kind: 'invalid')),
         throwsArgumentError);

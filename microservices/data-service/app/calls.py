@@ -1,4 +1,4 @@
-"""Private, leased call signalling. All store access shares social's single-worker lock."""
+"""Leased call signalling. All store access shares social's single-worker lock."""
 
 import hashlib
 import logging
@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Response
 from pydantic import BaseModel, Field, model_validator
 
 from . import call_providers as providers
@@ -36,8 +36,14 @@ PUBLIC_FIELDS = (
 
 class CallCreate(BaseModel):
     kind: Literal["voice", "video"]
-    target_type: Literal["direct", "group"]
+    target_type: Literal["direct", "group", "community"]
     target_id: str = Field(min_length=1, max_length=128)
+
+    @model_validator(mode="after")
+    def validate_target(self):
+        if self.target_type == "community" and self.target_id != "community":
+            raise ValueError("Community calls must target the shared community room")
+        return self
 
 
 class CallDevice(BaseModel):
@@ -88,6 +94,7 @@ def _save(calls: list) -> None:
     previous = {call["id"]: call for call in social._load_list(CALLS_FILE)}
     _atomic_save(CALLS_FILE, calls)
     changed_users = set()
+    community_changed = False
     for call in calls:
         old = previous.get(call["id"])
         # Lease renewal and provider bookkeeping aren't visible state changes.
@@ -95,10 +102,17 @@ def _save(calls: list) -> None:
             old.get(key) != call.get(key) for key in (*PUBLIC_FIELDS, "_departed")
         ):
             changed_users.update(call["participant_ids"])
+            if old:
+                changed_users.update(old["participant_ids"])
+            if call["target_type"] == "community":
+                community_changed = True
     if changed_users:
         # Persist signalling invalidations before the independent FCM/APNs worker
         # touches a provider. Slow/offline pushes must never postpone ringing.
         publish(["calls"], changed_users)
+    if community_changed:
+        # Discovery banners are public metadata, never incoming-call invitations.
+        publish(["community_calls"])
 
 
 def _save_devices(devices: list) -> None:
@@ -107,6 +121,8 @@ def _save_devices(devices: list) -> None:
 
 def _eligible(call: dict) -> set[str]:
     users = {user["id"] for user in social.load_users()}
+    if call["target_type"] == "community":
+        return users
     if call["target_type"] == "group":
         group = next(
             (item for item in social._load_list(social.GROUPS_FILE)
@@ -123,6 +139,8 @@ def _eligible(call: dict) -> set[str]:
 
 
 def _event(call: dict, user_ids, incoming: bool = False) -> None:
+    if call["target_type"] == "community":
+        return
     data = {"type": "incoming_call" if incoming else "call_ended", "call_id": call["id"]}
     if incoming:
         data.update(
@@ -138,6 +156,8 @@ def _event(call: dict, user_ids, incoming: bool = False) -> None:
 def _remove(call: dict, user_id: str) -> None:
     if user_id in call["accepted_ids"]:
         call["accepted_ids"].remove(user_id)
+    if call["target_type"] == "community" and user_id in call["participant_ids"]:
+        call["participant_ids"].remove(user_id)
     call["_leases"].pop(user_id, None)
     if user_id not in call["_departed"]:
         call["_departed"].append(user_id)
@@ -185,7 +205,10 @@ def _sweep(calls: list, now: float) -> None:
             _end(call, "connection_lost")
         elif not call["accepted_ids"]:
             _end(call, "last_participant_left")
-        elif call["status"] == "active" and now >= call["_ring_until"]:
+        elif (
+            call["target_type"] != "community"
+            and call["status"] == "active" and now >= call["_ring_until"]
+        ):
             pending = set(call["participant_ids"]) - set(call["accepted_ids"]) - set(call["_departed"])
             for user_id in pending:
                 _remove(call, user_id)
@@ -202,7 +225,9 @@ def _load_current() -> list:
 
 def _get(calls: list, call_id: str, user_id: str) -> dict:
     call = next((item for item in calls if item["id"] == call_id), None)
-    if call is None or user_id not in call["participant_ids"]:
+    if call is None or (
+        call["target_type"] != "community" and user_id not in call["participant_ids"]
+    ):
         raise HTTPException(404, "Call not found")
     if user_id not in _eligible(call):
         raise HTTPException(403, "Call membership is no longer valid")
@@ -212,7 +237,10 @@ def _get(calls: list, call_id: str, user_id: str) -> dict:
 def _busy(calls: list, user_id: str, exclude: str | None = None) -> bool:
     return any(
         call["id"] != exclude and call["status"] != "ended"
-        and user_id in call["participant_ids"] and user_id not in call["_departed"]
+        and user_id in (
+            call["accepted_ids"] if call["target_type"] == "community" else call["participant_ids"]
+        )
+        and user_id not in call["_departed"]
         for call in calls
     )
 
@@ -269,7 +297,7 @@ def create_call(
             )
             participants = [my_id, payload.target_id]
             title = other.get("full_name", "")
-        else:
+        elif payload.target_type == "group":
             group = social._group_for_member(
                 social._load_list(social.GROUPS_FILE), payload.target_id, my_id
             )
@@ -280,6 +308,10 @@ def create_call(
             title = group["name"]
             if len(participants) < 2:
                 raise HTTPException(400, "At least two group members are required")
+        else:
+            social._user_by_id(users, my_id)
+            participants = [my_id]
+            title = "Community"
         for call in calls:
             same = all(call[key] == value for key, value in payload.model_dump().items())
             if call["caller_id"] != my_id:
@@ -290,6 +322,11 @@ def create_call(
                 return _public(call, my_id)
             if same and call["status"] != "ended" and my_id not in call["_departed"]:
                 return _public(call, my_id)
+        community = payload.target_type == "community"
+        if community and any(
+            call["target_type"] == "community" and call["status"] != "ended" for call in calls
+        ):
+            raise HTTPException(409, "A community call is already active. Join the active call instead.")
         try:
             providers.livekit_config()
         except providers.ProviderError as exc:
@@ -297,14 +334,16 @@ def create_call(
         if _busy(calls, my_id):
             raise HTTPException(409, "You are already in a call")
         busy = [member for member in participants if member != my_id and _busy(calls, member)]
-        if len(busy) == len(participants) - 1:
+        if not community and len(busy) == len(participants) - 1:
             raise HTTPException(409, "The selected participants are busy")
         now = time.time()
         call = {
             "id": str(uuid.uuid4()), **payload.model_dump(), "title": title,
             "caller_id": my_id, "caller_name": current_user.get("full_name", ""),
-            "caller_avatar_url": current_user.get("avatar_url"), "status": "ringing",
-            "created_at": _iso(now), "expires_at": _iso(now + RING_SECONDS),
+            "caller_avatar_url": current_user.get("avatar_url"),
+            "status": "active" if community else "ringing",
+            "created_at": _iso(now),
+            "expires_at": _iso(now + (LEASE_SECONDS if community else RING_SECONDS)),
             "participant_ids": participants, "accepted_ids": [my_id], "ended_reason": None,
             "_room": str(uuid.uuid4()), "_ring_until": now + RING_SECONDS,
             "_leases": {my_id: now + LEASE_SECONDS}, "_departed": busy,
@@ -324,10 +363,22 @@ def incoming_calls(current_user: dict = Depends(get_current_user)):
         user_id = current_user["id"]
         return [
             _public(call, user_id) for call in calls
-            if call["status"] != "ended" and time.time() < call["_ring_until"]
+            if call["target_type"] != "community"
+            and call["status"] != "ended" and time.time() < call["_ring_until"]
             and user_id in call["participant_ids"] and user_id in _eligible(call)
             and user_id not in call["accepted_ids"] and user_id not in call["_departed"]
         ]
+
+
+@router.get("/calls/community")
+def community_call(response: Response, current_user: dict = Depends(get_current_user)):
+    response.headers["Cache-Control"] = "no-store"
+    with social._social_lock:
+        call = next((
+            call for call in _load_current()
+            if call["target_type"] == "community" and call["status"] == "active"
+        ), None)
+        return _public(call, current_user["id"]) if call else None
 
 
 @router.get("/calls/{call_id}")
@@ -341,12 +392,15 @@ def _join(call_id: str, user: dict, accept: bool) -> dict:
         calls = _load_current()
         user_id = user["id"]
         call = _get(calls, call_id, user_id)
-        if call["status"] == "ended" or user_id in call["_departed"]:
+        community = call["target_type"] == "community"
+        if call["status"] == "ended" or (not community and user_id in call["_departed"]):
             raise HTTPException(409, "Call has ended or you have already left")
         if user_id not in call["accepted_ids"]:
             if not accept:
                 raise HTTPException(403, "Accept the call before requesting a token")
-            if time.time() >= call["_ring_until"]:
+            if community and user_id in call["_cleanup"]:
+                raise HTTPException(409, "Your previous connection is still being cleaned up. Retry joining shortly.")
+            if not community and time.time() >= call["_ring_until"]:
                 raise HTTPException(409, "Call invitation has expired")
             if _busy(calls, user_id, call_id):
                 raise HTTPException(409, "You are already in a call")
@@ -355,6 +409,10 @@ def _join(call_id: str, user: dict, accept: bool) -> dict:
         except providers.ProviderError as exc:
             raise HTTPException(503, str(exc)) from exc
         if user_id not in call["accepted_ids"]:
+            if community:
+                if user_id in call["_departed"]:
+                    call["_departed"].remove(user_id)
+                call["participant_ids"].append(user_id)
             call["accepted_ids"].append(user_id)
             call["status"] = "active"
             # Cancel ringing on all this user's other installations.
@@ -381,6 +439,8 @@ def _depart(call_id: str, user: dict, decline: bool) -> dict:
         calls = _load_current()
         user_id = user["id"]
         call = _get(calls, call_id, user_id)
+        if call["target_type"] == "community" and user_id not in call["accepted_ids"]:
+            raise HTTPException(403, "Join the community call before changing participation")
         if call["status"] == "ended" or user_id in call["_departed"]:
             return _public(call, user_id)
         if decline and user_id in call["accepted_ids"]:
@@ -416,6 +476,8 @@ def heartbeat(call_id: str, current_user: dict = Depends(get_current_user)):
     with social._social_lock:
         calls = _load_current()
         call = _get(calls, call_id, current_user["id"])
+        if call["target_type"] == "community" and current_user["id"] not in call["accepted_ids"]:
+            raise HTTPException(403, "Join the community call before sending heartbeats")
         if call["status"] == "ended":
             return _public(call, current_user["id"])
         if current_user["id"] not in call["accepted_ids"]:

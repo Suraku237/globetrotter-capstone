@@ -32,9 +32,11 @@ class CallSession {
   });
 
   bool get isEnded => status == 'ended';
-  bool get isGroup => targetType == 'group';
+  bool get isCommunity => targetType == 'community';
+  bool get isGroup => targetType == 'group' || isCommunity;
 
   bool canAnswer(String userId, DateTime now) =>
+      !isCommunity &&
       (status == 'ringing' || status == 'active') &&
       expiresAt.isAfter(now) &&
       callerId != userId &&

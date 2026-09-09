@@ -187,6 +187,13 @@ class ApiService {
         .toList();
   }
 
+  Future<CallSession?> getCommunityCall() async {
+    final response = await _client.get(
+        Uri.parse('$baseUrl/social/calls/community'), headers: _headers);
+    final data = await _handle(response);
+    return data == null ? null : CallSession.fromJson(data as Map<String, dynamic>);
+  }
+
   Future<CallSession> getCall(String id) async => CallSession.fromJson(
         await _callRequest('calls/${Uri.encodeComponent(id)}')
             as Map<String, dynamic>,

@@ -351,10 +351,11 @@ class _FriendsScreenState extends State<FriendsScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
-        backgroundColor: ChatColors.header,
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        foregroundColor: AppColors.ink,
         title:
             Text(chatLabel(context, 'Chats & friends', 'Discussions et amis')),
         actions: [
@@ -376,9 +377,9 @@ class _FriendsScreenState extends State<FriendsScreen>
         ],
         bottom: TabBar(
           controller: _tabs,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
-          indicatorColor: Colors.white,
+          labelColor: AppColors.ochre,
+          unselectedLabelColor: AppColors.ink,
+          indicatorColor: AppColors.ochre,
           tabs: [
             const Tab(text: 'Friends'),
             Tab(
@@ -1085,8 +1086,9 @@ class _ConversationScreenState extends State<ConversationScreen> {
       backgroundColor: ChatColors.background,
       appBar: AppBar(
         titleSpacing: 0,
-        backgroundColor: ChatColors.header,
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        foregroundColor: AppColors.ink,
         title: Row(
           children: [
             _ConversationAvatar(
@@ -1106,7 +1108,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      color: Colors.white,
+                      color: AppColors.ink,
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
                     ),
@@ -1116,7 +1118,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.65),
+                      color: AppColors.inkSoft,
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
                     ),
@@ -1342,7 +1344,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
             decoration: InputDecoration(
               hintText: 'Write a message',
               filled: true,
-              fillColor: ChatColors.background,
+              fillColor: AppColors.sandDim,
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               border: OutlineInputBorder(

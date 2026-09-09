@@ -7,6 +7,7 @@ import 'package:fast_travel/Services/session_state.dart';
 import 'package:fast_travel/models/models.dart';
 import 'package:fast_travel/screens/chat/community_room_screen.dart';
 import 'package:fast_travel/screens/friends/friends_screen.dart';
+import 'package:fast_travel/widgets/app_background.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -34,7 +35,7 @@ Map<String, dynamic> _message(int index,
       'created_at': DateTime(2026, 9, 1, 10, index).toIso8601String(),
     };
 
-http.Response _json(Object data, {int status = 200}) =>
+http.Response _json(Object? data, {int status = 200}) =>
     http.Response(jsonEncode(data), status,
         headers: {'content-type': 'application/json'});
 
@@ -56,7 +57,10 @@ void main() {
   final session = _Session();
   late Future<http.Response> Function(http.Request) respond;
   late ApiService api;
-  final client = MockClient((request) => respond(request));
+  final client = MockClient((request) =>
+      request.url.path.endsWith('/calls/community')
+          ? Future.value(_json(null))
+          : respond(request));
 
   setUpAll(() {
     SharedPreferences.setMockInitialValues({});
@@ -68,32 +72,83 @@ void main() {
     );
   });
 
+  testWidgets('friends overview restores the shared image and warm tabs',
+      (tester) async {
+    respond = (request) async => request.url.path.endsWith('/groups')
+        ? _json([])
+        : _json(
+            {'friends': [], 'incoming_requests': [], 'outgoing_requests': []});
+    await tester.pumpWidget(MaterialApp(
+      builder: (context, child) =>
+          Stack(children: [const AppBackground(), child!]),
+      home: FriendsScreen(session: session),
+    ));
+    await _settle(tester);
+    expect(find.byType(AppBackground), findsOneWidget);
+    expect(tester.widget<Scaffold>(find.byType(Scaffold)).backgroundColor,
+        Colors.transparent);
+    expect(tester.widget<AppBar>(find.byType(AppBar)).backgroundColor,
+        Colors.transparent);
+    expect(tester.widget<TabBar>(find.byType(TabBar)).indicatorColor,
+        const Color(0xFFFF6A4D));
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _settle(tester);
+  });
+
   for (final label in ['community', 'private', 'group']) {
     final community = label == 'community';
     Widget screen() => MaterialApp(
+          builder: (context, child) =>
+              Stack(children: [const AppBackground(), child!]),
           home: community
               ? CommunityRoomScreen(session: session)
               : label == 'private'
-                ? ConversationScreen.direct(
-                  session: session,
-                  friend: const SocialUser(
-                      id: 'friend', fullName: 'Friend', username: 'friend'),
-                )
-                : ConversationScreen.group(
-                    session: session,
-                    group: const ChatGroup(
-                      id: 'group',
-                      name: 'Travel friends',
-                      ownerId: 'me',
-                      members: [
-                        SocialUser(id: 'friend', fullName: 'Friend', username: 'friend'),
-                      ],
-                      createdAt: '2026-09-01T10:00:00',
+                  ? ConversationScreen.direct(
+                      session: session,
+                      friend: const SocialUser(
+                          id: 'friend', fullName: 'Friend', username: 'friend'),
+                    )
+                  : ConversationScreen.group(
+                      session: session,
+                      group: const ChatGroup(
+                        id: 'group',
+                        name: 'Travel friends',
+                        ownerId: 'me',
+                        members: [
+                          SocialUser(
+                              id: 'friend',
+                              fullName: 'Friend',
+                              username: 'friend'),
+                        ],
+                        createdAt: '2026-09-01T10:00:00',
+                      ),
                     ),
-                  ),
         );
 
-    testWidgets('$label older pages keep their exclusive cursor with timestamp ties',
+    testWidgets('$label exposes the original image without a blue canvas',
+        (tester) async {
+      tester.view.physicalSize = const Size(320, 568);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      respond = (request) async => request.url.path.endsWith('/messages')
+          ? _json([_message(1)])
+          : _json({'count': 0, 'users': []});
+      await tester.pumpWidget(screen());
+      await _settle(tester);
+      expect(find.byType(AppBackground), findsOneWidget);
+      expect(tester.widget<Scaffold>(find.byType(Scaffold)).backgroundColor,
+          Colors.transparent);
+      expect(tester.widget<AppBar>(find.byType(AppBar)).backgroundColor,
+          Colors.transparent);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await _settle(tester);
+    });
+
+    testWidgets(
+        '$label older pages keep their exclusive cursor with timestamp ties',
         (tester) async {
       final cursors = <String>[];
       respond = (request) async {
@@ -104,7 +159,9 @@ void main() {
         final cursor = request.url.queryParameters['before'];
         if (cursor != null) cursors.add(cursor);
         return _json([
-          for (var i = cursor == null ? 10 : 0; i < (cursor == null ? 60 : 10); i++)
+          for (var i = cursor == null ? 10 : 0;
+              i < (cursor == null ? 60 : 10);
+              i++)
             {..._message(i), 'created_at': '2026-09-01T10:00:00Z'},
         ]);
       };
@@ -144,7 +201,8 @@ void main() {
       };
       await tester.pumpWidget(screen());
       await _settle(tester);
-      expect(reads, greaterThan(0), reason: 'The initial read should reach the mock client');
+      expect(reads, greaterThan(0),
+          reason: 'The initial read should reach the mock client');
       expect(find.text('Message 1'), findsOneWidget);
       await tester.enterText(find.byType(TextField), 'Keep this draft');
       await tester.pump();
@@ -265,14 +323,17 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('friend requests arrive live and approval updates without a spinner',
+  testWidgets(
+      'friend requests arrive live and approval updates without a spinner',
       (tester) async {
     var arrived = false;
     var accepted = false;
     var approvals = 0;
     final approval = Completer<http.Response>();
     const friend = {
-      'id': 'friend', 'full_name': 'New friend', 'username': 'new_friend',
+      'id': 'friend',
+      'full_name': 'New friend',
+      'username': 'new_friend',
     };
     respond = (request) async {
       if (request.url.path.endsWith('/accept')) {

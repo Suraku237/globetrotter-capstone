@@ -144,6 +144,7 @@ class CallCoordinator with WidgetsBindingObserver {
   }
 
   Future<void> acceptIncoming(String id) => _accept(id);
+  Future<void> joinCommunityCall(String id) => _accept(id, community: true);
   Future<void> endIncoming(String id) => _decline(id);
   Future<void> updateNativeMute(String id, bool muted) => _nativeMute(id, muted);
 
@@ -299,7 +300,7 @@ class CallCoordinator with WidgetsBindingObserver {
     if (_pendingCallId == call.id) return;
     final userId = session.currentUser?.id;
     if (userId == null || !call.canAnswer(userId, _now())) {
-      await _push.endCall(call.id);
+      if (!call.isCommunity) await _push.endCall(call.id);
       return;
     }
     if (_busy || callState.value != null) {
@@ -344,7 +345,7 @@ class CallCoordinator with WidgetsBindingObserver {
     unawaited(navigator.push(route));
   }
 
-  Future<void> _accept(String id) async {
+  Future<void> _accept(String id, {bool community = false}) async {
     if (_busy || _disposed || _signedOut || !session.isSignedIn) return;
     if (_connection?.call.id == id || _media != null) return;
     if (callState.value != null && callState.value!.id != id) {
@@ -359,7 +360,7 @@ class CallCoordinator with WidgetsBindingObserver {
     try {
       await beforeConnect?.call();
       if (!_sameSession(userId, generation)) return;
-      await _push.markAccepting(id);
+      if (!community) await _push.markAccepting(id);
       if (!_sameSession(userId, generation)) return;
       final connection = await _api.connectCall(id, accept: true);
       if (!_sameSession(userId, generation)) {
@@ -375,14 +376,14 @@ class CallCoordinator with WidgetsBindingObserver {
       _notify(error.message);
       _closeIncoming();
       callState.value = null;
-      await _push.endCall(id);
+      if (!community) await _push.endCall(id);
     } on PlatformException catch (error) {
       _notify('Cannot answer the system call: ${error.message ?? error.code}');
-      await _leave();
+      await _leave(community: community);
       _closeIncoming();
     } catch (_) {
       _notify('Call media could not start. Check permissions and try again.');
-      await _leave();
+      await _leave(community: community);
       _closeIncoming();
     } finally {
       if (_pendingCallId == id) _pendingCallId = null;
@@ -460,13 +461,14 @@ class CallCoordinator with WidgetsBindingObserver {
 
   Future<void> _remoteEnded(String id) async {
     if (callState.value?.id != id && _pendingCallId != id) return;
+    final community = callState.value?.isCommunity == true;
     _generation++;
     _pendingCallId = null;
     if (callState.value?.id == id) {
       callState.value = callState.value!.endedLocally();
     }
     await _media?.stop();
-    await _push.endCall(id);
+    if (!community) await _push.endCall(id);
     _closeIncoming();
     if (_callRoute == null) {
       _media = null;
@@ -516,9 +518,10 @@ class CallCoordinator with WidgetsBindingObserver {
     }));
   }
 
-  Future<void> _leave() => _leaveFuture ??= _leaveCurrent();
+  Future<void> _leave({bool community = false}) =>
+      _leaveFuture ??= _leaveCurrent(community: community);
 
-  Future<void> _leaveCurrent() async {
+  Future<void> _leaveCurrent({bool community = false}) async {
     final call = callState.value;
     final id = call?.id ?? _pendingCallId;
     if (id == null) return;
@@ -534,7 +537,9 @@ class CallCoordinator with WidgetsBindingObserver {
     } on ApiException catch (error) {
       _notify('Call stopped locally. ${error.message}');
     } finally {
-      await _push.endCall(id);
+      // Community calls have no native invitation. Suppressing their shared ID
+      // would prevent iOS audio from starting on a later explicit rejoin.
+      if (!community && call?.isCommunity != true) await _push.endCall(id);
       await stopping;
       // A group may remain active for everyone else after we leave.
       if (!_disposed && callState.value?.id == id) {

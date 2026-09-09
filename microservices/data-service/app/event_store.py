@@ -9,7 +9,7 @@ from pathlib import Path
 from .models import DATA_DIR
 
 TOPICS = {
-    "friends", "calls", "chat", "posts", "destinations", "itineraries",
+    "friends", "calls", "community_calls", "chat", "posts", "destinations", "itineraries",
     "profile", "recommendations", "stats",
 }
 HISTORY_LIMIT = 2048

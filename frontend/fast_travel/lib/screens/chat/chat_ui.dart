@@ -1,13 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../theme/app_theme.dart';
 
 abstract final class ChatColors {
-  static const header = Color(0xFF507DA2);
-  static const background = Color(0xFFE8EFF3);
-  static const outgoing = Color(0xFFE4F2DC);
-  static const ink = Color(0xFF223444);
-  static const muted = Color(0xFF627889);
+  static const header = AppColors.ochre;
+  static const background = Colors.transparent;
+  static const outgoing = Color(0xFFFFE9E2);
+  static const ink = AppColors.ink;
+  static const muted = AppColors.inkSoft;
 }
 
 String chatLabel(BuildContext context, String english, String french) =>
@@ -189,7 +190,7 @@ class ChatDateSeparator extends StatelessWidget {
         margin: const EdgeInsets.symmetric(vertical: 14),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
         decoration: BoxDecoration(
-          color: ChatColors.header.withValues(alpha: 0.13),
+          color: AppColors.sand.withValues(alpha: 0.9),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(label,

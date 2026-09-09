@@ -38,7 +38,8 @@ Server frames contain only cache metadata:
 | Topic | Audience and mutations |
 | --- | --- |
 | `friends` | Both requester and recipient on send/accept/decline/cancel; both participants on private messages; all group members on group creation/message; profile owner and their friends/groups on profile changes |
-| `calls` | Original call participants on creation, acceptance, departure, ringing expiry, lease expiry and membership-driven changes; not routine leases or provider retries |
+| `calls` | Original private-call participants, or actual community participants (including users just removed), on visible signalling changes; not routine leases or provider retries; never broadcast to all accounts |
+| `community_calls` | All authenticated subscribers: shared community call start/join/leave/end; refresh `GET /social/calls/community` for the join banner, never incoming-call polling or ringing |
 | `chat` | All authenticated subscribers: public community text/sticker/audio/image sends, reactions and soft deletes |
 | `posts` | All authenticated subscribers: post creation, likes, comments and deletion |
 | `destinations`, `recommendations` | All authenticated subscribers: destination creation/edit/moderation |
@@ -51,7 +52,12 @@ sent on this stream. Server-side audience filtering is mandatory and cannot be
 overridden with subscription frames. Existing private messages use audience-limited
 `friends` invalidations; `chat` means the existing **one public community room**,
 not a new DM system.
-Existing FCM, APNs PushKit/CallKit, native call lifecycle and LiveKit are unchanged.
+Private FCM, APNs PushKit/CallKit, native call lifecycle and LiveKit are unchanged.
+Community calls are explicit opt-in sessions: no incoming/native push events are
+queued at any stage. Their metadata topic carries no call payload. Discovery is a
+fresh authenticated `GET /social/calls/community` returning a call or JSON `null`;
+joining uses `POST /social/calls/{id}/accept`. Do not cache call signalling or
+credentials. See [CALLS.md](CALLS.md) for lease, busy and safe-rejoin semantics.
 Call invalidations are persisted before slow provider delivery; a socket is never
 required to receive a push, accept a call, fetch signalling, or carry media.
 

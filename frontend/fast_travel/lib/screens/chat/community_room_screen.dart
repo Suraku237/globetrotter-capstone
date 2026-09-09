@@ -9,12 +9,14 @@ import 'package:image_picker/image_picker.dart';
 import 'package:record/record.dart';
 
 import '../../Services/api_service.dart';
+import '../../Services/call_coordinator.dart';
 import '../../Services/media_cache.dart';
 import '../../Services/session_state.dart';
 import '../../models/models.dart';
 import '../../theme/app_theme.dart';
 import 'audio_capture_web.dart' if (dart.library.io) 'audio_capture_io.dart';
 import 'chat_ui.dart';
+import 'community_call_bar.dart';
 
 // Curated sticker set — same list as before, kept small so the picker
 // stays a quick emoji pad rather than a full keyboard.
@@ -75,6 +77,8 @@ class _CommunityRoomScreenState extends State<CommunityRoomScreen> {
   bool _loading = true;
   bool _sending = false;
   bool _recording = false;
+  bool _recordingBusy = false;
+  bool _preparingCall = false;
   bool _showStickers = false;
   bool _searchOpen = false;
   String _searchQuery = '';
@@ -344,7 +348,16 @@ class _CommunityRoomScreenState extends State<CommunityRoomScreen> {
   }
 
   Future<void> _toggleRecording() async {
-    if (_sending) return;
+    if (_sending || _recordingBusy) return;
+    if (_preparingCall || CallCoordinator.instance.isInCall) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(chatLabel(context,
+            'Finish the call before recording a message.',
+            'Terminez votre appel avant de commencer un enregistrement.')),
+      ));
+      return;
+    }
+    _recordingBusy = true;
     try {
       if (_recording) {
         final path = await _recorder.stop();
@@ -363,10 +376,15 @@ class _CommunityRoomScreenState extends State<CommunityRoomScreen> {
         );
         return;
       }
+      if (!mounted || CallCoordinator.instance.isInCall) return;
       final path =
           audioTempPath('${DateTime.now().microsecondsSinceEpoch}.m4a');
       await _recorder.start(const RecordConfig(encoder: AudioEncoder.aacLc),
           path: path);
+      if (!mounted || CallCoordinator.instance.isInCall) {
+        await _recorder.stop();
+        return;
+      }
       if (mounted) setState(() => _recording = true);
     } catch (_) {
       if (!mounted) return;
@@ -374,6 +392,8 @@ class _CommunityRoomScreenState extends State<CommunityRoomScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not access the microphone.')),
       );
+    } finally {
+      _recordingBusy = false;
     }
   }
 
@@ -601,6 +621,35 @@ class _CommunityRoomScreenState extends State<CommunityRoomScreen> {
 
   // ---- Build --------------------------------------------------------------
 
+  Future<bool> _prepareCommunityCall() async {
+    if (_recording || _recordingBusy || _sending) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(chatLabel(context,
+            'Finish your message before joining a call.',
+            'Terminez votre message avant de rejoindre un appel.')),
+      ));
+      return false;
+    }
+    _preparingCall = true;
+    try {
+      await _player?.stop();
+      if (!mounted) return false;
+      setState(() => _playingMessageId = null);
+      return true;
+    } on PlatformException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(chatLabel(context,
+              'Cannot stop voice playback: ${error.message ?? error.code}',
+              'Impossible de stopper la lecture audio : ${error.message ?? error.code}')),
+        ));
+      }
+      return false;
+    } finally {
+      _preparingCall = false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentUserId = widget.session.currentUser?.id ?? '';
@@ -608,8 +657,9 @@ class _CommunityRoomScreenState extends State<CommunityRoomScreen> {
     return Scaffold(
       backgroundColor: ChatColors.background,
       appBar: AppBar(
-        backgroundColor: ChatColors.header,
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        foregroundColor: AppColors.ink,
         title: _PresenceTitle(presence: _presence),
         actions: [
           IconButton(
@@ -644,6 +694,7 @@ class _CommunityRoomScreenState extends State<CommunityRoomScreen> {
       ),
       body: Column(
         children: [
+          CommunityCallBar(beforeCall: _prepareCommunityCall),
           if (_loadError != null)
             ChatNotice(message: _loadError!, onRetry: _updates.refreshFromNetwork),
           Expanded(
@@ -851,7 +902,7 @@ class _PresenceTitle extends StatelessWidget {
     return Row(
       children: [
         const CircleAvatar(
-          backgroundColor: Color(0xFF7199B8),
+          backgroundColor: AppColors.ochre,
           radius: 18,
           child: Icon(Icons.public_rounded, color: Colors.white, size: 20),
         ),
@@ -862,13 +913,17 @@ class _PresenceTitle extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(chatLabel(context, 'Community', 'Communauté'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                       fontSize: 16, fontWeight: FontWeight.w600)),
               Text(
                 subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                     fontSize: 12,
-                    color: Colors.white70,
+                    color: AppColors.inkSoft,
                     fontWeight: FontWeight.w400),
               ),
             ],

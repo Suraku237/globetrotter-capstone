@@ -9,6 +9,7 @@ import 'package:fast_travel/models/call_models.dart';
 import 'package:fast_travel/models/models.dart';
 import 'package:fast_travel/screens/friends/call_screen.dart';
 import 'package:flutter/material.dart' hide ConnectionState;
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:livekit_client/livekit_client.dart';
 
@@ -80,6 +81,7 @@ class _Api extends Fake implements ApiService {
   Completer<CallSession>? pendingAction;
   final pendingConnection = Completer<CallConnection>();
   bool connecting = false;
+  bool? accepting;
 
   @override
   bool get isAuthenticated => true;
@@ -110,6 +112,7 @@ class _Api extends Fake implements ApiService {
   @override
   Future<CallConnection> connectCall(String id, {required bool accept}) {
     connecting = true;
+    accepting = accept;
     return pendingConnection.future;
   }
 
@@ -130,6 +133,8 @@ class _Push extends Fake implements CallPushService {
   Future<void> Function()? recover;
   final muteUpdates = <bool>[];
   bool initialMute = false;
+  int accepts = 0;
+  bool rejectSuppressedAudio = false;
 
   @override
   Future<void> initialize() async {}
@@ -150,7 +155,11 @@ class _Push extends Fake implements CallPushService {
   Future<void> setMuted(String id, bool muted) async => muteUpdates.add(muted);
 
   @override
-  Future<void> prepareAudio(String id) async {}
+  Future<void> prepareAudio(String id) async {
+    if (rejectSuppressedAudio && ended.contains(id)) {
+      throw PlatformException(code: 'audio_call_changed');
+    }
+  }
 
   @override
   Future<void> markConnected(String id) async {}
@@ -165,7 +174,7 @@ class _Push extends Fake implements CallPushService {
   Future<void> endCall(String id) async => ended.add(id);
 
   @override
-  Future<void> markAccepting(String id) async {}
+  Future<void> markAccepting(String id) async => accepts++;
 
   @override
   Future<void> dispose() async {}
@@ -292,6 +301,78 @@ void main() {
       await api.updates.close();
     });
   }
+
+  testWidgets(
+      'community joins explicitly using the shared media without ringing',
+      (tester) async {
+    final room = _MediaRoom();
+    headless(tester, room);
+    final call = CallSession.fromJson({
+      'id': 'community-call',
+      'kind': 'voice',
+      'target_type': 'community',
+      'target_id': 'community',
+      'title': 'Community',
+      'caller_id': 'alice',
+      'caller_name': 'Alice',
+      'status': 'active',
+      'expires_at': '2000-01-01T00:00:00Z',
+      'participant_ids': ['alice', 'bob'],
+      'accepted_ids': ['alice', 'bob'],
+    });
+    api.call = call;
+    api.pendingConnection.complete(connection(call));
+    await calls.initialize();
+    await tester.pump();
+    expect(calls.callState.value, isNull);
+    expect(room.connections, 0);
+    await calls.joinCommunityCall(call.id);
+    expect(api.accepting, isTrue);
+    expect(push.accepts, 0);
+    expect(room.connections, 1);
+    expect(room.participant.microphone, isTrue);
+    expect(room.participant.cameraRequests, 0);
+    expect(calls.callState.value?.isCommunity, isTrue);
+    await calls.signOut();
+    expect(api.actions, contains('leave'));
+    expect(room.disposals, 1);
+    await disposeCalls(tester);
+  }, variant: const TargetPlatformVariant({TargetPlatform.linux}));
+
+  testWidgets('leaving community media does not suppress an explicit rejoin',
+      (tester) async {
+    final room = _MediaRoom();
+    headless(tester, room);
+    push.rejectSuppressedAudio = true;
+    final active = CallSession.fromJson({
+      'id': 'public-call',
+      'kind': 'voice',
+      'target_type': 'community',
+      'target_id': 'community',
+      'title': 'Community',
+      'caller_id': 'alice',
+      'caller_name': 'Alice',
+      'status': 'active',
+      'expires_at': '2099-01-01T00:00:00Z',
+      'participant_ids': ['alice', 'bob'],
+      'accepted_ids': ['alice', 'bob'],
+    });
+    api.call = active;
+    api.pendingConnection.complete(connection(active));
+    await calls.initialize();
+    await calls.joinCommunityCall(active.id);
+    expect(room.connections, 1);
+    await calls.endIncoming(active.id);
+    expect(calls.callState.value, isNull);
+    api.call = active;
+    await calls.joinCommunityCall(active.id);
+    await tester.pump();
+    expect(room.connections, 2);
+    expect(room.participant.microphone, isTrue);
+    expect(push.ended, isEmpty);
+    await calls.signOut();
+    await disposeCalls(tester);
+  }, variant: const TargetPlatformVariant({TargetPlatform.linux}));
 
   testWidgets(
       'restored native answer connects with no scene, frame, or Navigator',

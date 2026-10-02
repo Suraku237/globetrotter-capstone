@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>VulnBank | Online Banking</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="navbar">
+    <div class="logo">🏦 VulnBank</div>
+    <nav><a href="index.html">Sign In</a></nav>
+  </header>
+
+  <div class="container login-wrapper">
+    <div class="card">
+      <h2>Welcome back</h2>
+      <p class="subtitle">Sign in to manage your accounts</p>
+      <form id="loginForm">
+        <label>Username</label>
+        <input type="text" id="username" name="username" autocomplete="username">
+        <label>Password</label>
+        <div class="password-wrapper">
+          <input type="password" id="password" name="password" autocomplete="current-password">
+          <button type="button" class="toggle-password" id="togglePassword" aria-label="Show password">👁️</button>
+        </div>
+        <button type="submit">Sign In</button>
+        <div class="error" id="errorMsg"></div>
+      </form>
+    </div>
+  </div>
+
+  <footer>&copy; 2026 VulnBank. All rights reserved.</footer>
+
+  <script src="js/login.js"></script>
+</body>
+</html>

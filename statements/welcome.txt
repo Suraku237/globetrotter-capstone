@@ -1,0 +1,3 @@
+VulnBank Statement
+Account holder: Demo User
+This is a sample statement file. Try requesting other filenames via the 'file' parameter... 

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>VulnBank | Transfer Money</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="navbar">
+    <div class="logo">🏦 VulnBank</div>
+    <nav>
+      <a href="dashboard.html">Dashboard</a>
+      <a href="account.html">My Account</a>
+      <a href="transfer.html">Transfer Money</a>
+      <a href="tools.html">Tools</a>
+      <a href="admin.html">Admin</a>
+      <a href="#" id="logoutLink">Logout</a>
+    </nav>
+  </header>
+
+  <div class="container">
+    <div class="card">
+      <h3>Transfer Funds</h3>
+      <form id="transferForm">
+        <label>To Account ID</label>
+        <input type="number" id="toAccount" required>
+        <label>Amount</label>
+        <input type="number" id="amount" step="0.01" required>
+        <label>Note</label>
+        <input type="text" id="note" placeholder="What's this for?">
+        <button type="submit">Send Transfer</button>
+      </form>
+      <div id="transferMsg" style="margin-top:10px"></div>
+    </div>
+  </div>
+
+  <footer>&copy; 2026 VulnBank. All rights reserved.</footer>
+
+  <script src="js/auth.js"></script>
+  <script src="js/transfer.js"></script>
+</body>
+</html>

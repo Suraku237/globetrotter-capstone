@@ -88,7 +88,7 @@ Each section: **what/where** → **step-by-step bypass** → **why it works** �
 
 **Steps (two ways to become "admin"):**
 
-**A. Just log in as the seeded admin account** (`admin` / `SuperSecretAdmin!2024`) and visit `admin.html` → click **Load Users** → dumps every username/plaintext-password/balance.
+**A. Just log in as the seeded admin account** (`admin` / `admin`) and visit `admin.html` → click **Load Users** → dumps every username/plaintext-password/balance.
 
 **B. Forge your own admin JWT** (see §2.5) as a normal user, e.g. alice, and still access `/api/admin/users`.
 

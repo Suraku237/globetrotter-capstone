@@ -18,7 +18,7 @@ const jwt = require('jsonwebtoken');
 const path = require('path');
 const { exec } = require('child_process');
 const fs = require('fs');
-const db = require('./db');
+const db = require('./database');
 
 const app = express();
 const PORT = process.env.PORT || 3000;

@@ -33,6 +33,12 @@ migrate_working_dir/
 /build/
 /coverage/
 
+# Local Docker Compose overrides (the base deployment config stays tracked)
+/docker-compose.override.yml
+/docker-compose.override.yaml
+/compose.override.yml
+/compose.override.yaml
+
 # Symbolication related
 app.*.symbols
 

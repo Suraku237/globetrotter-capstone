@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import '../../models/models.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+
 import '../../Services/api_service.dart';
 import '../../Services/live_refresh.dart';
+import '../../cubits/discover_cubit.dart';
 import '../../l10n/generated/app_localizations.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/category_ribbon.dart';
@@ -20,89 +24,35 @@ class DiscoverScreen extends StatefulWidget {
 }
 
 class _DiscoverScreenState extends State<DiscoverScreen> {
-  List<Destination> _allDestinations = [];
-  List<Destination> _filteredDestinations = [];
-  List<String> _categories = [];
-  bool _loading = true;
-  bool _hasLoaded = false;
+  late final DiscoverCubit _cubit;
   late final LiveRefresh _refresh;
-  String? _error;
   final TextEditingController _searchController = TextEditingController();
-  String? _selectedCategory;
 
   @override
   void initState() {
     super.initState();
+    _cubit = DiscoverCubit();
     _refresh = LiveRefresh(
       changes: ApiService.instance.changes,
       topics: {'destinations'},
-      onRefresh: _fetchDestinations,
+      onRefresh: _cubit.load,
     );
     _loadDestinations();
-    _searchController.addListener(_onSearchOrFilterChanged);
+    _searchController.addListener(_onSearchChanged);
   }
 
   @override
   void dispose() {
     _refresh.dispose();
     _searchController.dispose();
+    unawaited(_cubit.close());
     super.dispose();
   }
 
   Future<void> _loadDestinations() => _refresh.refresh();
 
-  Future<void> _fetchDestinations() async {
-    setState(() {
-      _loading = !_hasLoaded;
-      _error = null;
-    });
-    try {
-      final data = await ApiService.instance.getDestinations();
-      if (!mounted) return;
-      // Categories always match whatever tags actually exist on the
-      // loaded destinations, sorted, instead of a hardcoded list that
-      // could drift out of sync with real data.
-      final categories = data.expand((d) => d.tags).toSet().toList()..sort();
-      setState(() {
-        _allDestinations = data;
-        _filteredDestinations = data;
-        _categories = categories;
-        _loading = false;
-        _hasLoaded = true;
-      });
-      _onSearchOrFilterChanged();
-    } on ApiException catch (e) {
-      if (mounted && !_hasLoaded) setState(() => _error = e.message);
-    } catch (_) {
-      if (mounted && !_hasLoaded) {
-        setState(() =>
-            _error = AppLocalizations.of(context)!.couldNotReachServerShort);
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  void _onSearchOrFilterChanged() {
-    final query = _searchController.text.trim().toLowerCase();
-    setState(() {
-      _filteredDestinations = _allDestinations.where((dest) {
-        final categoryMatch =
-            _selectedCategory == null || dest.tags.contains(_selectedCategory);
-        final nameMatch = dest.name.toLowerCase().contains(query);
-        final searchRegionMatch = dest.region.toLowerCase().contains(query);
-        final tagsMatch =
-            dest.tags.any((tag) => tag.toLowerCase().contains(query));
-        return categoryMatch && (nameMatch || searchRegionMatch || tagsMatch);
-      }).toList();
-    });
-  }
-
-  void _onCategorySelected(String? category) {
-    setState(() {
-      _selectedCategory = (category == _selectedCategory) ? null : category;
-    });
-    _onSearchOrFilterChanged();
+  void _onSearchChanged() {
+    _cubit.updateSearch(_searchController.text);
   }
 
   Future<void> _openSuggestDestination() async {
@@ -138,75 +88,78 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    // Transparent so the global AppBackground photo (see main.dart)
-    // shows through this screen — the hero card and bottom Suggest
-    // pill are gone because the same image is now behind everything.
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _SearchBar(
-                controller: _searchController,
-                hint: l10n.searchHint,
-              ),
-              const SizedBox(height: 14),
-              CategoryRibbon(
-                categories: _categories,
-                selected: _selectedCategory,
-                onSelect: _onCategorySelected,
-              ),
-              const SizedBox(height: 14),
-              Expanded(child: _buildBody(l10n)),
-              const SizedBox(height: 10),
-              // Only the Ask AI shortcut lives in the bottom row now —
-              // the Suggest a destination action moved to a small FAB
-              // on the right so it stays reachable without dominating
-              // the layout.
-              Row(
+    return BlocProvider.value(
+      value: _cubit,
+      child: BlocBuilder<DiscoverCubit, DiscoverState>(
+        builder: (context, state) => Scaffold(
+          backgroundColor: Colors.transparent,
+          body: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _AskAiButton(onTap: _openAssistant),
+                  _SearchBar(
+                    controller: _searchController,
+                    hint: l10n.searchHint,
+                  ),
+                  const SizedBox(height: 14),
+                  CategoryRibbon(
+                    categories: state.categories,
+                    selected: state.selectedCategory,
+                    onSelect: _cubit.selectCategory,
+                  ),
+                  const SizedBox(height: 14),
+                  Expanded(child: _buildBody(state, l10n)),
+                  const SizedBox(height: 10),
+                  // Only the Ask AI shortcut lives in the bottom row now —
+                  // the Suggest a destination action moved to a small FAB
+                  // on the right so it stays reachable without dominating
+                  // the layout.
+                  Row(
+                    children: [
+                      _AskAiButton(onTap: _openAssistant),
+                    ],
+                  ),
                 ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'suggest_destination_fab',
-        onPressed: _openSuggestDestination,
-        backgroundColor: AppColors.ochre,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.add_location_alt_rounded),
-        label: Text(
-          widget.isAdmin ? l10n.addDestination : l10n.suggestDestination,
+          floatingActionButton: FloatingActionButton.extended(
+            heroTag: 'suggest_destination_fab',
+            onPressed: _openSuggestDestination,
+            backgroundColor: AppColors.ochre,
+            foregroundColor: Colors.white,
+            icon: const Icon(Icons.add_location_alt_rounded),
+            label: Text(
+              widget.isAdmin ? l10n.addDestination : l10n.suggestDestination,
+            ),
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildBody(AppLocalizations l10n) {
-    if (_loading) {
+  Widget _buildBody(DiscoverState state, AppLocalizations l10n) {
+    if (state.isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (_error != null) {
+    if (state.hasError) {
       return EmptyState(
         icon: Icons.wifi_off_rounded,
         title: l10n.cantReachServer,
-        message: _error!,
+        message: state.errorMessage ?? l10n.couldNotReachServerShort,
         onRetry: _loadDestinations,
       );
     }
-    if (_filteredDestinations.isEmpty) {
+    if (state.filteredDestinations.isEmpty) {
       return EmptyState(
         icon: Icons.search_off_rounded,
         title: l10n.noResultsFound,
         message: l10n.noResultsMessage,
       );
     }
+    final destinations = state.filteredDestinations;
     return GridView.builder(
       padding: const EdgeInsets.only(bottom: 8, top: 4),
       // Target a fixed card width and let the column count adapt to
@@ -218,9 +171,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         crossAxisSpacing: 14,
         mainAxisSpacing: 14,
       ),
-      itemCount: _filteredDestinations.length,
+      itemCount: destinations.length,
       itemBuilder: (context, index) {
-        final dest = _filteredDestinations[index];
+        final dest = destinations[index];
         return DestinationCard(
           destination: dest,
           onTap: () {

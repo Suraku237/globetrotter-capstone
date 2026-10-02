@@ -16,6 +16,74 @@ For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.
 
+## Docker (Flutter web)
+
+The [Dockerfile](Dockerfile) builds the Flutter web release in a Linux builder
+and serves only the generated web files in an Nginx runtime container. A local
+Flutter installation is not required. This container does not run Android,
+iOS, or desktop apps.
+
+Start Docker Desktop with the Linux container engine enabled. From the repository
+root, run in PowerShell:
+
+```powershell
+Set-Location .\frontend\fast_travel
+docker compose up --build -d
+```
+
+Open http://localhost:2012. By default, the browser calls the existing API at
+`https://fasttravel-web.duckdns.org/api`; the frontend container does not start
+or proxy the backend. To use a backend already running on your computer:
+
+```powershell
+$env:API_BASE_URL = "http://localhost:8000"
+docker compose up --build -d
+```
+
+`API_BASE_URL` is compiled into the web app, so changes require rebuilding the
+image, not just restarting the container. Use an absolute URL with no trailing
+slash. The URL must be reachable from the **browser**, not from Docker: do not
+use an internal service name such as `api-gateway`. For a browser on another
+device, replace `localhost` with your computer's reachable hostname or IP.
+The backend must allow the frontend origin through CORS.
+
+Optional Compose settings are `FRONTEND_PORT` (default `2012`) and
+`FLUTTER_VERSION` (default `3.44.1`). Nginx supports client-side route fallback,
+returns 404 for missing static assets, and exposes `/healthz` for the container's
+health check. This check verifies the web server only, not backend availability.
+
+```powershell
+docker compose ps
+docker compose logs frontend
+docker compose down
+```
+
+For production, put the container behind an HTTPS reverse proxy and build with
+an HTTPS API URL (the event connection then uses WSS). HTTPS is also required
+outside localhost for browser microphone/camera and notification features.
+Do not pass API secrets as build arguments: Flutter web configuration is public.
+The [.dockerignore](.dockerignore) allowlist excludes local build output,
+platform projects, development caches, and private credential files.
+
+### Deployment checklist
+
+- Commit the Dockerfile, Compose file, Nginx configuration, dependency manifests,
+  Flutter source, and bundled assets. Do not commit environment files, private
+  credentials, generated builds, or local Compose overrides.
+- Run `flutter pub get` after dependency changes and commit the updated
+  `pubspec.lock` for reproducible application builds.
+- Before release, run `flutter analyze` and `flutter test`, then
+  `docker compose up --build -d`. Confirm `docker compose ps` reports the
+  frontend as healthy and check http://localhost:2012/healthz.
+- Verify the app loads, a browser refresh on a nested route works, and
+  authentication/API requests and live updates reach the configured backend.
+- For production, route the HTTPS reverse proxy to port `2012` on the Docker
+  host. Keep the backend's `/api` and WebSocket routing intact. If the reverse
+  proxy is on the same host, restrict the published port to loopback or protect
+  it with a firewall.
+- This Compose setup is manual: adding it does not switch the existing Jenkins
+  deployment to containers.
+
 ## Weak connections and live updates
 
 - Read responses for destinations, recommendations, trips, the feed, profile,

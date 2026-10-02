@@ -1,0 +1,23 @@
+# Local Python environments and generated caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local configuration and private credentials
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+*service-account*.json
+*.pem
+*.key
+*.p8
+/microservices/secrets/
+
+# Local diagnostics and operating-system files
+*.log
+.DS_Store
+Thumbs.db

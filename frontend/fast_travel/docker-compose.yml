@@ -1,0 +1,10 @@
+services:
+  frontend:
+    build:
+      context: .
+      args:
+        FLUTTER_VERSION: ${FLUTTER_VERSION:-3.44.1}
+        API_BASE_URL: ${API_BASE_URL:-https://fasttravel-web.duckdns.org/api}
+    ports:
+      - "${FRONTEND_PORT:-2012}:80"
+    restart: unless-stopped

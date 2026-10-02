@@ -23,7 +23,7 @@ Open **http://localhost:3000**
 |----------|------------------------|:---:|-------|
 | alice    | alicepass123           | 1   | user  |
 | bob      | bobpass123              | 2   | user  |
-| admin    | SuperSecretAdmin!2024   | 3   | admin |
+| admin    | admin                   | 3   | admin |
 
 ---
 

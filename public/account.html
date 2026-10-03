@@ -2,41 +2,59 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VulnBank | My Account</title>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
   <header class="navbar">
-    <div class="logo">🏦 VulnBank</div>
-    <nav>
+    <a class="logo" href="dashboard.html"><span class="brand-mark" aria-hidden="true">V</span>VulnBank</a>
+    <nav aria-label="Main navigation">
       <a href="dashboard.html">Dashboard</a>
-      <a href="account.html">My Account</a>
+      <a href="account.html" aria-current="page">My Account</a>
       <a href="transfer.html">Transfer Money</a>
       <a href="tools.html">Tools</a>
-      <a href="admin.html">Admin</a>
+      <a href="admin.html" data-admin-only hidden>Admin</a>
       <a href="#" id="logoutLink">Logout</a>
     </nav>
+    <div class="user-chip"><span class="avatar" data-user-initial>V</span><div><span data-user-name>Loading...</span><span data-user-role></span></div></div>
   </header>
+  <div class="lab-banner">Training simulation. Account lookup and raw-HTML notes remain intentionally vulnerable.</div>
 
-  <div class="container">
-    <div class="card">
-      <h3>Account Profile</h3>
-      <label>Account ID</label>
-      <input type="text" id="accIdInput" value="1">
-      <button onclick="loadProfile()">Load</button>
-      <div id="profileResult" style="margin-top:12px"></div>
+  <main class="container">
+    <div class="page-heading"><div><div class="eyebrow">Your details</div><h1>My account</h1><p>Your demo profile and FCFA balance.</p></div><a class="btn" href="transfer.html">Send money &rarr;</a></div>
+    <div id="pageError" class="status error" role="alert" hidden></div>
+    <div class="grid-two">
+    <section class="card">
+      <h2>Account Profile</h2>
+      <div id="profileResult"><p class="muted">Loading profile...</p></div>
+      <details class="lab-panel">
+        <summary>Inspect another account (IDOR lab)</summary>
+        <label for="accIdInput">Account ID</label>
+        <input type="text" id="accIdInput" value="1">
+        <button type="button" onclick="loadProfile()">Load</button>
+      </details>
+    </section>
+    <section class="card">
+      <h2>Your demo banking account</h2>
+      <p class="muted">Use your account balance for simulated MTN MoMo and Orange Money payouts. Mobile recipients do not need a VulnBank account.</p>
+      <div class="hint">Newly registered users choose their own four-digit demo PIN. The three seeded accounts use 1234. Never use a real operator PIN.</div>
+      <p class="help">Mobile payouts represent external wallet payments. They do not credit another VulnBank account, even when the recipient's number appears in this app.</p>
+    </section>
     </div>
 
-    <div class="card">
-      <h3>Community Notes</h3>
+    <section class="card">
+      <h2>Community Notes</h2>
+      <p class="muted">The original raw-HTML notes feature is retained for stored-XSS exercises.</p>
       <div id="commentsList"></div>
-      <label>Add a note</label>
+      <label for="commentBody">Add a note</label>
       <textarea id="commentBody" rows="3"></textarea>
-      <button onclick="postComment()">Post</button>
-    </div>
-  </div>
+      <button type="button" onclick="postComment()">Post</button>
+      <div id="commentMsg" class="status error" role="alert" hidden></div>
+    </section>
+  </main>
 
-  <footer>&copy; 2026 VulnBank. All rights reserved.</footer>
+  <footer>&copy; 2026 VulnBank Lab &middot; Simulated FCFA banking &middot; Authorized training only</footer>
 
   <script src="js/auth.js"></script>
   <script src="js/account.js"></script>

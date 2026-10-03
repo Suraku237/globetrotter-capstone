@@ -2,35 +2,48 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VulnBank | Admin</title>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
   <header class="navbar">
-    <div class="logo">🏦 VulnBank</div>
-    <nav>
+    <a class="logo" href="dashboard.html"><span class="brand-mark" aria-hidden="true">V</span>VulnBank</a>
+    <nav aria-label="Main navigation">
       <a href="dashboard.html">Dashboard</a>
       <a href="account.html">My Account</a>
       <a href="transfer.html">Transfer Money</a>
       <a href="tools.html">Tools</a>
-      <a href="admin.html">Admin</a>
+      <a href="admin.html" aria-current="page" data-admin-only hidden>Admin</a>
       <a href="#" id="logoutLink">Logout</a>
     </nav>
+    <div class="user-chip"><span class="avatar" data-user-initial>V</span><div><span data-user-name>Loading...</span><span data-user-role></span></div></div>
   </header>
+  <div class="lab-banner">Administrator training workspace. Token-based role bypasses and plaintext password exposure remain intentional.</div>
 
-  <div class="container">
-    <div class="card">
-      <h3>Customer Accounts</h3>
-      <button onclick="loadUsers()">Load Users</button>
+  <main class="container">
+    <div class="page-heading"><div><div class="eyebrow">Admin workspace</div><h1>Customer management</h1><p>View demo users and manage their roles.</p></div><button type="button" id="loadUsersButton" onclick="loadUsers()" disabled>Load Users</button></div>
+    <div id="pageError" class="status error" role="alert" hidden></div>
+    <div class="stats-grid">
+      <div class="stat"><span>Demo accounts</span><strong id="customerCount">...</strong></div>
+      <div class="stat"><span>Administrators</span><strong id="adminCount">...</strong></div>
+      <div class="stat"><span>Total demo funds</span><strong id="totalFunds">...</strong></div>
+    </div>
+    <section class="card">
+      <h2>Customer Accounts</h2>
+      <p class="muted">New signups are users. Role changes take effect in their session after they sign in again.</p>
+      <div class="hint">Plaintext demo passwords remain visible for the lab. Never register with real credentials.</div>
+      <div id="adminMsg" class="status" role="status" hidden></div>
+      <div class="table-scroll">
       <table id="userTable">
-        <thead><tr><th>ID</th><th>Username</th><th>Password</th><th>Full Name</th><th>Balance</th><th>Admin</th></tr></thead>
+        <thead><tr><th>ID</th><th>Customer</th><th>Username</th><th>Phone</th><th>Demo password</th><th>Balance</th><th>Role</th><th>Action</th></tr></thead>
         <tbody></tbody>
       </table>
-      <div id="adminMsg" class="error"></div>
-    </div>
-  </div>
+      </div>
+    </section>
+  </main>
 
-  <footer>&copy; 2026 VulnBank. All rights reserved.</footer>
+  <footer>&copy; 2026 VulnBank Lab &middot; Simulated FCFA banking &middot; Authorized training only</footer>
 
   <script src="js/auth.js"></script>
   <script src="js/admin.js"></script>

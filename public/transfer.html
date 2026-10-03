@@ -2,39 +2,91 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VulnBank | Transfer Money</title>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
   <header class="navbar">
-    <div class="logo">🏦 VulnBank</div>
-    <nav>
+    <a class="logo" href="dashboard.html"><span class="brand-mark" aria-hidden="true">V</span>VulnBank</a>
+    <nav aria-label="Main navigation">
       <a href="dashboard.html">Dashboard</a>
       <a href="account.html">My Account</a>
-      <a href="transfer.html">Transfer Money</a>
+      <a href="transfer.html" aria-current="page">Transfer Money</a>
       <a href="tools.html">Tools</a>
-      <a href="admin.html">Admin</a>
+      <a href="admin.html" data-admin-only hidden>Admin</a>
       <a href="#" id="logoutLink">Logout</a>
     </nav>
+    <div class="user-chip"><span class="avatar" data-user-initial>V</span><div><span data-user-name>Loading...</span><span data-user-role></span></div></div>
   </header>
+  <div class="lab-banner">Simulation only. MTN and Orange are not contacted. Never enter a real operator PIN.</div>
 
-  <div class="container">
-    <div class="card">
-      <h3>Transfer Funds</h3>
-      <form id="transferForm">
-        <label>To Account ID</label>
-        <input type="number" id="toAccount" required>
-        <label>Amount (FCFA)</label>
-        <input type="number" id="amount" step="0.01" required>
-        <label>Note</label>
-        <input type="text" id="note" placeholder="What's this for?">
-        <button type="submit">Send Transfer</button>
-      </form>
-      <div id="transferMsg" style="margin-top:10px"></div>
+  <main class="container">
+    <div class="page-heading"><div><div class="eyebrow">Mobile money</div><h1>Send money</h1><p>Simulate a payout to any MTN or Orange demo number.</p></div><a class="btn secondary" href="dashboard.html">Back to overview</a></div>
+    <div id="pageError" class="status error" role="alert" hidden></div>
+    <div class="transfer-layout">
+      <section class="card">
+        <div class="available-funds"><span>Available demo funds</span><strong id="transferBalance">Loading...</strong></div>
+        <form id="mobileTransferForm" method="post" action="/api/mobile-transfers">
+          <fieldset id="mobileFields" disabled>
+            <h2 style="margin-top:24px">Choose a network</h2>
+            <div class="provider-options" role="group" aria-label="Mobile money network">
+              <button type="button" class="provider-card mtn" data-provider="mtn" aria-pressed="true"><span class="provider-mark mtn">MTN</span><strong>MTN MoMo</strong><small>Simulated MTN payment</small></button>
+              <button type="button" class="provider-card orange" data-provider="orange" aria-pressed="false"><span class="provider-mark orange">O</span><strong>Orange Money</strong><small>Simulated Orange payment</small></button>
+            </div>
+            <label for="mobilePhone"><span id="selectedProvider">MTN MoMo</span> recipient number</label>
+            <input type="tel" id="mobilePhone" name="phone_number" maxlength="24" placeholder="+237600000004" required>
+            <small class="help">Include the country code. Any demo number is accepted, even if it is not registered here.</small>
+            <label for="mobileAmount">Amount (FCFA)</label>
+            <input type="number" id="mobileAmount" name="amount" min="0.01" step="0.01" inputmode="decimal" placeholder="0.00" required>
+            <label for="mobileNote">Note <span class="muted">(optional)</span></label>
+            <input type="text" id="mobileNote" name="note" maxlength="140" placeholder="What is this payment for?">
+            <label for="mobilePin">Your four-digit VulnBank demo PIN</label>
+            <input type="password" id="mobilePin" name="pin" inputmode="numeric" pattern="[0-9]{4}" minlength="4" maxlength="4" autocomplete="off" placeholder="Demo PIN only" required>
+            <small class="help">Use the PIN chosen at signup. The seeded alice, bob, and admin accounts use 1234. Never enter an actual MTN or Orange PIN.</small>
+            <button type="submit" id="mobileSubmit" class="full-width">Send with MTN MoMo</button>
+          </fieldset>
+        </form>
+        <div id="mobileMsg" class="status error" role="alert" hidden></div>
+        <section id="transferReceipt" class="receipt card" aria-live="polite" tabindex="-1" hidden>
+          <div class="receipt-symbol" aria-hidden="true">&#10003;</div>
+          <h2 id="receiptMessage"></h2>
+          <p class="muted">Simulation completed. No real funds or SMS were sent.</p>
+          <dl class="receipt-details">
+            <dt>Reference</dt><dd id="receiptReference"></dd>
+            <dt>Network</dt><dd id="receiptNetwork"></dd>
+            <dt>Recipient</dt><dd id="receiptPhone"></dd>
+            <dt>Amount</dt><dd id="receiptAmount"></dd>
+            <dt>Fee</dt><dd>0.00 FCFA</dd>
+            <dt>Date (UTC)</dt><dd id="receiptDate"></dd>
+          </dl>
+          <button type="button" id="newTransferButton">Make another transfer</button>
+        </section>
+      </section>
+      <aside>
+        <section class="card">
+          <h2>Your recent payments</h2>
+          <div id="mobileHistory" aria-live="polite"><p class="empty-state">Loading payments...</p></div>
+        </section>
+        <details class="lab-panel">
+          <summary>Legacy account-ID transfer lab</summary>
+          <p class="help">The original vulnerable transfer flow is retained here for training. It does not require a demo PIN.</p>
+          <form id="transferForm">
+            <label for="toAccount">To Account ID</label>
+            <input type="number" id="toAccount" required>
+            <label for="amount">Amount (FCFA)</label>
+            <input type="number" id="amount" step="0.01" required>
+            <label for="note">Note</label>
+            <input type="text" id="note" placeholder="Legacy lab transfer">
+            <button type="submit" id="legacySubmit" disabled>Send lab transfer</button>
+          </form>
+          <div id="transferMsg" class="status" role="status" hidden></div>
+        </details>
+      </aside>
     </div>
-  </div>
+  </main>
 
-  <footer>&copy; 2026 VulnBank. All rights reserved.</footer>
+  <footer>&copy; 2026 VulnBank Lab &middot; Simulated FCFA banking &middot; Authorized training only</footer>
 
   <script src="js/auth.js"></script>
   <script src="js/transfer.js"></script>

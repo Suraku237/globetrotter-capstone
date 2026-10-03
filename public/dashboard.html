@@ -2,42 +2,72 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VulnBank | Dashboard</title>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
   <header class="navbar">
-    <div class="logo">🏦 VulnBank</div>
-    <nav>
-      <a href="dashboard.html">Dashboard</a>
+    <a class="logo" href="dashboard.html"><span class="brand-mark" aria-hidden="true">V</span>VulnBank</a>
+    <nav aria-label="Main navigation">
+      <a href="dashboard.html" aria-current="page">Dashboard</a>
       <a href="account.html">My Account</a>
       <a href="transfer.html">Transfer Money</a>
       <a href="tools.html">Tools</a>
-      <a href="admin.html">Admin</a>
+      <a href="admin.html" data-admin-only hidden>Admin</a>
       <a href="#" id="logoutLink">Logout</a>
     </nav>
+    <div class="user-chip"><span class="avatar" data-user-initial>V</span><div><span data-user-name>Loading...</span><span data-user-role></span></div></div>
   </header>
+  <div class="lab-banner">Training simulation. No real money or SMS is sent. Use demo data only.</div>
 
-  <div class="container">
-    <div class="balance-box">
-      <div>Welcome, <span id="fullName">...</span></div>
-      <div class="amount"><span id="balance">0.00</span> FCFA</div>
-      <div style="font-size:12px;opacity:.8">Account ID: <span id="accountId"></span></div>
+  <main class="container">
+    <div class="page-heading">
+      <div><div class="eyebrow">Your banking overview</div><h1>Dashboard</h1><p>Your balance, payments, and activity in one place.</p></div>
+      <a href="transfer.html" class="btn">Send money &rarr;</a>
+    </div>
+    <div id="pageError" class="status error" role="alert" hidden></div>
+    <div id="dashboardNotice" class="status info" role="status" hidden></div>
+    <div class="wallet-grid">
+      <section class="balance-box">
+        <div class="eyebrow" style="color:#c5e7e1">FCFA demo wallet</div>
+        <h2>Welcome, <span id="fullName">...</span></h2>
+        <div>Available balance</div>
+        <div class="amount"><span id="balance">...</span> FCFA</div>
+        <div class="balance-meta">Account ID: <span id="accountId">...</span> &middot; Simulated funds</div>
+      </section>
+      <section class="card">
+        <h2>Send to mobile money</h2>
+        <p class="muted">Choose a network, enter a demo phone number, and confirm with your demo PIN.</p>
+        <div class="provider-options">
+          <a class="provider-card mtn" href="transfer.html?provider=mtn"><span class="provider-mark mtn">MTN</span><strong>MTN MoMo</strong><small>Send via MTN &rarr;</small></a>
+          <a class="provider-card orange" href="transfer.html?provider=orange"><span class="provider-mark orange">O</span><strong>Orange Money</strong><small>Send via Orange &rarr;</small></a>
+        </div>
+      </section>
     </div>
 
-    <div class="card">
+    <section class="card">
+      <h2>Recent mobile payments</h2>
+      <p class="muted">Your latest simulated transfers and saved receipt references.</p>
+      <div id="mobileHistory" aria-live="polite"><p class="empty-state">Loading payments...</p></div>
+    </section>
+    <section class="card">
       <h3>Recent Transactions</h3>
-      <label>Search by note</label>
-      <input type="text" id="searchBox" placeholder="Search transactions...">
-      <button onclick="loadTransactions()">Search</button>
+      <div class="search-row">
+        <div class="field"><label for="searchBox">Search by note</label><input type="text" id="searchBox" placeholder="Search transactions..."></div>
+        <button type="button" onclick="loadTransactions()">Search</button>
+      </div>
+      <div class="table-scroll">
       <table id="txTable">
         <thead><tr><th>From</th><th>To</th><th>Amount</th><th>Note</th><th>Date</th></tr></thead>
         <tbody></tbody>
       </table>
-    </div>
-  </div>
+      </div>
+      <small class="help">Mobile payouts have no destination bank-account ID. The original search remains available for lab exercises.</small>
+    </section>
+  </main>
 
-  <footer>&copy; 2026 VulnBank. All rights reserved.</footer>
+  <footer>&copy; 2026 VulnBank Lab &middot; Simulated FCFA banking &middot; Authorized training only</footer>
 
   <script src="js/auth.js"></script>
   <script src="js/dashboard.js"></script>

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VulnBank | Open a Demo Account</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="navbar">
+    <a class="logo" href="index.html"><span class="brand-mark" aria-hidden="true">V</span>VulnBank</a>
+    <nav aria-label="Account access">
+      <a href="index.html">Sign In</a>
+      <a href="signup.html" aria-current="page">Open a demo account</a>
+    </nav>
+  </header>
+  <div class="lab-banner">Security training simulation. No real money. Use fictional details and a demo PIN.</div>
+  <main class="container auth-layout">
+    <section class="auth-hero">
+      <div class="eyebrow">Your new demo account</div>
+      <h1>Start exploring with 5,000 FCFA.</h1>
+      <p>Create a regular user account and try the full simulated banking experience.</p>
+      <ul class="feature-list">
+        <li><strong>Choose your demo PIN</strong><span>Use four test digits to confirm simulated payments.</span></li>
+        <li><strong>Pay any demo number</strong><span>MTN and Orange recipients do not need an account here.</span></li>
+        <li><strong>Keep the lab isolated</strong><span>No operator is contacted, and no SMS or real money is sent.</span></li>
+      </ul>
+    </section>
+    <section class="card auth-card">
+      <div class="eyebrow">User registration</div>
+      <h2>Open a demo account</h2>
+      <form id="signupForm" method="post" action="/api/signup">
+        <div class="form-grid">
+          <div class="span-two">
+            <label for="fullName">Full name</label>
+            <input id="fullName" name="full_name" type="text" minlength="2" maxlength="100" placeholder="Demo Customer" required>
+          </div>
+          <div>
+            <label for="signupUsername">Username</label>
+            <input id="signupUsername" name="username" type="text" minlength="3" maxlength="40" pattern="[A-Za-z0-9_]{3,40}" autocomplete="username" placeholder="demo_customer" required>
+            <small class="help">Letters, numbers, and underscores.</small>
+          </div>
+          <div>
+            <label for="signupPhone">Demo phone number</label>
+            <input id="signupPhone" name="phone_number" type="tel" maxlength="24" placeholder="+237600000004" required>
+            <small class="help">Include + and the country code.</small>
+          </div>
+          <div>
+            <label for="signupPassword">Demo password</label>
+            <input id="signupPassword" name="password" type="password" minlength="4" maxlength="128" autocomplete="new-password" required>
+          </div>
+          <div>
+            <label for="confirmPassword">Confirm password</label>
+            <input id="confirmPassword" type="password" minlength="4" maxlength="128" autocomplete="new-password" required>
+          </div>
+          <div class="span-two">
+            <label for="signupPin">Four-digit demo transaction PIN</label>
+            <input id="signupPin" name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" minlength="4" maxlength="4" autocomplete="off" placeholder="Choose four test digits" required>
+            <small class="help">This is a VulnBank test PIN, not an MTN or Orange PIN. Never reuse a real PIN.</small>
+          </div>
+        </div>
+        <button id="signupSubmit" class="full-width" type="submit">Create demo account</button>
+        <div id="signupMsg" class="status error" role="alert" hidden></div>
+      </form>
+      <p class="fine-print">You start as a regular user with 5,000 simulated FCFA. Only an administrator can change your role through the normal workflow.</p>
+      <div class="auth-links">Already registered? <a href="index.html">Sign in</a></div>
+    </section>
+  </main>
+  <footer>&copy; 2026 VulnBank Lab &middot; Simulated FCFA banking &middot; Authorized training only</footer>
+  <script src="js/auth.js"></script>
+  <script src="js/signup.js"></script>
+</body>
+</html>

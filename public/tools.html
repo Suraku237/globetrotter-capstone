@@ -2,48 +2,55 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VulnBank | Tools</title>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
   <header class="navbar">
-    <div class="logo">🏦 VulnBank</div>
-    <nav>
+    <a class="logo" href="dashboard.html"><span class="brand-mark" aria-hidden="true">V</span>VulnBank</a>
+    <nav aria-label="Main navigation">
       <a href="dashboard.html">Dashboard</a>
       <a href="account.html">My Account</a>
       <a href="transfer.html">Transfer Money</a>
-      <a href="tools.html">Tools</a>
-      <a href="admin.html">Admin</a>
+      <a href="tools.html" aria-current="page">Tools</a>
+      <a href="admin.html" data-admin-only hidden>Admin</a>
       <a href="#" id="logoutLink">Logout</a>
     </nav>
+    <div class="user-chip"><span class="avatar" data-user-initial>V</span><div><span data-user-name>Loading...</span><span data-user-role></span></div></div>
   </header>
+  <div class="lab-banner">Intentionally vulnerable lab tools. Use only in your isolated, authorized training environment.</div>
 
-  <div class="container">
+  <main class="container">
+    <div class="page-heading"><div><div class="eyebrow">Training workspace</div><h1>Lab tools</h1><p>The original diagnostic, file-access, and HTML-injection exercises remain available.</p></div></div>
+    <div id="pageError" class="status error" role="alert" hidden></div>
+    <div class="grid-two">
     <div class="card">
       <h3>Network Diagnostics</h3>
-      <label>Host</label>
+      <label for="hostInput">Host</label>
       <input type="text" id="hostInput" value="127.0.0.1">
       <button onclick="doPing()">Ping</button>
-      <pre id="pingResult" style="white-space:pre-wrap;background:#222;color:#0f0;padding:10px;border-radius:6px;margin-top:10px"></pre>
+      <pre id="pingResult" class="console"></pre>
     </div>
 
     <div class="card">
       <h3>Download Statement</h3>
-      <label>Statement file name</label>
+      <label for="fileInput">Statement file name</label>
       <input type="text" id="fileInput" value="welcome.txt">
       <button onclick="getStatement()">View</button>
-      <pre id="statementResult" style="white-space:pre-wrap;background:#f8f9fa;padding:10px;border-radius:6px;margin-top:10px"></pre>
+      <pre id="statementResult" class="console statement-output"></pre>
+    </div>
     </div>
 
     <div class="card">
       <h3>Help Center Search</h3>
-      <label>Search term</label>
+      <label for="helpQuery">Search term</label>
       <input type="text" id="helpQuery" placeholder="Search help articles...">
       <button onclick="openHelp()">Search</button>
     </div>
-  </div>
+  </main>
 
-  <footer>&copy; 2026 VulnBank. All rights reserved.</footer>
+  <footer>&copy; 2026 VulnBank Lab &middot; Simulated FCFA banking &middot; Authorized training only</footer>
 
   <script src="js/auth.js"></script>
   <script src="js/tools.js"></script>

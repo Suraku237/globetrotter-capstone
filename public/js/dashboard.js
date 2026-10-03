@@ -29,7 +29,7 @@ async function loadTransactions() {
   if (data.success) {
     data.transactions.forEach(tx => {
       const row = document.createElement('tr');
-      row.innerHTML = `<td>${tx.from_account ?? ''}</td><td>${tx.to_account ?? ''}</td><td>$${tx.amount ?? ''}</td><td>${tx.note ?? ''}</td><td>${tx.created_at ?? ''}</td>`;
+      row.innerHTML = `<td>${tx.from_account ?? ''}</td><td>${tx.to_account ?? ''}</td><td>${tx.amount ?? ''} FCFA</td><td>${tx.note ?? ''}</td><td>${tx.created_at ?? ''}</td>`;
       tbody.appendChild(row);
     });
   }

@@ -17,7 +17,7 @@ async function loadProfile() {
 
   const data = await res.json();
   if (data.success) {
-    el.innerHTML = `<b>${data.account.full_name}</b> (user: ${data.account.username})<br>Balance: $${data.account.balance}`;
+    el.innerHTML = `<b>${data.account.full_name}</b> (user: ${data.account.username})<br>Balance: ${data.account.balance} FCFA`;
   } else {
     el.textContent = data.message || 'Not found';
   }

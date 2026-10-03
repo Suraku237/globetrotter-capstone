@@ -17,6 +17,10 @@ npm start
 
 Open **http://localhost:3000**
 
+Balances and transaction amounts are displayed in **FCFA**, and transfers are
+entered in FCFA. Existing numeric values and decimal behavior are preserved;
+no currency conversion is performed.
+
 ### Demo accounts
 
 | Username | Password              | Account ID | Role  |

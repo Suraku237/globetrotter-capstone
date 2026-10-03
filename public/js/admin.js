@@ -10,7 +10,7 @@ async function loadUsers() {
   if (data.success) {
     data.users.forEach(u => {
       const row = document.createElement('tr');
-      row.innerHTML = `<td>${u.id}</td><td>${u.username}</td><td>${u.password}</td><td>${u.full_name}</td><td>$${u.balance}</td><td>${u.is_admin ? 'Yes' : 'No'}</td>`;
+      row.innerHTML = `<td>${u.id}</td><td>${u.username}</td><td>${u.password}</td><td>${u.full_name}</td><td>${u.balance} FCFA</td><td>${u.is_admin ? 'Yes' : 'No'}</td>`;
       tbody.appendChild(row);
     });
   } else {

@@ -74,7 +74,7 @@ async function login(username = 'admin', password = 'admin') {
 }
 
 function payment(overrides = {}) {
-  return { provider: 'mtn', phone_number: '+237690123456', amount: '12.50', pin: '0042', ...overrides };
+  return { provider: 'mtn', phone_number: '+237600000002', amount: '12.50', pin: '0042', ...overrides };
 }
 
 test('fresh databases retain demo accounts and the legacy transaction shape', async () => {
@@ -140,17 +140,17 @@ test('administrators manage other roles and users refresh claims by signing in a
   })).status, 400);
 });
 
-test('MTN and Orange payments debit funds, persist receipts, and accept unregistered numbers', async () => {
+test('MTN and Orange payments debit funds, persist receipts, and credit the registered recipient', async () => {
   for (const provider of ['mtn', 'orange']) {
     const customer = await signup();
     const response = await api('/api/mobile-transfers', {
       method: 'POST', cookie: customer.cookie,
-      body: payment({ provider, phone_number: '+237 690-123-456' })
+      body: payment({ provider, phone_number: '+237 600-000-002' })
     });
     assert.equal(response.status, 201, response.text);
     assert.equal(response.data.balance, 4987.5);
     assert.equal(response.data.transfer.provider, provider);
-    assert.equal(response.data.transfer.recipient_phone, '+237690123456');
+    assert.equal(response.data.transfer.recipient_phone, '+237600000002');
     assert.equal(response.data.transfer.simulated, true);
     assert.match(response.data.transfer.reference, /^VB-(MTN|ORANGE)-\d{6,}$/);
     assert.match(response.data.message, /12\.50 FCFA transferred successfully/);
@@ -159,22 +159,48 @@ test('MTN and Orange payments debit funds, persist receipts, and accept unregist
     assert.equal(history.data.transfers[0].reference, response.data.transfer.reference);
     const ledger = await store.get(bank.db, 'SELECT * FROM transactions WHERE id = ?', [response.data.transfer.transaction_id]);
     assert.equal(ledger.from_account, customer.data.user.id);
-    assert.equal(ledger.to_account, null);
+    assert.equal(ledger.to_account, 2);
     assert.equal(ledger.amount, 12.5);
-    assert.match(ledger.note, /transfer to \+237690123456/);
+    assert.match(ledger.note, /transfer to \+237600000002/);
   }
 });
 
-test('payments to a registered contact still simulate an external wallet, not a bank-account credit', async () => {
-  const customer = await signup();
-  const beforeBalance = await store.get(bank.db, 'SELECT balance FROM users WHERE id = 2');
-  const response = await api('/api/mobile-transfers', {
-    method: 'POST', cookie: customer.cookie, body: payment({ phone_number: '+237600000002' })
+test('a payment credits the recipient account and rejects unknown or own numbers', async () => {
+  const sender = await signup();
+  const receiver = await signup();
+  const credit = await api('/api/mobile-transfers', {
+    method: 'POST', cookie: sender.cookie, body: payment({ phone_number: receiver.credentials.phone_number, amount: '100' })
   });
-  assert.equal(response.status, 201);
-  assert.deepEqual(await store.get(bank.db, 'SELECT balance FROM users WHERE id = 2'), beforeBalance);
+  assert.equal(credit.status, 201, credit.text);
+  assert.equal(credit.data.balance, 4900);
+  assert.equal((await store.get(bank.db, 'SELECT balance FROM users WHERE id = ?', [receiver.data.user.id])).balance, 5100);
+  const missing = await api('/api/mobile-transfers', {
+    method: 'POST', cookie: sender.cookie, body: payment({ phone_number: '+237699999999' })
+  });
+  assert.equal(missing.status, 404);
+  assert.equal(missing.data.message, 'Account not found.');
+  const self = await api('/api/mobile-transfers', {
+    method: 'POST', cookie: sender.cookie, body: payment({ phone_number: sender.credentials.phone_number })
+  });
+  assert.equal(self.status, 400);
+  assert.equal((await store.get(bank.db, 'SELECT balance FROM users WHERE id = ?', [sender.data.user.id])).balance, 4900);
 });
 
+test('legacy account-ID transfers credit the recipient and report a missing account', async () => {
+  const sender = await signup();
+  const receiver = await signup();
+  const ok = await api('/api/transfer', {
+    method: 'POST', cookie: sender.cookie, body: { to_account: receiver.data.user.id, amount: '50', note: 'check' }
+  });
+  assert.equal(ok.status, 200);
+  await new Promise(resolve => setTimeout(resolve, 100));
+  assert.equal((await store.get(bank.db, 'SELECT balance FROM users WHERE id = ?', [receiver.data.user.id])).balance, 5050);
+  const missing = await api('/api/transfer', {
+    method: 'POST', cookie: sender.cookie, body: { to_account: 999999, amount: '50', note: 'check' }
+  });
+  assert.equal(missing.status, 404);
+  assert.equal(missing.data.message, 'Account not found.');
+});
 test('failed mobile payments return explicit errors without changing balances or ledgers', async () => {
   const customer = await signup();
   const id = customer.data.user.id;

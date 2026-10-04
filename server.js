@@ -180,16 +180,20 @@ app.post('/api/transfer', (req, res) => {
   if (!user) return res.status(401).json({ success: false });
 
   const { to_account, amount, note } = req.body;
-  db.run(
-    `INSERT INTO transactions (from_account, to_account, amount, note) VALUES (?, ?, ?, ?)`,
-    [user.id, to_account, amount, note],
-    function (err) {
-      if (err) return sendError(res, err);
-      db.run(`UPDATE users SET balance = balance - ? WHERE id = ?`, [amount, user.id]);
-      db.run(`UPDATE users SET balance = balance + ? WHERE id = ?`, [amount, to_account]);
-      res.json({ success: true, message: 'Transfer complete' });
-    }
-  );
+  db.get('SELECT id FROM users WHERE id = ?', [to_account], (lookupErr, recipient) => {
+    if (lookupErr) return sendError(res, lookupErr);
+    if (!recipient) return res.status(404).json({ success: false, message: 'Account not found.' });
+    db.run(
+      `INSERT INTO transactions (from_account, to_account, amount, note) VALUES (?, ?, ?, ?)`,
+      [user.id, recipient.id, amount, note],
+      function (err) {
+        if (err) return sendError(res, err);
+        db.run(`UPDATE users SET balance = balance - ? WHERE id = ?`, [amount, user.id]);
+        db.run(`UPDATE users SET balance = balance + ? WHERE id = ?`, [amount, recipient.id]);
+        res.json({ success: true, message: 'Transfer complete' });
+      }
+    );
+  });
 });
 
 // ---------- SIMULATED MOBILE MONEY ----------
@@ -247,14 +251,18 @@ app.post('/api/mobile-transfers', async (req, res) => {
       if (typeof sender.balance !== 'number' || !Number.isFinite(sender.balance)) {
         return { status: 409, error: 'This account has an invalid balance. Ask the lab administrator to inspect it.' };
       }
+      const recipient = await get(connection, 'SELECT id FROM users WHERE phone_number = ?', [phone]);
+      if (!recipient) return { status: 404, error: 'Account not found.' };
+      if (recipient.id === user.id) return { status: 400, error: 'You cannot transfer money to your own account.' };
       if (sender.balance < value) return { status: 400, error: 'Insufficient demo funds for this transfer.' };
       const description = `${MOBILE_PROVIDERS[provider]} transfer to ${phone}${note.trim() ? ' - ' + note.trim() : ''}`;
       const ledger = await run(connection, `INSERT INTO transactions
-        (from_account, to_account, amount, note) VALUES (?, NULL, ?, ?)`, [user.id, value, description]);
+        (from_account, to_account, amount, note) VALUES (?, ?, ?, ?)`, [user.id, recipient.id, value, description]);
       const payment = await run(connection, `INSERT INTO mobile_transfers
         (transaction_id, sender_id, provider, recipient_phone, amount) VALUES (?, ?, ?, ?, ?)`,
       [ledger.lastID, user.id, provider, phone, value]);
       await run(connection, 'UPDATE users SET balance = balance - ? WHERE id = ?', [value, user.id]);
+      await run(connection, 'UPDATE users SET balance = balance + ? WHERE id = ?', [value, recipient.id]);
       const transfer = await get(connection, 'SELECT * FROM mobile_transfers WHERE id = ?', [payment.lastID]);
       const account = await get(connection, 'SELECT balance FROM users WHERE id = ?', [user.id]);
       return { transfer: mobileReceipt(transfer), balance: account.balance };

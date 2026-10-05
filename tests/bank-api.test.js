@@ -153,7 +153,7 @@ test('MTN and Orange payments debit funds, persist receipts, and credit the regi
     assert.equal(response.data.transfer.recipient_phone, '+237600000002');
     assert.equal(response.data.transfer.simulated, true);
     assert.match(response.data.transfer.reference, /^VB-(MTN|ORANGE)-\d{6,}$/);
-    assert.match(response.data.message, /12\.50 FCFA transferred successfully/);
+    assert.match(response.data.message, /12\.50 FCFA transferred successfully to bob \(\+237600000002\)/);
     const history = await api('/api/mobile-transfers', { cookie: customer.cookie });
     assert.equal(history.data.transfers.length, 1);
     assert.equal(history.data.transfers[0].reference, response.data.transfer.reference);

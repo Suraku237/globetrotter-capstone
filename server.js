@@ -251,7 +251,7 @@ app.post('/api/mobile-transfers', async (req, res) => {
       if (typeof sender.balance !== 'number' || !Number.isFinite(sender.balance)) {
         return { status: 409, error: 'This account has an invalid balance. Ask the lab administrator to inspect it.' };
       }
-      const recipient = await get(connection, 'SELECT id FROM users WHERE phone_number = ?', [phone]);
+      const recipient = await get(connection, 'SELECT id, username FROM users WHERE phone_number = ?', [phone]);
       if (!recipient) return { status: 404, error: 'Account not found.' };
       if (recipient.id === user.id) return { status: 400, error: 'You cannot transfer money to your own account.' };
       if (sender.balance < value) return { status: 400, error: 'Insufficient demo funds for this transfer.' };
@@ -265,14 +265,14 @@ app.post('/api/mobile-transfers', async (req, res) => {
       await run(connection, 'UPDATE users SET balance = balance + ? WHERE id = ?', [value, recipient.id]);
       const transfer = await get(connection, 'SELECT * FROM mobile_transfers WHERE id = ?', [payment.lastID]);
       const account = await get(connection, 'SELECT balance FROM users WHERE id = ?', [user.id]);
-      return { transfer: mobileReceipt(transfer), balance: account.balance };
+      return { transfer: mobileReceipt(transfer), balance: account.balance, recipient: recipient.username };
     });
     if (result.error) {
       return res.status(result.status).json({ success: false, message: result.error });
     }
     res.status(201).json({
       success: true,
-      message: `${value.toFixed(2)} FCFA transferred successfully via ${MOBILE_PROVIDERS[provider]} to ${phone}.`,
+      message: `${value.toFixed(2)} FCFA transferred successfully to ${result.recipient} (${phone}) via ${MOBILE_PROVIDERS[provider]}.`,
       ...result
     });
   } catch (err) {
